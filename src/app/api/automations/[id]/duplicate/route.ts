@@ -23,7 +23,7 @@ export async function POST(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const admin = supabaseAdmin();
   const { data: original, error: origErr } = await admin

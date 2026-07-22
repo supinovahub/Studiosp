@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     } catch (err) {
       if (err instanceof AiError) {
         return NextResponse.json(
-          { error: err.message, code: err.code },
+          { error: 'Falha ao processar a solicitação', code: err.code },
           { status: 400 }
         );
       }

@@ -30,10 +30,16 @@ import {
 // is the human-readable RAISE message we put in the migration.
 function rpcErrorToResponse(err: PostgrestError): NextResponse {
   if (err.code === '42501') {
-    return NextResponse.json({ error: err.message }, { status: 403 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 403 }
+    );
   }
   if (err.code === '22023') {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 400 }
+    );
   }
   console.error('[members route] unexpected RPC error:', err);
   return NextResponse.json(

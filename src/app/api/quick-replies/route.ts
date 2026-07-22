@@ -21,7 +21,10 @@ export async function GET() {
       .select('*')
       .order('created_at', { ascending: false });
     if (error)
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Falha ao processar a solicitação' },
+        { status: 500 }
+      );
     return NextResponse.json({ quick_replies: data ?? [] });
   } catch (err) {
     return toErrorResponse(err);
@@ -83,7 +86,10 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   }
   return NextResponse.json({ quick_reply: data }, { status: 201 });
 }

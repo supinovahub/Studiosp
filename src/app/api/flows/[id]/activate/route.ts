@@ -39,7 +39,7 @@ export async function POST(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
   const body = (await request.json().catch(() => null)) as {
@@ -114,7 +114,10 @@ export async function POST(
     .select()
     .maybeSingle();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   }
   return NextResponse.json({ flow: updated });
 }

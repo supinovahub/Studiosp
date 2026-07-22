@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
     // Per-user rate limit. Bucket key is scoped to this route so
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     } catch (err) {
       if (err instanceof SendMessageError) {
         return NextResponse.json(
-          { error: err.message },
+          { error: 'Falha ao processar a solicitação' },
           { status: err.status }
         );
       }
@@ -194,7 +194,7 @@ export async function POST(request: Request) {
     } catch (err) {
       if (err instanceof SendMessageError) {
         return NextResponse.json(
-          { error: err.message },
+          { error: 'Falha ao processar a solicitação' },
           { status: err.status }
         );
       }

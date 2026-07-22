@@ -38,13 +38,22 @@ function getClientIp(request: Request): string {
 
 function rpcErrorToResponse(err: PostgrestError): NextResponse {
   if (err.code === '42501') {
-    return NextResponse.json({ error: err.message }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 401 }
+    );
   }
   if (err.code === '22023') {
-    return NextResponse.json({ error: err.message }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 400 }
+    );
   }
   if (err.code === '23505') {
-    return NextResponse.json({ error: err.message }, { status: 409 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 409 }
+    );
   }
   console.error('[redeem] unexpected RPC error:', err);
   return NextResponse.json(
@@ -64,7 +73,7 @@ export async function POST(
   const { token } = await params;
   if (!token || typeof token !== 'string') {
     return NextResponse.json(
-      { error: 'Missing invitation token' },
+      { error: 'Token de convite ausente' },
       { status: 400 }
     );
   }
@@ -78,7 +87,7 @@ export async function POST(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
   const { data: accountId, error } = await supabase.rpc('redeem_invitation', {

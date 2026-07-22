@@ -166,7 +166,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(
-      { error: 'Verification token mismatch' },
+      { error: 'Token de verificação não confere' },
       { status: 403 }
     );
   } catch (error) {

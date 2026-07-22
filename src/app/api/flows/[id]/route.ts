@@ -31,7 +31,7 @@ async function requireOwnership(flowId: string): Promise<
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { ok: false, status: 401, body: { error: 'Unauthorized' } };
+    return { ok: false, status: 401, body: { error: 'Não autorizado' } };
   }
   // RLS scopes this to the caller — a flow owned by another user
   // returns null (404 below).
@@ -41,7 +41,7 @@ async function requireOwnership(flowId: string): Promise<
     .eq('id', flowId)
     .maybeSingle();
   if (!flow) {
-    return { ok: false, status: 404, body: { error: 'Not found' } };
+    return { ok: false, status: 404, body: { error: 'Não encontrado' } };
   }
   return { ok: true, userId: user.id, supabase };
 }
@@ -205,7 +205,10 @@ export async function DELETE(
   // free up the contact for new triggers immediately.
   const { error } = await supabaseAdmin().from('flows').delete().eq('id', id);
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   }
   return NextResponse.json({ ok: true });
 }

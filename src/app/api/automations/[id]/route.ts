@@ -27,7 +27,7 @@ export async function GET(
   const { id } = await params;
   const user = await requireUser();
   if (!user)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const admin = supabaseAdmin();
   const { data: automation, error } = await admin
@@ -38,7 +38,10 @@ export async function GET(
     .maybeSingle();
 
   if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   if (!automation)
     return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
@@ -63,7 +66,7 @@ export async function PATCH(
 
   const user = await requireUser();
   if (!user)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const body = await request.json().catch(() => null);
   if (!body)
@@ -161,7 +164,7 @@ export async function DELETE(
 
   const user = await requireUser();
   if (!user)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { error } = await supabaseAdmin()
     .from('automations')
@@ -169,6 +172,9 @@ export async function DELETE(
     .eq('id', id)
     .eq('user_id', user.id);
   if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   return NextResponse.json({ ok: true });
 }

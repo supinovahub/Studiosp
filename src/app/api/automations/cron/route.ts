@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     suppliedBuf.length !== expectedBuf.length ||
     !timingSafeEqual(suppliedBuf, expectedBuf)
   ) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
   const admin = supabaseAdmin();
@@ -43,7 +43,10 @@ export async function GET(request: Request) {
     .limit(50);
 
   if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   if (!due || due.length === 0) return NextResponse.json({ processed: 0 });
 
   let processed = 0;

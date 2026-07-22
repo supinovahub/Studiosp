@@ -8,7 +8,10 @@ import {
 } from '@/lib/contacts/tag-write';
 
 function tagWriteErrorResponse(error: ContactTagWriteError): NextResponse {
-  return NextResponse.json({ error: error.message }, { status: error.status });
+  return NextResponse.json(
+    { error: 'Falha ao processar a solicitação' },
+    { status: error.status }
+  );
 }
 
 async function readTagId(request: Request): Promise<string | null> {

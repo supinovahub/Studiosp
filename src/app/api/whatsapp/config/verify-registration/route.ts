@@ -32,7 +32,7 @@ export async function GET() {
     error: authError,
   } = await supabase.auth.getUser();
   if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
   // whatsapp_config is one-row-per-account post-017. Resolve the
@@ -77,7 +77,7 @@ export async function GET() {
         token_decryptable: false,
       },
       message:
-        "Stored access token can't be decrypted — likely ENCRYPTION_KEY changed. Re-enter the token to repair.",
+        'Não foi possível descriptografar o token salvo — a ENCRYPTION_KEY provavelmente mudou. Informe o token novamente para corrigir.',
     });
   }
 

@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     suppliedBuf.length !== expectedBuf.length ||
     !timingSafeEqual(suppliedBuf, expectedBuf)
   ) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
   const admin = supabaseAdmin();
@@ -63,7 +63,10 @@ export async function GET(request: Request) {
 
   if (error) {
     console.error('[flows-cron] active-run scan failed:', error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   }
   if (!runs?.length) return NextResponse.json({ swept: 0 });
 

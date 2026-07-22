@@ -18,14 +18,17 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { data, error } = await supabase
     .from('automations')
     .select('*')
     .order('created_at', { ascending: false });
   if (error)
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   return NextResponse.json({ automations: data ?? [] });
 }
 
@@ -44,7 +47,7 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   // Resolve the caller's account_id — `automations.account_id` is NOT
   // NULL post-017, so an INSERT without it trips the not-null constraint

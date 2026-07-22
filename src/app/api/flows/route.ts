@@ -27,7 +27,7 @@ async function requireUser(): Promise<
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { ok: false, status: 401, body: { error: 'Unauthorized' } };
+    return { ok: false, status: 401, body: { error: 'Não autorizado' } };
   }
   return { ok: true, userId: user.id, supabase };
 }
@@ -44,7 +44,10 @@ export async function GET() {
     .select('*')
     .order('created_at', { ascending: false });
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao processar a solicitação' },
+      { status: 500 }
+    );
   }
   return NextResponse.json({ flows: data ?? [] });
 }
