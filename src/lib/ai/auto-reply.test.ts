@@ -134,6 +134,23 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     )
   })
 
+  it('sends each parsed sentence as a separate WhatsApp message', async () => {
+    vi.stubEnv('AI_MESSAGE_DELAY_MS', '0')
+    h.generateReply.mockResolvedValue({
+      text: 'Olá! Encontrei uma opção. Qual bairro você prefere?',
+      handoff: false,
+    })
+
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.engineSendText.mock.calls.map(([call]) => call.text)).toEqual([
+      'Olá!',
+      'Encontrei uma opção.',
+      'Qual bairro você prefere?',
+    ])
+    vi.unstubAllEnvs()
+  })
+
   it('grounds the reply in retrieved knowledge', async () => {
     h.retrieveKnowledge.mockResolvedValue(['Returns accepted within 30 days.'])
     await dispatchInboundToAiReply(ARGS)

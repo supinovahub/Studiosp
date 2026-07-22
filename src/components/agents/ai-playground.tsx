@@ -61,16 +61,25 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
         setInput(text);
         return;
       }
+      const replyParts = Array.isArray(data.replies)
+        ? data.replies.filter(
+            (part: unknown): part is string =>
+              typeof part === 'string' && part.trim().length > 0
+          )
+        : [];
+      const replies =
+        replyParts.length > 0
+          ? replyParts
+          : typeof data.reply === 'string' && data.reply.trim()
+            ? [data.reply]
+            : [''];
       setTurns([
         ...next,
-        {
-          role: 'assistant',
-          content:
-            typeof data.reply === 'string' && data.reply.trim()
-              ? data.reply
-              : '',
-          handoff: Boolean(data.handoff),
-        },
+        ...replies.map((content: string, index: number) => ({
+          role: 'assistant' as const,
+          content,
+          handoff: Boolean(data.handoff) && index === replies.length - 1,
+        })),
       ]);
     } catch {
       toast.error('Não foi possível entrar em contato com o agente.');

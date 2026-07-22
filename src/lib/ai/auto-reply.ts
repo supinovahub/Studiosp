@@ -12,6 +12,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { classifySdrTurn, emptySdrClassification } from './sdr-classify'
 import { buildSdrTurnContext } from './sdr-catalog'
 import { persistSdrClassification } from './sdr-store'
+import { splitAiMessage, waitBetweenAiMessages } from './message-parser'
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -204,14 +205,18 @@ export async function dispatchInboundToAiReply(
     }
     if (claimed !== true) return // lost the per-conversation cap race
 
-    await engineSendText({
-      accountId,
-      userId: configOwnerUserId,
-      conversationId,
-      contactId,
-      text,
-      aiGenerated: true,
-    })
+    const messageParts = splitAiMessage(text)
+    for (const [index, messagePart] of messageParts.entries()) {
+      if (index > 0) await waitBetweenAiMessages()
+      await engineSendText({
+        accountId,
+        userId: configOwnerUserId,
+        conversationId,
+        contactId,
+        text: messagePart,
+        aiGenerated: true,
+      })
+    }
 
     if (classification.wantsPhotos) {
       const images = sdr.products

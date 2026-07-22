@@ -13,6 +13,7 @@ import { latestUserMessage } from '@/lib/ai/query';
 import { AiError, type ChatMessage } from '@/lib/ai/types';
 import { classifySdrTurn, emptySdrClassification } from '@/lib/ai/sdr-classify';
 import { buildSdrTurnContext } from '@/lib/ai/sdr-catalog';
+import { splitAiMessage } from '@/lib/ai/message-parser';
 
 // Keep the tested transcript bounded, mirroring the live context window.
 const MAX_TURNS = 20;
@@ -116,6 +117,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({
       reply: text,
+      replies: splitAiMessage(text),
       handoff: handoff || classification.requiresHandoff,
       classification,
       products: sdr.products.map((product) => ({
