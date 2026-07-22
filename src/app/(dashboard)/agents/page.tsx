@@ -39,14 +39,14 @@ export default function AgentsPage() {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <Bot className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          AI Agents
+        <Bot className="text-primary h-6 w-6" />
+        <h1 className="text-foreground text-2xl font-bold tracking-tight">
+          Agentes de IA
         </h1>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Your bring-your-own-key AI agent — set it up, then test it in the
-        playground before it replies to customers in the inbox.
+      <p className="text-muted-foreground mt-1 text-sm">
+        Seu agente de IA que traz sua própria chave: configure-o e teste-o no
+        playground antes que ele responda aos clientes na caixa de entrada.
       </p>
 
       {decided && (
@@ -57,14 +57,14 @@ export default function AgentsPage() {
         >
           <TabsList>
             <TabsTrigger value="playground">
-              <Sparkles className="mr-1.5 h-4 w-4" /> Playground
+              <Sparkles className="mr-1.5 h-4 w-4" /> Testes
             </TabsTrigger>
             <TabsTrigger value="setup">
-              <Settings2 className="mr-1.5 h-4 w-4" /> Setup
+              <Settings2 className="mr-1.5 h-4 w-4" /> Configuração
             </TabsTrigger>
             {canViewUsage && (
               <TabsTrigger value="usage">
-                <BarChart3 className="mr-1.5 h-4 w-4" /> Usage
+                <BarChart3 className="mr-1.5 h-4 w-4" /> Uso
               </TabsTrigger>
             )}
           </TabsList>

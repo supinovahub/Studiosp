@@ -25,7 +25,7 @@ export async function GET(
     const ctx = await requireApiKey(request, 'contacts:read');
     const { id } = await params;
     const contact = await getContactById(ctx.supabase, ctx.accountId, id);
-    if (!contact) return fail('not_found', 'Contact not found', 404);
+    if (!contact) return fail('not_found', 'Contato não encontrado', 404);
     return ok(contact);
   } catch (err) {
     return toApiErrorResponse(err);
@@ -45,12 +45,16 @@ export async function PATCH(
       unknown
     > | null;
     if (!body || typeof body !== 'object') {
-      return fail('bad_request', 'Request body must be a JSON object', 400);
+      return fail(
+        'bad_request',
+        'O corpo da solicitação precisa ser um objeto JSON',
+        400
+      );
     }
 
     // Verify the contact is in this account before mutating anything.
     const existing = await getContactById(ctx.supabase, ctx.accountId, id);
-    if (!existing) return fail('not_found', 'Contact not found', 404);
+    if (!existing) return fail('not_found', 'Contato não encontrado', 404);
 
     // Build a partial update from the provided scalar fields. A field
     // is updated only when its key is PRESENT (so omitted fields are
@@ -76,7 +80,7 @@ export async function PATCH(
         .eq('account_id', ctx.accountId);
       if (error) {
         console.error('[api/v1/contacts] update error:', error);
-        return fail('internal', 'Failed to update contact', 500);
+        return fail('internal', 'Falha ao atualizar contato', 500);
       }
     }
 
@@ -95,7 +99,11 @@ export async function PATCH(
     return ok(contact);
   } catch (err) {
     if (err instanceof ContactError) {
-      return fail(err.status === 400 ? 'bad_request' : 'internal', err.message, err.status);
+      return fail(
+        err.status === 400 ? 'bad_request' : 'internal',
+        err.message,
+        err.status
+      );
     }
     return toApiErrorResponse(err);
   }

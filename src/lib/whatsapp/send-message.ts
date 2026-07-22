@@ -21,14 +21,14 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { type MediaKind } from '@/lib/whatsapp/meta-api';
 import {
-  sendTextMessage,
-  sendTemplateMessage,
-  sendMediaMessage,
-  sendInteractiveButtons,
-  sendInteractiveList,
-  type MediaKind,
-} from '@/lib/whatsapp/meta-api';
+  providerName,
+  sendProviderInteractive,
+  sendProviderMedia,
+  sendProviderTemplate,
+  sendProviderText,
+} from '@/lib/whatsapp/provider';
 import {
   validateInteractivePayload,
   interactivePayloadPreviewText,
@@ -115,8 +115,13 @@ export function validateSendMessageParams(params: {
   templateName?: string | null;
   interactivePayload?: InteractiveMessagePayload | null;
 }): void {
-  const { messageType, contentText, mediaUrl, templateName, interactivePayload } =
-    params;
+  const {
+    messageType,
+    contentText,
+    mediaUrl,
+    templateName,
+    interactivePayload,
+  } = params;
 
   if (!messageType) {
     throw new SendMessageError('bad_request', 'message_type is required', 400);
@@ -263,6 +268,12 @@ export async function sendMessageToConversation(
   }
 
   const accessToken = decrypt(config.access_token);
+  const providerConfig = {
+    provider: config.provider,
+    phone_number_id: config.phone_number_id,
+    uazapi_base_url: config.uazapi_base_url,
+    accessToken,
+  };
 
   // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
   if (isLegacyFormat(config.access_token)) {
@@ -331,9 +342,8 @@ export async function sendMessageToConversation(
 
   const attempt = async (phone: string): Promise<string> => {
     if (messageType === 'template') {
-      const result = await sendTemplateMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const result = await sendProviderTemplate({
+        config: providerConfig,
         to: phone,
         templateName: templateName!,
         language: templateLanguage || 'en_US',
@@ -345,9 +355,8 @@ export async function sendMessageToConversation(
       return result.messageId;
     }
     if (isMediaKind) {
-      const result = await sendMediaMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const result = await sendProviderMedia({
+        config: providerConfig,
         to: phone,
         kind: messageType as MediaKind,
         link: mediaUrl!,
@@ -358,36 +367,16 @@ export async function sendMessageToConversation(
       return result.messageId;
     }
     if (messageType === 'interactive') {
-      const p = interactivePayload!;
-      if (p.kind === 'buttons') {
-        const result = await sendInteractiveButtons({
-          phoneNumberId: config.phone_number_id,
-          accessToken,
-          to: phone,
-          bodyText: p.body,
-          headerText: p.header || undefined,
-          footerText: p.footer || undefined,
-          buttons: p.buttons,
-          contextMessageId,
-        });
-        return result.messageId;
-      }
-      const result = await sendInteractiveList({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const result = await sendProviderInteractive({
+        config: providerConfig,
         to: phone,
-        bodyText: p.body,
-        buttonLabel: p.button_label,
-        headerText: p.header || undefined,
-        footerText: p.footer || undefined,
-        sections: p.sections,
+        payload: interactivePayload!,
         contextMessageId,
       });
       return result.messageId;
     }
-    const result = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const result = await sendProviderText({
+      config: providerConfig,
       to: phone,
       text: contentText!,
       contextMessageId,
@@ -395,13 +384,17 @@ export async function sendMessageToConversation(
     return result.messageId;
   };
 
-  // Send via Meta — retry across phone-number variants if Meta rejects
+  // Send via the configured provider. Meta retries Brazilian phone-number
+  // variants; UAZAPI expects the normalized WhatsApp number directly.
   // with "recipient not in allowed list"; persist a working variant
   // back to the contact so the next send goes straight through.
   let waMessageId = '';
   let workingPhone = sanitizedPhone;
   try {
-    const variants = phoneVariants(sanitizedPhone);
+    const variants =
+      config.provider === 'uazapi'
+        ? [sanitizedPhone]
+        : phoneVariants(sanitizedPhone);
     let lastError: unknown = null;
 
     for (const variant of variants) {
@@ -412,12 +405,15 @@ export async function sendMessageToConversation(
         break;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (!isRecipientNotAllowedError(message)) {
+        if (
+          config.provider === 'uazapi' ||
+          !isRecipientNotAllowedError(message)
+        ) {
           throw err;
         }
         lastError = err;
         console.warn(
-          `[send-message] variant "${variant}" rejected by Meta, trying next…`
+          `[send-message] variant "${variant}" rejected by Meta; trying the next format…`
         );
       }
     }
@@ -425,9 +421,10 @@ export async function sendMessageToConversation(
     if (lastError) throw lastError;
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : 'Unknown Meta API error';
-    console.error('[send-message] Meta send failed for all variants:', message);
-    throw new SendMessageError('meta_error', `Meta API error: ${message}`, 502);
+      err instanceof Error ? err.message : 'Erro desconhecido do provedor';
+    const name = providerName(providerConfig);
+    console.error(`[send-message] ${name} send failed:`, message);
+    throw new SendMessageError('provider_error', `${name}: ${message}`, 502);
   }
 
   if (workingPhone !== sanitizedPhone) {
@@ -470,7 +467,7 @@ export async function sendMessageToConversation(
     console.error('[send-message] error inserting sent message:', msgError);
     throw new SendMessageError(
       'db_error',
-      `Message sent to Meta but failed to save to DB: ${msgError.message}`,
+      `A mensagem foi enviada, mas não pôde ser salva no banco: ${msgError.message}`,
       500
     );
   }

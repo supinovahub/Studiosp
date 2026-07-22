@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server';
+import { randomBytes } from 'node:crypto';
+import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import {
   registerPhoneNumber,
   subscribeWabaToApp,
   verifyPhoneNumber,
-} from '@/lib/whatsapp/meta-api'
-import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
+} from '@/lib/whatsapp/meta-api';
+import { encrypt, decrypt } from '@/lib/whatsapp/encryption';
+import { configureUazapiWebhook, getUazapiStatus } from '@/lib/whatsapp/uazapi';
+import { isDeliverableUrl } from '@/lib/webhooks/ssrf';
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
@@ -20,15 +23,15 @@ import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
  */
 async function resolveAccountId(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
+  userId: string
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from('profiles')
     .select('account_id')
     .eq('user_id', userId)
-    .maybeSingle()
-  if (error || !data?.account_id) return null
-  return data.account_id as string
+    .maybeSingle();
+  if (error || !data?.account_id) return null;
+  return data.account_id as string;
 }
 
 // Lazy-initialised service-role client. We need it to detect a
@@ -36,15 +39,15 @@ async function resolveAccountId(
 // the user's own session can't see other users' rows, so the conflict
 // would be invisible without the service role.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _adminClient: any = null
+let _adminClient: any = null;
 function supabaseAdmin() {
   if (!_adminClient) {
     _adminClient = createAdminClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    );
   }
-  return _adminClient
+  return _adminClient;
 }
 
 /**
@@ -62,41 +65,47 @@ function supabaseAdmin() {
  */
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = await createClient();
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser()
+    } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
     }
 
-    const accountId = await resolveAccountId(supabase, user.id)
+    const accountId = await resolveAccountId(supabase, user.id);
     if (!accountId) {
       return NextResponse.json(
         {
           connected: false,
           reason: 'no_account',
-          message: 'Your profile is not linked to an account.',
+          message: 'Seu perfil não está vinculado a uma conta.',
         },
-        { status: 200 },
-      )
+        { status: 200 }
+      );
     }
 
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token, status')
+      .select(
+        'provider, phone_number_id, access_token, status, uazapi_base_url, uazapi_instance_id, uazapi_instance_name'
+      )
       .eq('account_id', accountId)
-      .maybeSingle()
+      .maybeSingle();
 
     if (configError) {
-      console.error('Error fetching whatsapp_config:', configError)
+      console.error('Error fetching whatsapp_config:', configError);
       return NextResponse.json(
-        { connected: false, reason: 'db_error', message: 'Failed to fetch configuration' },
+        {
+          connected: false,
+          reason: 'db_error',
+          message: 'Falha ao buscar configuração',
+        },
         { status: 200 }
-      )
+      );
     }
 
     if (!config) {
@@ -104,29 +113,67 @@ export async function GET() {
         {
           connected: false,
           reason: 'no_config',
-          message: 'No WhatsApp configuration saved yet. Fill in the form and click Save Configuration.',
+          message:
+            'Nenhuma configuração do WhatsApp salva ainda. Preencha o formulário e clique em Salvar configuração.',
         },
         { status: 200 }
-      )
+      );
     }
 
     // Try to decrypt the stored token with the current ENCRYPTION_KEY.
     // If this fails, the key changed (or was never consistent across envs).
-    let accessToken: string
+    let accessToken: string;
     try {
-      accessToken = decrypt(config.access_token)
+      accessToken = decrypt(config.access_token);
     } catch (err) {
-      console.error('[whatsapp/config GET] Token decryption failed:', err)
+      console.error('[whatsapp/config GET] Token decryption failed:', err);
       return NextResponse.json(
         {
           connected: false,
           reason: 'token_corrupted',
           needs_reset: true,
           message:
-            'The stored access token cannot be decrypted with the current ENCRYPTION_KEY. This usually means the key changed, or it differs between environments (local vs Hostinger vs Vercel). Click "Reset Configuration" below, then re-save.',
+            'O token armazenado não pode ser descriptografado com a ENCRYPTION_KEY atual. Isso normalmente significa que a chave mudou ou está diferente entre os ambientes. Remova a configuração abaixo e salve as credenciais novamente.',
         },
         { status: 200 }
-      )
+      );
+    }
+
+    if (config.provider === 'uazapi') {
+      try {
+        const status = await getUazapiStatus({
+          baseUrl: config.uazapi_base_url,
+          token: accessToken,
+        });
+        return NextResponse.json({
+          connected: status.connected,
+          provider: 'uazapi',
+          status: status.instance.status,
+          phone_info: {
+            id: status.instance.id ?? config.uazapi_instance_id,
+            display_phone_number: status.phone ?? config.phone_number_id,
+            verified_name:
+              status.instance.profileName ?? config.uazapi_instance_name,
+            profile_picture_url: status.instance.profilePicUrl,
+            is_business: status.instance.isBusiness,
+            qrcode: status.instance.qrcode,
+            paircode: status.instance.paircode,
+          },
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Erro desconhecido da UAZAPI';
+        console.error(
+          '[whatsapp/config GET] UAZAPI verification failed:',
+          message
+        );
+        return NextResponse.json({
+          connected: false,
+          provider: 'uazapi',
+          reason: 'uazapi_error',
+          message: `A UAZAPI rejeitou a conexão: ${message}`,
+        });
+      }
     }
 
     // Validate credentials against Meta
@@ -134,11 +181,15 @@ export async function GET() {
       const phoneInfo = await verifyPhoneNumber({
         phoneNumberId: config.phone_number_id,
         accessToken,
-      })
-      return NextResponse.json({ connected: true, phone_info: phoneInfo })
+      });
+      return NextResponse.json({ connected: true, phone_info: phoneInfo });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown Meta API error'
-      console.error('[whatsapp/config GET] Meta API verification failed:', message)
+      const message =
+        err instanceof Error ? err.message : 'Unknown Meta API error';
+      console.error(
+        '[whatsapp/config GET] Meta API verification failed:',
+        message
+      );
       return NextResponse.json(
         {
           connected: false,
@@ -146,14 +197,18 @@ export async function GET() {
           message: `Meta API rejected the credentials: ${message}`,
         },
         { status: 200 }
-      )
+      );
     }
   } catch (error) {
-    console.error('Error in WhatsApp config GET:', error)
+    console.error('Error in WhatsApp config GET:', error);
     return NextResponse.json(
-      { connected: false, reason: 'unknown', message: 'Internal server error' },
+      {
+        connected: false,
+        reason: 'unknown',
+        message: 'Erro do Servidor Interno',
+      },
       { status: 500 }
-    )
+    );
   }
 }
 
@@ -165,41 +220,194 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = await createClient();
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser()
+    } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
     }
 
-    const accountId = await resolveAccountId(supabase, user.id)
+    const accountId = await resolveAccountId(supabase, user.id);
     if (!accountId) {
       return NextResponse.json(
-        { error: 'Your profile is not linked to an account.' },
-        { status: 403 },
-      )
+        { error: 'Seu perfil não está vinculado a uma conta.' },
+        { status: 403 }
+      );
     }
 
-    const body = await request.json()
-    const { phone_number_id, waba_id, access_token, verify_token, pin } = body
+    const body = await request.json();
+    const {
+      provider: providerInput,
+      phone_number_id,
+      waba_id,
+      access_token,
+      verify_token,
+      pin,
+      uazapi_base_url,
+    } = body;
+    const provider = providerInput === 'uazapi' ? 'uazapi' : 'meta';
+
+    if (provider === 'uazapi') {
+      if (!access_token || !uazapi_base_url) {
+        return NextResponse.json(
+          {
+            error: 'A URL base e o token da instância UAZAPI são obrigatórios.',
+          },
+          { status: 400 }
+        );
+      }
+
+      let normalizedBaseUrl: string;
+      try {
+        const parsed = new URL(uazapi_base_url);
+        if (parsed.protocol !== 'https:') throw new Error('https_required');
+        normalizedBaseUrl = parsed.toString().replace(/\/$/, '');
+      } catch {
+        return NextResponse.json(
+          { error: 'Informe uma URL HTTPS válida para a UAZAPI.' },
+          { status: 400 }
+        );
+      }
+      if (!(await isDeliverableUrl(normalizedBaseUrl))) {
+        return NextResponse.json(
+          {
+            error: 'A URL da UAZAPI precisa apontar para um servidor público.',
+          },
+          { status: 400 }
+        );
+      }
+
+      let status;
+      try {
+        status = await getUazapiStatus({
+          baseUrl: normalizedBaseUrl,
+          token: access_token,
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Erro desconhecido da UAZAPI';
+        return NextResponse.json(
+          { error: `Não foi possível validar a UAZAPI: ${message}` },
+          { status: 400 }
+        );
+      }
+
+      let encryptedAccessToken: string;
+      try {
+        encryptedAccessToken = encrypt(access_token);
+      } catch {
+        return NextResponse.json(
+          { error: 'Não foi possível criptografar o token da UAZAPI.' },
+          { status: 500 }
+        );
+      }
+
+      const { data: existing } = await supabase
+        .from('whatsapp_config')
+        .select('id, verify_token')
+        .eq('account_id', accountId)
+        .maybeSingle();
+
+      let webhookSecret = randomBytes(32).toString('hex');
+      if (existing?.verify_token) {
+        try {
+          webhookSecret = decrypt(existing.verify_token);
+        } catch {
+          // A chave antiga não pôde ser lida; a configuração recebe um
+          // segredo novo junto com o token atualizado.
+        }
+      }
+
+      const baseRow = {
+        provider: 'uazapi',
+        phone_number_id: status.phone ?? null,
+        waba_id: null,
+        access_token: encryptedAccessToken,
+        verify_token: encrypt(webhookSecret),
+        status:
+          status.instance.status ??
+          (status.connected ? 'connected' : 'disconnected'),
+        connected_at: status.connected ? new Date().toISOString() : null,
+        registered_at: null,
+        subscribed_apps_at: null,
+        last_registration_error: null,
+        uazapi_base_url: normalizedBaseUrl,
+        uazapi_instance_id: status.instance.id ?? null,
+        uazapi_instance_name:
+          status.instance.name ?? status.instance.profileName ?? 'Studiosp',
+        updated_at: new Date().toISOString(),
+      };
+
+      const write = existing
+        ? supabase
+            .from('whatsapp_config')
+            .update(baseRow)
+            .eq('account_id', accountId)
+        : supabase.from('whatsapp_config').insert({
+            account_id: accountId,
+            user_id: user.id,
+            ...baseRow,
+          });
+      const { error: writeError } = await write;
+      if (writeError) {
+        console.error('Error saving UAZAPI config:', writeError);
+        return NextResponse.json(
+          { error: 'Não foi possível salvar a configuração da UAZAPI.' },
+          { status: writeError.code === '23505' ? 409 : 500 }
+        );
+      }
+
+      let webhookConfigured = false;
+      const publicOrigin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '');
+      if (publicOrigin?.startsWith('https://')) {
+        try {
+          await configureUazapiWebhook(
+            { baseUrl: normalizedBaseUrl, token: access_token },
+            `${publicOrigin}/api/whatsapp/uazapi/webhook?secret=${encodeURIComponent(webhookSecret)}`
+          );
+          webhookConfigured = true;
+        } catch (err) {
+          console.warn(
+            'UAZAPI webhook setup failed:',
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        saved: true,
+        provider: 'uazapi',
+        connected: status.connected,
+        status: status.instance.status,
+        webhook_configured: webhookConfigured,
+        phone_info: {
+          id: status.instance.id,
+          display_phone_number: status.phone,
+          verified_name: status.instance.profileName ?? status.instance.name,
+          qrcode: status.instance.qrcode,
+          paircode: status.instance.paircode,
+        },
+      });
+    }
 
     if (!access_token || !phone_number_id) {
       return NextResponse.json(
-        { error: 'access_token and phone_number_id are required' },
+        { error: 'access_token e phone_number_id são obrigatórios' },
         { status: 400 }
-      )
+      );
     }
 
     if (pin !== undefined && pin !== null && pin !== '') {
       if (typeof pin !== 'string' || !/^\d{6}$/.test(pin)) {
         return NextResponse.json(
-          { error: 'PIN must be exactly 6 digits.' },
+          { error: 'O PIN deve ter exatamente 6 dígitos.' },
           { status: 400 }
-        )
+        );
       }
     }
 
@@ -215,58 +423,62 @@ export async function POST(request: Request) {
       .select('account_id')
       .eq('phone_number_id', phone_number_id)
       .neq('account_id', accountId)
-      .maybeSingle()
+      .maybeSingle();
 
     if (claimedError) {
-      console.error('Error checking phone_number_id ownership:', claimedError)
+      console.error('Error checking phone_number_id ownership:', claimedError);
       return NextResponse.json(
-        { error: 'Failed to validate configuration' },
+        { error: 'Falha ao validar a configuração' },
         { status: 500 }
-      )
+      );
     }
 
     if (claimed) {
       return NextResponse.json(
         {
           error:
-            'This WhatsApp phone number is already linked to another account on this instance. Each phone number can only be connected to one wacrm user.',
+            'Este número de telefone do WhatsApp já está vinculado a outra conta nesta instância. Cada número de telefone só pode ser conectado a um usuário Studiosp.',
         },
         { status: 409 }
-      )
+      );
     }
 
     // Verify credentials with Meta BEFORE saving
-    let phoneInfo
+    let phoneInfo;
     try {
       phoneInfo = await verifyPhoneNumber({
         phoneNumberId: phone_number_id,
         accessToken: access_token,
-      })
+      });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown Meta API error'
-      console.error('Meta API verification failed during save:', message)
+      const message =
+        err instanceof Error ? err.message : 'Erro desconhecido da API da Meta';
+      console.error('Meta API verification failed during save:', message);
       return NextResponse.json(
-        { error: `Meta API error: ${message}` },
+        { error: `Erro da API da Meta: ${message}` },
         { status: 400 }
-      )
+      );
     }
 
     // Encrypt sensitive tokens before storing
-    let encryptedAccessToken: string
-    let encryptedVerifyToken: string | null
+    let encryptedAccessToken: string;
+    let encryptedVerifyToken: string | null;
     try {
-      encryptedAccessToken = encrypt(access_token)
-      encryptedVerifyToken = verify_token ? encrypt(verify_token) : null
+      encryptedAccessToken = encrypt(access_token);
+      encryptedVerifyToken = verify_token ? encrypt(verify_token) : null;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown encryption error'
-      console.error('Encryption failed:', message)
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Erro desconhecido de criptografia';
+      console.error('Encryption failed:', message);
       return NextResponse.json(
         {
           error:
-            'Failed to encrypt token. Check that ENCRYPTION_KEY is a valid 64-character hex string in your environment variables.',
+            'Não foi possível criptografar o token. Confirme que ENCRYPTION_KEY contém 64 caracteres hexadecimais válidos nas variáveis de ambiente.',
         },
         { status: 500 }
-      )
+      );
     }
 
     // Look up any pre-existing row for this account so we know whether
@@ -276,11 +488,11 @@ export async function POST(request: Request) {
       .from('whatsapp_config')
       .select('id, registered_at, phone_number_id')
       .eq('account_id', accountId)
-      .maybeSingle()
+      .maybeSingle();
 
     const sameNumber =
       existing?.phone_number_id === phone_number_id &&
-      existing?.registered_at != null
+      existing?.registered_at != null;
 
     // Step 1: register the phone number for inbound webhooks.
     //
@@ -289,14 +501,15 @@ export async function POST(request: Request) {
     // when the same number is already registered and no PIN was
     // supplied — re-registering an already-active number with a
     // stale PIN would actually fail and undo the active subscription.
-    let registeredAt: string | null = existing?.registered_at ?? null
-    let registrationError: string | null = null
+    let registeredAt: string | null = existing?.registered_at ?? null;
+    let registrationError: string | null = null;
     // True when registration was deliberately skipped because no PIN
     // was supplied (see below). Distinct from registrationError — this
     // is not a failure, just an incomplete-but-valid save.
-    let registrationSkipped = false
+    let registrationSkipped = false;
 
-    const needsRegistration = !sameNumber || (typeof pin === 'string' && pin.length > 0)
+    const needsRegistration =
+      !sameNumber || (typeof pin === 'string' && pin.length > 0);
     if (needsRegistration) {
       if (!pin) {
         // No PIN provided. Meta TEST numbers (Developer Console) are
@@ -308,19 +521,19 @@ export async function POST(request: Request) {
         // credentials as connected, and leave registered_at null. The
         // UI surfaces a separate "Not registered" banner with a path to
         // add a PIN later for users who do need inbound webhook routing.
-        registrationSkipped = true
+        registrationSkipped = true;
       } else {
         try {
           await registerPhoneNumber({
             phoneNumberId: phone_number_id,
             accessToken: access_token,
             pin,
-          })
-          registeredAt = new Date().toISOString()
+          });
+          registeredAt = new Date().toISOString();
         } catch (err) {
           registrationError =
-            err instanceof Error ? err.message : 'Unknown Meta API error'
-          console.error('Phone number /register failed:', registrationError)
+            err instanceof Error ? err.message : 'Unknown Meta API error';
+          console.error('Phone number /register failed:', registrationError);
           // We deliberately fall through and still save the row so the
           // user can retry without re-entering everything. The UI
           // surfaces `last_registration_error` so they see WHY it's
@@ -333,17 +546,17 @@ export async function POST(request: Request) {
     // side, so we call on every save and persist the timestamp.
     // Skipped only when there's no waba_id (legacy rows from before
     // we required it).
-    let subscribedAppsAt: string | null = null
+    let subscribedAppsAt: string | null = null;
     if (waba_id) {
       try {
         await subscribeWabaToApp({
           wabaId: waba_id,
           accessToken: access_token,
-        })
-        subscribedAppsAt = new Date().toISOString()
+        });
+        subscribedAppsAt = new Date().toISOString();
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        console.warn('WABA subscribed_apps failed (non-fatal):', message)
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn('WABA subscribed_apps failed (non-fatal):', message);
         // Subscription failures are rare once the App has the right
         // permissions; we don't block save on them — the diagnostic
         // endpoint surfaces this state too.
@@ -354,6 +567,7 @@ export async function POST(request: Request) {
     // store the credentials and the error so the UI can guide the
     // user through a retry.
     const baseRow = {
+      provider: 'meta',
       phone_number_id,
       waba_id: waba_id || null,
       access_token: encryptedAccessToken,
@@ -363,21 +577,24 @@ export async function POST(request: Request) {
       registered_at: registrationError ? null : registeredAt,
       subscribed_apps_at: subscribedAppsAt ?? null,
       last_registration_error: registrationError,
+      uazapi_base_url: null,
+      uazapi_instance_id: null,
+      uazapi_instance_name: null,
       updated_at: new Date().toISOString(),
-    }
+    };
 
     if (existing) {
       const { error: updateError } = await supabase
         .from('whatsapp_config')
         .update(baseRow)
-        .eq('account_id', accountId)
+        .eq('account_id', accountId);
 
       if (updateError) {
-        console.error('Error updating whatsapp_config:', updateError)
+        console.error('Error updating whatsapp_config:', updateError);
         return NextResponse.json(
-          { error: 'Failed to update configuration' },
+          { error: 'Falha ao atualizar a configuração' },
           { status: 500 }
-        )
+        );
       }
     } else {
       // Insert with both columns: `account_id` is the tenancy key
@@ -390,14 +607,14 @@ export async function POST(request: Request) {
           account_id: accountId,
           user_id: user.id,
           ...baseRow,
-        })
+        });
 
       if (insertError) {
-        console.error('Error inserting whatsapp_config:', insertError)
+        console.error('Error inserting whatsapp_config:', insertError);
         return NextResponse.json(
-          { error: 'Failed to save configuration' },
+          { error: 'Falha ao salvar a configuração' },
           { status: 500 }
-        )
+        );
       }
     }
 
@@ -411,7 +628,7 @@ export async function POST(request: Request) {
         registered: false,
         registration_error: registrationError,
         phone_info: phoneInfo,
-      })
+      });
     }
 
     return NextResponse.json({
@@ -424,10 +641,13 @@ export async function POST(request: Request) {
       // rather than claiming the number is fully live.
       registration_skipped: registrationSkipped,
       phone_info: phoneInfo,
-    })
+    });
   } catch (error) {
-    console.error('Error in WhatsApp config POST:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Error in WhatsApp config POST:', error);
+    return NextResponse.json(
+      { error: 'Erro interno do servidor.' },
+      { status: 500 }
+    );
   }
 }
 
@@ -440,41 +660,44 @@ export async function POST(request: Request) {
  */
 export async function DELETE() {
   try {
-    const supabase = await createClient()
+    const supabase = await createClient();
 
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser()
+    } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
     }
 
-    const accountId = await resolveAccountId(supabase, user.id)
+    const accountId = await resolveAccountId(supabase, user.id);
     if (!accountId) {
       return NextResponse.json(
-        { error: 'Your profile is not linked to an account.' },
-        { status: 403 },
-      )
+        { error: 'Seu perfil não está vinculado a uma conta.' },
+        { status: 403 }
+      );
     }
 
     const { error: deleteError } = await supabase
       .from('whatsapp_config')
       .delete()
-      .eq('account_id', accountId)
+      .eq('account_id', accountId);
 
     if (deleteError) {
-      console.error('Error deleting whatsapp_config:', deleteError)
+      console.error('Error deleting whatsapp_config:', deleteError);
       return NextResponse.json(
-        { error: 'Failed to delete configuration' },
+        { error: 'Falha ao excluir a configuração' },
         { status: 500 }
-      )
+      );
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error in WhatsApp config DELETE:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error('Error in WhatsApp config DELETE:', error);
+    return NextResponse.json(
+      { error: 'Erro interno do servidor.' },
+      { status: 500 }
+    );
   }
 }

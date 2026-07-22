@@ -57,7 +57,7 @@ export async function GET() {
     if (error) {
       console.error('[GET /api/account/api-keys] fetch error:', error);
       return NextResponse.json(
-        { error: 'Failed to load API keys' },
+        { error: 'Falha ao carregar chaves de API' },
         { status: 500 }
       );
     }
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     const rawName = typeof body?.name === 'string' ? body.name.trim() : '';
     if (!rawName) {
       return NextResponse.json(
-        { error: "'name' is required" },
+        { error: "'nome' é obrigatório" },
         { status: 400 }
       );
     }
@@ -103,7 +103,9 @@ export async function POST(request: Request) {
     const scopes = normalizeScopes(body?.scopes ?? []);
     if (scopes === null) {
       return NextResponse.json(
-        { error: "'scopes' must be an array of known scope strings" },
+        {
+          error: "'scopes' deve ser uma matriz de strings de escopo conhecidas",
+        },
         { status: 400 }
       );
     }
@@ -140,7 +142,7 @@ export async function POST(request: Request) {
     if (error || !data) {
       console.error('[POST /api/account/api-keys] insert error:', error);
       return NextResponse.json(
-        { error: 'Failed to create API key' },
+        { error: 'Falha ao criar chave de API' },
         { status: 500 }
       );
     }

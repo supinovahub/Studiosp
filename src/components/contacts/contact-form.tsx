@@ -61,9 +61,10 @@ export function ContactForm({
   // hard-blocks the save; a fuzzy trunk-variant match only warns. The
   // DB unique index (migration 022) is the real backstop — this is the
   // friendly heads-up before we get there.
-  const [dupMatch, setDupMatch] = useState<
-    { contact: ExistingContact; exact: boolean } | null
-  >(null);
+  const [dupMatch, setDupMatch] = useState<{
+    contact: ExistingContact;
+    exact: boolean;
+  } | null>(null);
   const [checkingDup, setCheckingDup] = useState(false);
 
   const [tags, setTags] = useState<Tag[]>([]);
@@ -97,7 +98,7 @@ export function ContactForm({
       setDupMatch(
         existing
           ? { contact: existing, exact: isExactMatch(existing, value) }
-          : null,
+          : null
       );
     } finally {
       setCheckingDup(false);
@@ -106,10 +107,7 @@ export function ContactForm({
 
   async function fetchTags() {
     setLoadingTags(true);
-    const { data } = await supabase
-      .from('tags')
-      .select('*')
-      .order('name');
+    const { data } = await supabase.from('tags').select('*').order('name');
     if (data) setTags(data);
     setLoadingTags(false);
   }
@@ -144,8 +142,9 @@ export function ContactForm({
         data: { session },
       } = await supabase.auth.getSession();
       const user = session?.user;
-      if (!user) throw new Error('Not authenticated');
-      if (!accountId) throw new Error('Your profile is not linked to an account.');
+      if (!user) throw new Error('Não autenticado');
+      if (!accountId)
+        throw new Error('Seu perfil não está vinculado a uma conta.');
 
       let contactId = contact?.id;
 
@@ -182,8 +181,12 @@ export function ContactForm({
       if (contactId) {
         const existingTagIds = new Set(contactTags.map((tag) => tag.tag_id));
         const desiredTagIds = new Set(selectedTagIds);
-        const toRemove = [...existingTagIds].filter((id) => !desiredTagIds.has(id));
-        const toAdd = [...desiredTagIds].filter((id) => !existingTagIds.has(id));
+        const toRemove = [...existingTagIds].filter(
+          (id) => !desiredTagIds.has(id)
+        );
+        const toAdd = [...desiredTagIds].filter(
+          (id) => !existingTagIds.has(id)
+        );
 
         for (const tagId of toRemove) {
           await deleteContactTag(contactId, tagId);
@@ -207,7 +210,7 @@ export function ContactForm({
           const existing = await findExistingContact(
             supabase,
             accountId,
-            phone.trim(),
+            phone.trim()
           );
           if (existing) setDupMatch({ contact: existing, exact: true });
         }
@@ -228,9 +231,7 @@ export function ContactForm({
             {isEdit ? t('editTitle') : t('addTitle')}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            {isEdit
-              ? t('editDesc')
-              : t('addDesc')}
+            {isEdit ? t('editDesc') : t('addDesc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -267,32 +268,28 @@ export function ContactForm({
               <div
                 className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${
                   dupMatch.exact
-                    ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                    : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                    ? 'borda-vermelho-500/40 texto-vermelho-300 bg-red-500/10'
+                    : 'borda-âmbar-500/40 bg-âmbar-500/10 texto-âmbar-300'
                 }`}
               >
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 <div className="space-y-1">
-                  <p>
-                    {dupMatch.exact
-                      ? t('dupExact')
-                      : t('dupSimilar')}
-                  </p>
+                  <p>{dupMatch.exact ? t('dupExact') : t('dupSimilar')}</p>
                   {onViewExisting && (
                     <button
                       type="button"
                       onClick={() => onViewExisting(dupMatch.contact.id)}
                       className="font-medium underline underline-offset-2 hover:no-underline"
                     >
-                      {t('viewExisting', { name: dupMatch.contact.name || dupMatch.contact.phone })}
+                      {t('viewExisting', {
+                        name: dupMatch.contact.name || dupMatch.contact.phone,
+                      })}
                     </button>
                   )}
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                {t('phoneHint')}
-              </p>
+              <p className="text-muted-foreground text-xs">{t('phoneHint')}</p>
             )}
           </div>
 
@@ -326,12 +323,12 @@ export function ContactForm({
           <div className="space-y-2">
             <Label className="text-muted-foreground">{t('tagsLabel')}</Label>
             {loadingTags ? (
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <div className="text-muted-foreground flex items-center gap-2 text-sm">
                 <Loader2 className="size-3 animate-spin" />
                 {t('loadingTags')}
               </div>
             ) : tags.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {t('noTagsAvailable')}
               </p>
             ) : (
@@ -343,10 +340,10 @@ export function ContactForm({
                       key={tag.id}
                       type="button"
                       onClick={() => toggleTag(tag.id)}
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer ${
+                      className={`inline-flex cursor-pointer items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
                         selected
-                          ? 'ring-2 ring-primary ring-offset-1 ring-offset-border'
-                          : 'opacity-60 hover:opacity-100'
+                          ? 'anel-2 anel-primário anel-deslocamento-1 anel-deslocamento-borda'
+                          : 'opacidade-60 pairar:opacidade-100'
                       }`}
                       style={{
                         backgroundColor: tag.color + '20',

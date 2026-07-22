@@ -1,17 +1,17 @@
 {
-  "name": "wacrm",
+  "name": "studiosp",
   "version": "0.8.0",
   "private": true,
-  "description": "Self-hostable CRM template for WhatsApp built on Next.js and Supabase — shared inbox, contacts, sales pipelines, broadcasts, and no-code automations.",
+  "description": "CRM brasileiro para vendas de studios com atendimento integrado ao WhatsApp.",
   "license": "MIT",
-  "author": "Arnas Donauskas",
-  "homepage": "https://github.com/ArnasDon/wacrm",
+  "author": "Studiosp — baseado no wacrm de Arnas Donauskas",
+  "homepage": "https://github.com/mathdias2020/Studiosp",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ArnasDon/wacrm.git"
+    "url": "git+https://github.com/mathdias2020/Studiosp.git"
   },
   "bugs": {
-    "url": "https://github.com/ArnasDon/wacrm/issues"
+    "url": "https://github.com/mathdias2020/Studiosp/issues"
   },
   "keywords": [
     "crm",

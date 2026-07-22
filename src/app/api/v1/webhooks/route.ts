@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error('[api/v1/webhooks] list error:', error);
-      return fail('internal', 'Failed to list webhooks', 500);
+      return fail('internal', 'Falha ao listar webhooks', 500);
     }
 
     // The roster is small and settings-class — return it whole (the
@@ -55,19 +55,23 @@ export async function POST(request: Request) {
       unknown
     > | null;
     if (!body || typeof body !== 'object') {
-      return fail('bad_request', 'Request body must be a JSON object', 400);
+      return fail(
+        'bad_request',
+        'O corpo da solicitação precisa ser um objeto JSON',
+        400
+      );
     }
 
     const url = normalizeWebhookUrl(body.url);
     if (!url) {
-      return fail('bad_request', "'url' must be a valid https:// URL", 400);
+      return fail('bad_request', "'url' deve ser um URL https:// válido", 400);
     }
 
     const events = normalizeEvents(body.events);
     if (!events) {
       return fail(
         'bad_request',
-        "'events' must be a non-empty array of known event names",
+        "'eventos' deve ser uma matriz não vazia de nomes de eventos conhecidos",
         400
       );
     }
@@ -88,12 +92,15 @@ export async function POST(request: Request) {
 
     if (error || !created) {
       console.error('[api/v1/webhooks] create error:', error);
-      return fail('internal', 'Failed to create webhook', 500);
+      return fail('internal', 'Falha ao criar webhook', 500);
     }
 
     // Secret shown exactly once.
     return ok(
-      { ...serializeWebhookEndpoint(created as Record<string, unknown>), secret },
+      {
+        ...serializeWebhookEndpoint(created as Record<string, unknown>),
+        secret,
+      },
       201
     );
   } catch (err) {

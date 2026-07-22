@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -13,14 +13,14 @@ import {
   closestCorners,
   type DragEndEvent,
   type DragStartEvent,
-} from "@dnd-kit/core";
-import type { Deal, PipelineStage } from "@/types";
-import { DealCard } from "./deal-card";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
-import { formatCurrency } from "@/lib/currency";
-import { useTranslations } from "next-intl";
+} from '@dnd-kit/core';
+import type { Deal, PipelineStage } from '@/types';
+import { DealCard } from './deal-card';
+import { Button } from '@/components/ui/button';
+import { Plus } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
+import { formatCurrency } from '@/lib/currency';
+import { useTranslations } from 'next-intl';
 
 interface PipelineBoardProps {
   stages: PipelineStage[];
@@ -42,7 +42,7 @@ export function PipelineBoard({
 
   const sortedStages = useMemo(
     () => [...stages].sort((a, b) => a.position - b.position),
-    [stages],
+    [stages]
   );
 
   const dealsByStage = useMemo(() => {
@@ -60,11 +60,11 @@ export function PipelineBoard({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     // Keyboard drag support: focus a card, Space to pick up, arrows to move,
     // Space to drop, Escape to cancel.
-    useSensor(KeyboardSensor),
+    useSensor(KeyboardSensor)
   );
 
   const activeDeal = activeDealId
-    ? deals.find((d) => d.id === activeDealId) ?? null
+    ? (deals.find((d) => d.id === activeDealId) ?? null)
     : null;
 
   function handleDragStart(event: DragStartEvent) {
@@ -108,7 +108,7 @@ export function PipelineBoard({
           const stageDeals = dealsByStage.get(stage.id) ?? [];
           const totalValue = stageDeals.reduce(
             (s, d) => s + Number(d.value || 0),
-            0,
+            0
           );
           return (
             <StageColumn
@@ -127,7 +127,7 @@ export function PipelineBoard({
       <DragOverlay
         dropAnimation={{
           duration: 200,
-          easing: "cubic-bezier(0.2, 0, 0, 1)",
+          easing: 'cubic-bezier(0.2, 0, 0, 1)',
         }}
       >
         {activeDeal ? (
@@ -144,44 +144,9 @@ export function PipelineBoard({
         ) : null}
       </DragOverlay>
 
-      <style jsx>{`
-        .pipeline-scroll {
-          scroll-behavior: smooth;
-        }
-        /* On touch devices the peek/snap layout already signals there's
-           more to swipe, so the scrollbar is hidden for a clean look.
-           On desktop (mouse) the board can overflow with many stages
-           and there is no peek hint, so keep a thin, themed scrollbar
-           visible to make the overflow discoverable and usable. */
-        @media (hover: none), (pointer: coarse) {
-          .pipeline-scroll::-webkit-scrollbar {
-            height: 0;
-            display: none;
-          }
-          .pipeline-scroll {
-            scrollbar-width: none;
-          }
-        }
-        @media (hover: hover) and (pointer: fine) {
-          .pipeline-scroll {
-            scrollbar-width: thin;
-            scrollbar-color: var(--border) transparent;
-          }
-          .pipeline-scroll::-webkit-scrollbar {
-            height: 8px;
-          }
-          .pipeline-scroll::-webkit-scrollbar-track {
-            background: transparent;
-          }
-          .pipeline-scroll::-webkit-scrollbar-thumb {
-            background-color: var(--border);
-            border-radius: 9999px;
-          }
-          .pipeline-scroll::-webkit-scrollbar-thumb:hover {
-            background-color: var(--muted-foreground);
-          }
-        }
-      `}</style>
+      <style
+        jsx
+      >{`.funil-scroll {comportamento de rolagem: suave; } /* Em dispositivos sensíveis ao toque, o layout peek/snap já sinaliza que há mais para deslizar, então a barra de rolagem fica oculta para uma aparência limpa. No desktop (mouse), o quadro pode transbordar com muitos estágios e não há nenhuma dica de espiada, portanto, mantenha uma barra de rolagem temática fina visível para tornar o estouro detectável e utilizável. */ @media (hover: none), (ponteiro: grosso) { .funil-scroll::-webkit-scrollbar { height: 0; exibição: nenhum; } .funil-scroll {largura da barra de rolagem: nenhum; } } @media (hover: hover) e (ponteiro: fino) { .funil-scroll { scrollbar-width: thin; cor da barra de rolagem: var(--border) transparente; } .funil-scroll::-webkit-scrollbar { altura: 8px; } .funil-scroll::-webkit-scrollbar-track { background: transparente; } .funil-scroll::-webkit-scrollbar-thumb { cor de fundo: var(--border); raio da borda: 9999px; } .funil-scroll::-webkit-scrollbar-thumb:hover { cor de fundo: var(--muted-foreground); } }`}</style>
     </DndContext>
   );
 }
@@ -201,7 +166,7 @@ function StageColumn({
   onAddDeal: (stageId: string) => void;
   onEditDeal: (deal: Deal) => void;
 }) {
-  const t = useTranslations("Pipelines.board");
+  const t = useTranslations('Pipelines.board');
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
   return (
@@ -211,21 +176,21 @@ function StageColumn({
     // restore the flex-1 share-the-row behavior. The droppable ref is
     // on the inner messages region below — intentionally NOT here, so
     // a drag over the column header doesn't highlight the whole column.
-    <div className="flex w-[85vw] min-w-[260px] max-w-[320px] shrink-0 snap-start flex-col rounded-xl border border-border bg-card/60 p-4 lg:w-auto lg:max-w-none lg:flex-1 lg:basis-[260px] lg:shrink lg:snap-none">
+    <div className="border-border bg-card/60 flex w-[85vw] max-w-[320px] min-w-[260px] shrink-0 snap-start flex-col rounded-xl border p-4 lg:w-auto lg:max-w-none lg:flex-1 lg:shrink lg:basis-[260px] lg:snap-none">
       {/* 3px colored top border — sits above the column's padding */}
       <div
         className="-mx-4 -mt-4 h-[3px] rounded-t-xl"
         style={{ backgroundColor: stage.color }}
       />
       <div className="flex items-center justify-between pt-3">
-        <h3 className="truncate text-sm font-semibold text-foreground">
+        <h3 className="text-foreground truncate text-sm font-semibold">
           {stage.name}
         </h3>
-        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+        <span className="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium">
           {deals.length}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         {formatCurrency(totalValue, currency)}
       </p>
 
@@ -233,13 +198,13 @@ function StageColumn({
         ref={setNodeRef}
         className={`mt-3 flex flex-1 flex-col gap-2 rounded-lg transition-all ${
           isOver
-            ? "bg-primary/5 outline outline-2 outline-dashed outline-primary outline-offset-2"
-            : ""
+            ? 'bg-primary/5 contorno contorno-2 contorno-tracejado contorno-primário contorno-offset-2'
+            : ''
         }`}
       >
         {deals.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center rounded-lg border-2 border-dashed border-border py-10 text-xs text-muted-foreground">
-            {t("dropDealHere")}
+          <div className="border-border text-muted-foreground flex flex-1 items-center justify-center rounded-lg border-2 border-dashed py-10 text-xs">
+            {t('dropDealHere')}
           </div>
         ) : (
           deals.map((deal) => (
@@ -257,10 +222,10 @@ function StageColumn({
         variant="ghost"
         size="sm"
         onClick={() => onAddDeal(stage.id)}
-        className="mt-3 w-full justify-start border border-dashed border-border bg-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
+        className="border-border text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground mt-3 w-full justify-start border border-dashed bg-transparent"
       >
         <Plus className="mr-1 h-3 w-3" />
-        {t("addDeal")}
+        {t('addDeal')}
       </Button>
     </div>
   );
@@ -284,7 +249,7 @@ function DraggableDealCard({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      style={{ opacity: isDragging ? 0.3 : 1, touchAction: "none" }}
+      style={{ opacity: isDragging ? 0.3 : 1, touchAction: 'none' }}
     >
       <DealCard deal={deal} stage={stage} onEdit={onEdit} />
     </div>
