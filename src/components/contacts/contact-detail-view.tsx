@@ -260,10 +260,8 @@ export function ContactDetailView({
         setContactTagIds((prev) => [...prev, tagId]);
       }
       onUpdated();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('toastUpdateFailed')
-      );
+    } catch {
+      toast.error(t('toastUpdateFailed'));
     }
     setSavingTags(false);
   }
@@ -372,17 +370,14 @@ export function ContactDetailView({
         }),
       });
 
-      const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const reason = payload?.error || `HTTP ${res.status}`;
-        toast.error(t('toastTemplateFailed', { reason }));
+        toast.error(t('toastTemplateFailed', { reason: 'Tente novamente.' }));
         return;
       }
 
       toast.success(t('toastTemplateSent', { name: template.name }));
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : 'network error';
-      toast.error(`Failed to send template: ${reason}`);
+    } catch {
+      toast.error('Falha ao enviar o modelo.');
     } finally {
       setSendingTemplate(false);
     }

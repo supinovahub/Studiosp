@@ -186,7 +186,7 @@ export default function JoinPage() {
               'You are already in another account. Sign in with a different email to join this one.'
           );
         } else {
-          toast.error(payload.error || 'Failed to accept invitation');
+          toast.error(payload.error || 'Falha ao aceitar o convite');
         }
         setAccepting(false);
         return;

@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { MessageSquare, UsersRound } from 'lucide-react';
+import { authErrorMessage } from '@/lib/auth/error-message';
 
 // `useSearchParams` opts the component out of static prerendering
 // unless it sits under a Suspense boundary. We split the form into
@@ -55,7 +56,9 @@ function LoginPageInner() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(
+        authErrorMessage(error, 'Não foi possível entrar. Tente novamente.')
+      );
       setLoading(false);
       return;
     }

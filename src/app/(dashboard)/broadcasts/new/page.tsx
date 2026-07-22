@@ -68,9 +68,8 @@ export default function NewBroadcastPage() {
     } catch (err) {
       // Previously swallowed with console.error — the wizard would
       // just no-op, leaving the user confused. Surface the reason.
-      const message = err instanceof Error ? err.message : 'Broadcast failed';
       console.error('Broadcast failed:', err);
-      toast.error(message);
+      toast.error('Falha ao criar a transmissão');
     }
   }
 
@@ -123,7 +122,7 @@ export default function NewBroadcastPage() {
     });
 
     if (error) {
-      toast.error(t('toastFailedDraft', { error: error.message }));
+      toast.error(t('toastFailedDraft', { error: 'Tente novamente.' }));
       return;
     }
     toast.success(t('toastDraftSaved'));

@@ -216,8 +216,7 @@ export function ContactForm({
         }
         return;
       }
-      const message = err instanceof Error ? err.message : t('toastError');
-      toast.error(message);
+      toast.error(t('toastError'));
     } finally {
       setSaving(false);
     }

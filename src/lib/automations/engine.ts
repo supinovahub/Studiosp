@@ -396,7 +396,8 @@ async function runStep(
     case 'send_list': {
       const payload = step.step_config as
         SendButtonsStepConfig | SendListStepConfig;
-      if (!args.contactId) throw new Error(`${step.step_type} needs a contact`);
+      if (!args.contactId)
+        throw new Error(`${step.step_type} precisa de um contato`);
       // Validate against Meta's limits before the network call so a bad
       // payload surfaces as a clear failed-step detail rather than a raw
       // Meta 400 mid-conversation.
@@ -634,7 +635,7 @@ async function runStep(
         redirect: 'manual',
         signal: AbortSignal.timeout(10_000),
       });
-      if (!res.ok) throw new Error(`webhook returned ${res.status}`);
+      if (!res.ok) throw new Error(`o webhook retornou ${res.status}`);
       return `webhook ${res.status}`;
     }
 
@@ -676,13 +677,13 @@ async function resolveConversationId(args: ExecuteArgs): Promise<string> {
     .eq('account_id', args.automation.account_id)
     .eq('contact_id', args.contactId)
     .maybeSingle();
-  if (error) throw new Error(`conversation lookup failed: ${error.message}`);
+  if (error) throw new Error('falha ao localizar a conversa');
   if (!data?.id) {
     const prefix =
       args.triggerEvent === 'tag_added'
-        ? 'tag_added automation cannot send'
-        : 'cannot send';
-    throw new Error(`${prefix}: contact has no existing conversation`);
+        ? 'a automação tag_added não pode enviar'
+        : 'não é possível enviar';
+    throw new Error(`${prefix}: o contato não possui uma conversa existente`);
   }
   return data.id as string;
 }

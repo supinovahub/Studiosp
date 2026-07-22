@@ -221,7 +221,7 @@ export async function POST(request: Request) {
           break;
         } catch (error) {
           const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
+            error instanceof Error ? error.message : 'Erro desconhecido';
           if (
             config.provider === 'uazapi' ||
             !isRecipientNotAllowedError(errorMessage)
@@ -249,7 +249,7 @@ export async function POST(request: Request) {
         results.push({
           phone: recipient.phone,
           status: 'failed',
-          error: lastError || 'Unknown error',
+          error: lastError || 'Erro desconhecido',
         });
         failedCount++;
       }

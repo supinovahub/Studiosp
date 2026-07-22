@@ -926,9 +926,8 @@ function SendMediaForm({
           filename: file.name,
         });
         toast.success('Arquivo carregado.');
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Upload failed.';
-        toast.error(msg);
+      } catch {
+        toast.error('Falha ao enviar o arquivo.');
       } finally {
         setUploading(false);
       }

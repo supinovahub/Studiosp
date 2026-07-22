@@ -93,7 +93,7 @@ describe('sendMessageToConversation — param validation (pre-DB)', () => {
     await expectSendError(
       { ...base, messageType: 'interactive' },
       400,
-      /payload is required/
+      /conteúdo da mensagem interativa é obrigatório/
     );
     // Too many buttons.
     await expectSendError(

@@ -136,7 +136,7 @@ export async function POST(request: Request) {
       validateTemplatePayload(payload);
     } catch (e) {
       return NextResponse.json(
-        { error: e instanceof Error ? e.message : 'Validation failed.' },
+        { error: e instanceof Error ? e.message : 'Falha na validação.' },
         { status: 400 }
       );
     }
@@ -188,7 +188,9 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              e instanceof Error ? e.message : 'Header image upload failed.',
+              e instanceof Error
+                ? e.message
+                : 'Falha ao enviar a imagem do cabeçalho.',
           },
           { status: 400 }
         );
@@ -204,7 +206,8 @@ export async function POST(request: Request) {
         metaTemplateId = meta.id;
         metaStatus = meta.status;
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Meta submit failed.';
+        const message =
+          e instanceof Error ? e.message : 'Falha ao enviar para a Meta.';
         // Persist the failure so the user can retry; row stays DRAFT
         // until they fix and re-submit.
         await upsertTemplateRow(
@@ -259,7 +262,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : 'Failed to submit template.',
+          error instanceof Error ? error.message : 'Falha ao enviar o modelo.',
       },
       { status: 500 }
     );

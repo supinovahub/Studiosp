@@ -100,7 +100,7 @@ export async function POST(request: Request) {
     );
   } catch (err) {
     if (err instanceof BroadcastError) {
-      return fail(err.code, err.message, err.status);
+      return fail(err.code, 'Falha ao processar a transmissão', err.status);
     }
     if (err instanceof ContactError) {
       return fail(

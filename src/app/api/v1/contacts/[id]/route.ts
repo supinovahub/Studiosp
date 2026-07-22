@@ -67,7 +67,7 @@ export async function PATCH(
       if (value === null || typeof value === 'string') {
         updates[field] = value;
       } else {
-        return fail('bad_request', `'${field}' must be a string or null`, 400);
+        return fail('bad_request', `'${field}' deve ser um texto ou nulo`, 400);
       }
     }
 

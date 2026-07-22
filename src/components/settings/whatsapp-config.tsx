@@ -127,10 +127,9 @@ export function WhatsAppConfig() {
         );
         if (showToast) toast.error(payload.message || 'Conexão não concluída.');
       }
-    } catch (error) {
+    } catch {
       setConnectionStatus('disconnected');
-      const message =
-        error instanceof Error ? error.message : 'Falha ao testar a conexão.';
+      const message = 'Falha ao testar a conexão.';
       setStatusMessage(message);
       if (showToast) toast.error(message);
     } finally {
@@ -224,10 +223,8 @@ export function WhatsAppConfig() {
           : 'Configuração da Meta salva com sucesso.'
       );
       if (accountId) await loadConfig(accountId);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Não foi possível salvar.'
-      );
+    } catch {
+      toast.error('Não foi possível salvar.');
     } finally {
       setSaving(false);
     }
@@ -258,10 +255,8 @@ export function WhatsAppConfig() {
             ? 'Código de pareamento gerado.'
             : 'QR Code gerado. Escaneie pelo WhatsApp.'
       );
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Falha ao conectar.'
-      );
+    } catch {
+      toast.error('Falha ao conectar.');
     } finally {
       setConnecting(false);
     }
@@ -280,8 +275,8 @@ export function WhatsAppConfig() {
       setConnectionStatus('disconnected');
       setStatusMessage('Configuração removida.');
       toast.success('Configuração removida com sucesso.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Falha ao excluir.');
+    } catch {
+      toast.error('Falha ao excluir.');
     } finally {
       setResetting(false);
     }

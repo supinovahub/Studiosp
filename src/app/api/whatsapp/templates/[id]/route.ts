@@ -118,7 +118,7 @@ export async function PATCH(
     if (!EDITABLE_STATUSES.has(existing.status)) {
       return NextResponse.json(
         {
-          error: `Templates in status ${existing.status} cannot be edited. Allowed: APPROVED, REJECTED, PAUSED.`,
+          error: `Modelos com status ${existing.status} não podem ser editados. Permitidos: APPROVED, REJECTED, PAUSED.`,
         },
         { status: 400 }
       );
@@ -138,7 +138,7 @@ export async function PATCH(
       validateTemplatePayload(payload);
     } catch (e) {
       return NextResponse.json(
-        { error: e instanceof Error ? e.message : 'Validation failed.' },
+        { error: e instanceof Error ? e.message : 'Falha na validação.' },
         { status: 400 }
       );
     }
@@ -165,7 +165,9 @@ export async function PATCH(
         return NextResponse.json(
           {
             error:
-              e instanceof Error ? e.message : 'Header image upload failed.',
+              e instanceof Error
+                ? e.message
+                : 'Falha ao enviar a imagem do cabeçalho.',
           },
           { status: 400 }
         );
@@ -179,7 +181,8 @@ export async function PATCH(
           components: metaPayload.components,
         });
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Meta edit failed.';
+        const message =
+          e instanceof Error ? e.message : 'Falha ao editar na Meta.';
         await supabase
           .from('message_templates')
           .update({
@@ -232,7 +235,7 @@ export async function PATCH(
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : 'Failed to edit template.',
+          error instanceof Error ? error.message : 'Falha ao editar o modelo.',
       },
       { status: 500 }
     );
@@ -312,7 +315,8 @@ export async function DELETE(
           metaTemplateId: existing.meta_template_id,
         });
       } catch (e) {
-        const message = e instanceof Error ? e.message : 'Meta delete failed.';
+        const message =
+          e instanceof Error ? e.message : 'Falha ao excluir na Meta.';
         return NextResponse.json({ error: message }, { status: 502 });
       }
     }
@@ -336,7 +340,7 @@ export async function DELETE(
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : 'Failed to delete template.',
+          error instanceof Error ? error.message : 'Falha ao excluir o modelo.',
       },
       { status: 500 }
     );

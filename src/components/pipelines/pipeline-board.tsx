@@ -144,9 +144,39 @@ export function PipelineBoard({
         ) : null}
       </DragOverlay>
 
-      <style
-        jsx
-      >{`.funil-scroll {comportamento de rolagem: suave; } /* Em dispositivos sensíveis ao toque, o layout peek/snap já sinaliza que há mais para deslizar, então a barra de rolagem fica oculta para uma aparência limpa. No desktop (mouse), o quadro pode transbordar com muitos estágios e não há nenhuma dica de espiada, portanto, mantenha uma barra de rolagem temática fina visível para tornar o estouro detectável e utilizável. */ @media (hover: none), (ponteiro: grosso) { .funil-scroll::-webkit-scrollbar { height: 0; exibição: nenhum; } .funil-scroll {largura da barra de rolagem: nenhum; } } @media (hover: hover) e (ponteiro: fino) { .funil-scroll { scrollbar-width: thin; cor da barra de rolagem: var(--border) transparente; } .funil-scroll::-webkit-scrollbar { altura: 8px; } .funil-scroll::-webkit-scrollbar-track { background: transparente; } .funil-scroll::-webkit-scrollbar-thumb { cor de fundo: var(--border); raio da borda: 9999px; } .funil-scroll::-webkit-scrollbar-thumb:hover { cor de fundo: var(--muted-foreground); } }`}</style>
+      <style jsx>{`
+        .pipeline-scroll {
+          scroll-behavior: smooth;
+        }
+        @media (hover: none), (pointer: coarse) {
+          .pipeline-scroll::-webkit-scrollbar {
+            height: 0;
+            display: none;
+          }
+          .pipeline-scroll {
+            scrollbar-width: none;
+          }
+        }
+        @media (hover: hover) and (pointer: fine) {
+          .pipeline-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+          }
+          .pipeline-scroll::-webkit-scrollbar {
+            height: 8px;
+          }
+          .pipeline-scroll::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .pipeline-scroll::-webkit-scrollbar-thumb {
+            background-color: var(--border);
+            border-radius: 9999px;
+          }
+          .pipeline-scroll::-webkit-scrollbar-thumb:hover {
+            background-color: var(--muted-foreground);
+          }
+        }
+      `}</style>
     </DndContext>
   );
 }

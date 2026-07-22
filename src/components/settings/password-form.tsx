@@ -66,7 +66,7 @@ export function PasswordForm() {
         password: next,
       });
       if (updateError) {
-        toast.error(t('passwordUpdateFailed', { message: updateError.message }));
+        toast.error(t('passwordUpdateFailed', { message: 'Tente novamente.' }));
         return;
       }
 
@@ -74,9 +74,8 @@ export function PasswordForm() {
       setNext('');
       setConfirm('');
       toast.success(t('passwordUpdated'));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      toast.error(msg);
+    } catch {
+      toast.error(t('passwordUpdateFailed', { message: 'Tente novamente.' }));
     } finally {
       setSaving(false);
     }
@@ -85,8 +84,8 @@ export function PasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground">
-          <KeyRound className="size-4 text-primary" />
+        <CardTitle className="text-foreground flex items-center gap-2">
+          <KeyRound className="text-primary size-4" />
           {t('passwordTitle')}
         </CardTitle>
         <CardDescription className="text-muted-foreground">
@@ -145,7 +144,7 @@ export function PasswordForm() {
           </div>
 
           {confirmError && (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <p className="border-destructive/30 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-xs">
               {confirmError}
             </p>
           )}

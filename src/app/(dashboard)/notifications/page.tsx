@@ -36,7 +36,7 @@ export default function NotificationsPage() {
       .order('created_at', { ascending: false })
       .limit(100);
     if (fetchErr) {
-      setError(fetchErr.message);
+      setError('Falha ao carregar notificações.');
       return;
     }
     setNotifications((data ?? []) as Notification[]);

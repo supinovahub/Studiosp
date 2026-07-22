@@ -67,10 +67,13 @@ export async function POST(request: Request) {
       requireActive: false,
     }).catch((err) => {
       console.error('[ai/playground] loadAiConfig error:', err);
-      throw new AiError('Stored API key could not be decrypted.', {
-        code: 'key_decrypt_failed',
-        status: 400,
-      });
+      throw new AiError(
+        'Não foi possível descriptografar a chave de API salva.',
+        {
+          code: 'key_decrypt_failed',
+          status: 400,
+        }
+      );
     });
     if (!config) {
       return NextResponse.json(

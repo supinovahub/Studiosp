@@ -46,10 +46,8 @@ export function Step1ChooseTemplate({
 
         if (fetchError) throw fetchError;
         setTemplates(data ?? []);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : t('chooseTemplate.errorLoad')
-        );
+      } catch {
+        setError(t('chooseTemplate.errorLoad'));
       } finally {
         setLoading(false);
       }

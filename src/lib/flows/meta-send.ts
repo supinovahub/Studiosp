@@ -80,7 +80,7 @@ export async function engineSendText(
 
   const sanitized = sanitizePhoneForMeta(contact.phone);
   if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`);
+    throw new Error(`telefone do contato inválido: ${contact.phone}`);
   }
 
   const { data: config, error: configErr } = await db
@@ -146,7 +146,9 @@ export async function engineSendText(
     ai_generated: args.aiGenerated ?? false,
   });
   if (msgErr) {
-    throw new Error(`sent to Meta but DB insert failed: ${msgErr.message}`);
+    throw new Error(
+      'mensagem enviada à Meta, mas não foi possível salvá-la no banco'
+    );
   }
 
   await db
@@ -200,7 +202,7 @@ export async function engineSendMedia(
 
   const sanitized = sanitizePhoneForMeta(contact.phone);
   if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`);
+    throw new Error(`telefone do contato inválido: ${contact.phone}`);
   }
 
   const { data: config, error: configErr } = await db
@@ -273,7 +275,9 @@ export async function engineSendMedia(
     status: 'sent',
   });
   if (msgErr) {
-    throw new Error(`sent to Meta but DB insert failed: ${msgErr.message}`);
+    throw new Error(
+      'mensagem enviada à Meta, mas não foi possível salvá-la no banco'
+    );
   }
 
   await db
@@ -362,7 +366,7 @@ async function sendInteractiveViaMeta(
 
   const sanitized = sanitizePhoneForMeta(contact.phone);
   if (!isValidE164(sanitized)) {
-    throw new Error(`contact phone invalid: ${contact.phone}`);
+    throw new Error(`telefone do contato inválido: ${contact.phone}`);
   }
 
   const { data: config, error: configErr } = await db
@@ -477,7 +481,9 @@ async function sendInteractiveViaMeta(
     status: 'sent',
   });
   if (msgErr) {
-    throw new Error(`sent to Meta but DB insert failed: ${msgErr.message}`);
+    throw new Error(
+      'mensagem enviada à Meta, mas não foi possível salvá-la no banco'
+    );
   }
 
   await db

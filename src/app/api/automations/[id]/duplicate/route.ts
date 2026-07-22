@@ -33,7 +33,10 @@ export async function POST(
     .eq('user_id', user.id)
     .maybeSingle();
   if (origErr)
-    return NextResponse.json({ error: origErr.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Falha ao carregar a automação' },
+      { status: 500 }
+    );
   if (!original)
     return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
@@ -88,7 +91,10 @@ export async function POST(
     }));
     const { error: insErr } = await admin.from('automation_steps').insert(rows);
     if (insErr)
-      return NextResponse.json({ error: insErr.message }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Falha ao duplicar a automação' },
+        { status: 500 }
+      );
   }
 
   return NextResponse.json({ automation: copy }, { status: 201 });

@@ -315,7 +315,9 @@ export async function POST() {
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : 'Failed to sync templates',
+          error instanceof Error
+            ? error.message
+            : 'Falha ao sincronizar modelos',
       },
       { status: 500 }
     );

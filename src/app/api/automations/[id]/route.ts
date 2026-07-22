@@ -137,7 +137,10 @@ export async function PATCH(
       .update(update)
       .eq('id', id);
     if (updErr)
-      return NextResponse.json({ error: updErr.message }, { status: 500 });
+      return NextResponse.json(
+        { error: 'Falha ao atualizar a automação' },
+        { status: 500 }
+      );
   }
 
   if (Array.isArray(body.steps)) {

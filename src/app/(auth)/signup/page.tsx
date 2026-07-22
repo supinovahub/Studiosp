@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { MessageSquare, CheckCircle, UsersRound } from 'lucide-react';
+import { authErrorMessage } from '@/lib/auth/error-message';
 
 // `useSearchParams` opts the component out of static prerendering
 // unless wrapped in Suspense — same pattern as /login.
@@ -80,7 +81,12 @@ function SignupPageInner() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(
+        authErrorMessage(
+          error,
+          'Não foi possível criar a conta. Tente novamente.'
+        )
+      );
       setLoading(false);
       return;
     }

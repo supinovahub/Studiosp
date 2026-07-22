@@ -79,8 +79,8 @@ export default function BroadcastsPage() {
 
       if (fetchError) throw fetchError;
       setBroadcasts(data ?? []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errorLoad'));
+    } catch {
+      setError(t('errorLoad'));
     } finally {
       setLoading(false);
     }

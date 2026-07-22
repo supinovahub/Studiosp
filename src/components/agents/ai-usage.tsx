@@ -70,7 +70,7 @@ export function AiUsageCard() {
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
-        toast.error(json?.error ?? 'Failed to load usage');
+        toast.error(json?.error ?? 'Falha ao carregar o uso');
         setData(null);
         return;
       }

@@ -352,7 +352,9 @@ export function ImportModal({
       if (skippedNames.length > 0) {
         const sample = skippedNames.slice(0, 3).join(', ');
         const more =
-          skippedNames.length > 3 ? ` (+${skippedNames.length - 3} more)` : '';
+          skippedNames.length > 3
+            ? ` (+${skippedNames.length - 3} outras)`
+            : '';
         toast.info(t('toastTagsSkipped', { sample, more }));
       }
       if (skipped > 0) {
@@ -361,9 +363,8 @@ export function ImportModal({
       if (failed > 0) {
         toast.error(t('toastFailed', { count: failed }));
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('toastError');
-      toast.error(message);
+    } catch {
+      toast.error(t('toastError'));
     } finally {
       setImporting(false);
     }

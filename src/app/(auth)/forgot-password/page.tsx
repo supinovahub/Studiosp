@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { authErrorMessage } from '@/lib/auth/error-message';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,7 +33,12 @@ export default function ForgotPasswordPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(
+        authErrorMessage(
+          error,
+          'Não foi possível enviar o link. Tente novamente.'
+        )
+      );
       setLoading(false);
       return;
     }

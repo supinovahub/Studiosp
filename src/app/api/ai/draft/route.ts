@@ -73,10 +73,13 @@ export async function POST(request: Request) {
     const config = await loadAiConfig(supabase, accountId).catch((err) => {
       // Decrypt failure — surface distinctly from "not configured".
       console.error('[ai/draft] loadAiConfig error:', err);
-      throw new AiError('Stored API key could not be decrypted.', {
-        code: 'key_decrypt_failed',
-        status: 400,
-      });
+      throw new AiError(
+        'Não foi possível descriptografar a chave de API salva.',
+        {
+          code: 'key_decrypt_failed',
+          status: 400,
+        }
+      );
     });
     if (!config) {
       return NextResponse.json(

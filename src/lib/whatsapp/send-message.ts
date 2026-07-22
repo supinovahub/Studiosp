@@ -124,7 +124,11 @@ export function validateSendMessageParams(params: {
   } = params;
 
   if (!messageType) {
-    throw new SendMessageError('bad_request', 'message_type is required', 400);
+    throw new SendMessageError(
+      'bad_request',
+      'O tipo de mensagem é obrigatório',
+      400
+    );
   }
 
   const isMediaKind = (MEDIA_KINDS as readonly string[]).includes(messageType);
@@ -231,14 +235,14 @@ export async function sendMessageToConversation(
     .single();
 
   if (convError || !conversation) {
-    throw new SendMessageError('not_found', 'Conversation not found', 404);
+    throw new SendMessageError('not_found', 'Conversa não encontrada', 404);
   }
 
   const contact = conversation.contact;
   if (!contact?.phone) {
     throw new SendMessageError(
       'bad_request',
-      'Contact phone number not found',
+      'Número de telefone do contato não encontrado',
       400
     );
   }
@@ -247,7 +251,7 @@ export async function sendMessageToConversation(
   if (!isValidE164(sanitizedPhone)) {
     throw new SendMessageError(
       'bad_request',
-      'Invalid phone number format',
+      'Formato de número de telefone inválido',
       400
     );
   }
@@ -262,7 +266,7 @@ export async function sendMessageToConversation(
   if (configError || !config) {
     throw new SendMessageError(
       'whatsapp_not_configured',
-      'WhatsApp not configured. Please set up your WhatsApp integration first.',
+      'WhatsApp não configurado. Configure a integração com o WhatsApp primeiro.',
       400
     );
   }
@@ -333,7 +337,7 @@ export async function sendMessageToConversation(
     if (data && !isMessageTemplate(data)) {
       throw new SendMessageError(
         'template_malformed',
-        'Template row is malformed locally — run "Sync from Meta" in Settings to repair it.',
+        'O modelo salvo está inválido — execute "Sincronizar com a Meta" nas Configurações para corrigi-lo.',
         500
       );
     }

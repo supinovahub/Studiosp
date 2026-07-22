@@ -118,7 +118,7 @@ export default function FlowRunsPage() {
           if (!cancelled) setNotFound(true);
           return;
         }
-        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        if (!res.ok) throw new Error(`Falha: ${res.status}`);
         const json = (await res.json()) as {
           flow: { id: string; name: string };
           runs: RunRow[];

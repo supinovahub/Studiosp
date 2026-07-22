@@ -159,7 +159,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
     if (audience.type === 'all') {
       const { data, error } = await supabase.from('contacts').select('*');
-      if (error) throw new Error(`Failed to fetch contacts: ${error.message}`);
+      if (error) throw new Error('Falha ao carregar contatos');
       contacts = data ?? [];
     } else if (
       audience.type === 'tags' &&
@@ -171,8 +171,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         .select('contact_id')
         .in('tag_id', audience.tagIds);
 
-      if (tagError)
-        throw new Error(`Failed to fetch contact tags: ${tagError.message}`);
+      if (tagError) throw new Error('Falha ao carregar etiquetas dos contatos');
 
       if (contactTags && contactTags.length > 0) {
         const uniqueContactIds = [
@@ -182,8 +181,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           .from('contacts')
           .select('*')
           .in('id', uniqueContactIds);
-        if (error)
-          throw new Error(`Failed to fetch contacts: ${error.message}`);
+        if (error) throw new Error('Falha ao carregar contatos');
         contacts = data ?? [];
       }
     } else if (audience.type === 'custom_field' && audience.customField) {
@@ -251,7 +249,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       .eq('user_id', user.id)
       .in('phone', phones);
     if (lookupErr) {
-      throw new Error(`Failed to look up CSV contacts: ${lookupErr.message}`);
+      throw new Error('Falha ao localizar contatos do CSV');
     }
 
     const byPhone = new Map<string, Contact>();
@@ -278,7 +276,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         .insert(chunk)
         .select();
       if (insertErr) {
-        throw new Error(`Failed to create CSV contacts: ${insertErr.message}`);
+        throw new Error('Falha ao criar contatos do CSV');
       }
       for (const c of (inserted ?? []) as Contact[]) {
         if (c.phone) byPhone.set(c.phone, c);
@@ -311,8 +309,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       query = query.ilike('value', `%${value}%`);
 
     const { data: matches, error: matchErr } = await query;
-    if (matchErr)
-      throw new Error(`Custom-field filter failed: ${matchErr.message}`);
+    if (matchErr) throw new Error('Falha ao filtrar pelo campo personalizado');
 
     const contactIds = [...new Set((matches ?? []).map((m) => m.contact_id))];
     if (contactIds.length === 0) return [];
@@ -321,7 +318,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       .from('contacts')
       .select('*')
       .in('id', contactIds);
-    if (error) throw new Error(`Failed to fetch contacts: ${error.message}`);
+    if (error) throw new Error('Falha ao carregar contatos');
     return data ?? [];
   }
 
@@ -387,9 +384,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         .single();
 
       if (broadcastError || !broadcast) {
-        throw new Error(
-          `Failed to create broadcast: ${broadcastError?.message ?? 'unknown error'}`
-        );
+        throw new Error('Falha ao criar transmissão');
       }
 
       // ── Step 3: Insert recipient rows ─────────────────────────────
@@ -419,7 +414,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
             })
             .eq('id', broadcast.id);
           throw new Error(
-            `Failed to insert recipient batch ${i / INSERT_BATCH_SIZE + 1}: ${recipientError.message}`
+            `Falha ao inserir o lote de destinatários ${i / INSERT_BATCH_SIZE + 1}`
           );
         }
       }
@@ -494,7 +489,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           const data = await res.json();
 
           if (!res.ok) {
-            throw new Error(data.error || 'Broadcast API request failed');
+            throw new Error(
+              data.error || 'Falha na solicitação de transmissão'
+            );
           }
 
           const resultsByPhone = new Map<string, BroadcastApiResult>();
@@ -512,7 +509,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                 .from('broadcast_recipients')
                 .update({
                   status: 'failed',
-                  error_message: 'No phone number on contact',
+                  error_message: 'O contato não possui número de telefone',
                 })
                 .eq('id', recipient.id);
               continue;
@@ -534,7 +531,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                 .from('broadcast_recipients')
                 .update({
                   status: 'failed',
-                  error_message: result.error ?? 'Unknown error',
+                  error_message: result.error ?? 'Erro desconhecido',
                 })
                 .eq('id', recipient.id);
             }
@@ -547,7 +544,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
               .update({
                 status: 'failed',
                 error_message:
-                  err instanceof Error ? err.message : 'Unknown error',
+                  err instanceof Error ? err.message : 'Erro desconhecido',
               })
               .eq('id', recipient.id);
           }

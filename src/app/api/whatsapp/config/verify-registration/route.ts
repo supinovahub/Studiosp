@@ -103,10 +103,8 @@ export async function GET() {
       accessToken,
     });
     checks.phone_metadata_ok = true;
-  } catch (err) {
-    errors.push(
-      `Phone metadata check failed: ${err instanceof Error ? err.message : String(err)}`
-    );
+  } catch {
+    errors.push('Falha ao verificar os dados do número de telefone.');
   }
 
   // 2. WABA subscription — only meaningful if we have a waba_id
@@ -123,17 +121,15 @@ export async function GET() {
       checks.waba_subscribed_to_app = subs.length > 0;
       if (!checks.waba_subscribed_to_app) {
         errors.push(
-          'WABA has no subscribed apps. Re-save the configuration to subscribe.'
+          'A WABA não possui aplicativos inscritos. Salve novamente a configuração para realizar a inscrição.'
         );
       }
-    } catch (err) {
-      errors.push(
-        `WABA subscription check failed: ${err instanceof Error ? err.message : String(err)}`
-      );
+    } catch {
+      errors.push('Falha ao verificar a inscrição da WABA.');
     }
   } else {
     errors.push(
-      "No WABA ID on file — webhooks can't be wired without it. Add it in the form and re-save."
+      'Nenhum ID da WABA foi salvo. Informe-o no formulário e salve novamente para configurar os webhooks.'
     );
   }
 

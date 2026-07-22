@@ -143,7 +143,7 @@ export async function POST(request: Request) {
     );
   } catch (err) {
     if (err instanceof SendMessageError) {
-      return fail(err.code, err.message, err.status);
+      return fail(err.code, 'Falha ao processar a mensagem', err.status);
     }
     return toApiErrorResponse(err);
   }

@@ -146,7 +146,10 @@ export async function POST(request: Request) {
         // sit as an empty draft. CASCADE on flow_id removes the
         // (probably zero) nodes too.
         await admin.from('flows').delete().eq('id', flow.id);
-        return NextResponse.json({ error: nodesErr.message }, { status: 500 });
+        return NextResponse.json(
+          { error: 'Falha ao criar os nós do fluxo' },
+          { status: 500 }
+        );
       }
     }
     return NextResponse.json({ flow }, { status: 201 });

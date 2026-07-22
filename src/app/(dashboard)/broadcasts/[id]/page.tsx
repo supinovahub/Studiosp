@@ -182,8 +182,8 @@ export default function BroadcastDetailPage() {
 
         if (recsError) throw recsError;
         setRecipients(recs ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : t('notFound'));
+      } catch {
+        setError(t('notFound'));
       } finally {
         setLoading(false);
       }
@@ -240,7 +240,7 @@ export default function BroadcastDetailPage() {
       .eq('id', broadcastId);
     setDeleting(false);
     if (delErr) {
-      toast.error(t('toastFailedDelete', { error: delErr.message }));
+      toast.error(t('toastFailedDelete', { error: 'Tente novamente.' }));
       return;
     }
     toast.success(t('toastDeleted'));
@@ -529,7 +529,7 @@ export default function BroadcastDetailPage() {
                   return (
                     <TableRow key={recipient.id} className="border-border">
                       <TableCell className="text-foreground font-medium">
-                        {recipient.contact?.name ?? 'Unknown'}
+                        {recipient.contact?.name ?? 'Desconhecido'}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {recipient.contact?.phone ?? '-'}

@@ -303,7 +303,7 @@ export function TemplateManager() {
       setEditingId(null);
     } catch (err) {
       console.error('Submit error:', err);
-      toast.error(err instanceof Error ? err.message : t('toastSubmitFailed'));
+      toast.error(t('toastSubmitFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -318,7 +318,9 @@ export function TemplateManager() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.error || `Sync failed (HTTP ${res.status})`);
+        throw new Error(
+          data?.error || `Falha na sincronização (HTTP ${res.status})`
+        );
       }
       toast.success(
         t('toastSyncCount', { total: data.total }) +
@@ -337,7 +339,7 @@ export function TemplateManager() {
               `${e.name} (${e.language})`
           );
         const suffix =
-          data.errors.length > 3 ? `, +${data.errors.length - 3} more` : '';
+          data.errors.length > 3 ? `, +${data.errors.length - 3} outras` : '';
         toast.error(
           t('toastSyncFailed', { preview: preview.join(', ') + suffix })
         );
@@ -351,7 +353,7 @@ export function TemplateManager() {
       await fetchTemplates(user.id);
     } catch (err) {
       console.error('Template sync error:', err);
-      toast.error(err instanceof Error ? err.message : t('toastSyncError'));
+      toast.error(t('toastSyncError'));
     } finally {
       setSyncing(false);
     }
@@ -370,14 +372,16 @@ export function TemplateManager() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.error || `Delete failed (HTTP ${res.status})`);
+        throw new Error(
+          data?.error || `Falha na exclusão (HTTP ${res.status})`
+        );
       }
       toast.success(t('toastDeleteSuccess'));
       setTemplates((prev) => prev.filter((t) => t.id !== target.id));
       setTemplateToDelete(null);
     } catch (err) {
       console.error('Delete error:', err);
-      toast.error(err instanceof Error ? err.message : t('toastDeleteError'));
+      toast.error(t('toastDeleteError'));
     } finally {
       setDeletingId(null);
     }
@@ -488,8 +492,8 @@ export function TemplateManager() {
       const { publicUrl } = await uploadAccountMedia('chat-media', file);
       setForm((f) => ({ ...f, header_media_url: publicUrl }));
       toast.success(t('toastUploadSuccess'));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('toastUploadFailed'));
+    } catch {
+      toast.error(t('toastUploadFailed'));
     } finally {
       setUploadingHeader(false);
     }

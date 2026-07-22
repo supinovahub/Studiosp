@@ -387,7 +387,7 @@ export function MessageComposer({
       const max = MEDIA_MAX_BYTES_BY_KIND[kind];
       if (file.size > max) {
         toast.error(
-          `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — ${kind} limit is ${Math.round(
+          `O arquivo tem ${(file.size / 1024 / 1024).toFixed(1)} MB — o limite para ${kind} é ${Math.round(
             max / 1024 / 1024
           )} MB.`
         );
@@ -408,8 +408,8 @@ export function MessageComposer({
           filename: file.name,
           caption: '',
         });
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Upload failed.');
+      } catch {
+        toast.error('Falha ao enviar o arquivo.');
       } finally {
         setBusy(false);
       }
@@ -458,8 +458,8 @@ export function MessageComposer({
           filename: file.name,
           caption: '',
         });
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Upload failed.');
+      } catch {
+        toast.error('Falha ao enviar a gravação.');
       } finally {
         setBusy(false);
       }

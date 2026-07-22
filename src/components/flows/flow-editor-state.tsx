@@ -342,13 +342,12 @@ export function FlowEditorProvider({
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        throw new Error(json.error ?? `Save failed: ${res.status}`);
+        throw new Error(json.error ?? `Falha ao salvar: ${res.status}`);
       }
       setDirty(false);
       toast.success(t('saved'));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Save failed';
-      toast.error(msg);
+    } catch {
+      toast.error('Falha ao salvar o fluxo');
     } finally {
       setSaving(false);
     }
@@ -376,7 +375,9 @@ export function FlowEditorProvider({
         });
         if (!res.ok) {
           const json = await res.json().catch(() => ({}));
-          throw new Error(json.error ?? `Status update failed: ${res.status}`);
+          throw new Error(
+            json.error ?? `Falha ao atualizar o status: ${res.status}`
+          );
         }
         setStateRaw((s) => ({ ...s, status: next }));
         toast.success(
@@ -386,9 +387,8 @@ export function FlowEditorProvider({
               ? t('statusArchived')
               : t('statusDraft')
         );
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Status update failed';
-        toast.error(msg);
+      } catch {
+        toast.error('Falha ao atualizar o status do fluxo');
       } finally {
         setActivating(false);
       }
@@ -399,18 +399,17 @@ export function FlowEditorProvider({
   // ---- Delete ----
   const deleteFlow = useCallback(async () => {
     const yes = window.confirm(
-      `Delete "${state.name}"? Any active runs end immediately. This can't be undone.`
+      `Excluir "${state.name}"? Todas as execuções ativas serão encerradas imediatamente. Esta ação não pode ser desfeita.`
     );
     if (!yes) return;
     try {
       const res = await fetch(`/api/flows/${initialFlow.id}`, {
         method: 'DELETE',
       });
-      if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+      if (!res.ok) throw new Error(`Falha ao excluir: ${res.status}`);
       router.push('/flows');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Delete failed';
-      toast.error(msg);
+    } catch {
+      toast.error('Falha ao excluir o fluxo');
     }
   }, [initialFlow.id, router, state.name]);
 
