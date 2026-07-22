@@ -5,13 +5,13 @@
   "description": "CRM brasileiro para vendas de studios com atendimento integrado ao WhatsApp.",
   "license": "MIT",
   "author": "Studiosp — baseado no wacrm de Arnas Donauskas",
-  "homepage": "https://github.com/mathdias2020/Studiosp",
+  "homepage": "https://github.com/supinovahub/Studiosp",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mathdias2020/Studiosp.git"
+    "url": "git+https://github.com/supinovahub/Studiosp.git"
   },
   "bugs": {
-    "url": "https://github.com/mathdias2020/Studiosp/issues"
+    "url": "https://github.com/supinovahub/Studiosp/issues"
   },
   "keywords": [
     "crm",
