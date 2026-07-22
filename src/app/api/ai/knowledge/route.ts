@@ -25,6 +25,7 @@ export async function GET() {
       .from('ai_knowledge_documents')
       .select('id, title, updated_at')
       .eq('account_id', accountId)
+      .eq('source_type', 'manual')
       .order('updated_at', { ascending: false });
     if (error) {
       console.error('[ai/knowledge GET] error:', error);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { mediaPayload, productPayload } from '@/lib/products/validate';
+import { syncProductKnowledge } from '@/lib/products/knowledge';
 
 const SELECT = '*, product_media(*)';
 
@@ -71,7 +72,16 @@ export async function POST(request: Request) {
       .eq('id', product.id)
       .single();
     if (reloadError) throw reloadError;
-    return NextResponse.json({ product: complete }, { status: 201 });
+    const indexing = await syncProductKnowledge(
+      supabase,
+      accountId,
+      product.id,
+      userId
+    );
+    return NextResponse.json(
+      { product: complete, indexingWarning: indexing.warning },
+      { status: 201 }
+    );
   } catch (error) {
     return toErrorResponse(error);
   }
