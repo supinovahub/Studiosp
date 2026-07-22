@@ -23,9 +23,11 @@ const ROW = {
   model: 'gpt-x',
   api_key: 'enc-key',
   system_prompt: null,
+  communication_prompt: 'Seja objetiva.',
   is_active: false,
   auto_reply_enabled: false,
   auto_reply_max_per_conversation: 3,
+  handoff_agent_id: null,
   embeddings_api_key: null,
 }
 
@@ -41,6 +43,8 @@ describe('loadAiConfig requireActive', () => {
     expect(config).not.toBeNull()
     expect(config!.provider).toBe('openai')
     expect(config!.apiKey).toBe('plain:enc-key')
+    expect(config!.internalPrompt).toBeNull()
+    expect(config!.communicationPrompt).toBe('Seja objetiva.')
   })
 
   it('returns null when there is no row', async () => {

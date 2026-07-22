@@ -68,7 +68,7 @@ export function AiConfig() {
   const [embeddingsKey, setEmbeddingsKey] = useState('');
   const [embeddingsKeyEdited, setEmbeddingsKeyEdited] = useState(false);
   const [hasStoredEmbeddingsKey, setHasStoredEmbeddingsKey] = useState(false);
-  const [systemPrompt, setSystemPrompt] = useState('');
+  const [communicationPrompt, setCommunicationPrompt] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
   const [maxPerConversation, setMaxPerConversation] = useState(3);
@@ -95,7 +95,7 @@ export function AiConfig() {
         setConfigured(true);
         setProvider(data.provider);
         setModel(data.model);
-        setSystemPrompt(data.system_prompt ?? '');
+        setCommunicationPrompt(data.communication_prompt ?? '');
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
         setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
@@ -146,7 +146,7 @@ export function AiConfig() {
     model: model.trim(),
     api_key: keyPayload(),
     embeddings_api_key: embeddingsKeyPayload(),
-    system_prompt: systemPrompt.trim() || null,
+    communication_prompt: communicationPrompt.trim() || null,
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
@@ -217,7 +217,7 @@ export function AiConfig() {
         setKeyEdited(false);
         setIsActive(false);
         setAutoReplyEnabled(false);
-        setSystemPrompt('');
+        setCommunicationPrompt('');
         setHandoffAgentId('');
       } else {
         const data = await res.json();
@@ -393,10 +393,11 @@ export function AiConfig() {
               <Label htmlFor="ai-prompt">{t('businessContext')}</Label>
               <Textarea
                 id="ai-prompt"
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
+                value={communicationPrompt}
+                onChange={(e) => setCommunicationPrompt(e.target.value)}
                 placeholder={t('promptPlaceholder')}
                 rows={5}
+                maxLength={4000}
                 disabled={disabled}
               />
             </div>

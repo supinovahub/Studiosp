@@ -17,7 +17,10 @@ export interface AiConfig {
   provider: AiProvider
   model: string
   apiKey: string
-  systemPrompt: string | null
+  /** Trusted operational instructions. Never exposed to the dashboard. */
+  internalPrompt: string | null
+  /** Dashboard-editable preferences limited to tone and wording. */
+  communicationPrompt: string | null
   isActive: boolean
   autoReplyEnabled: boolean
   autoReplyMaxPerConversation: number

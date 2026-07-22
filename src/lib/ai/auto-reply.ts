@@ -123,7 +123,8 @@ export async function dispatchInboundToAiReply(
     })
 
     const systemPrompt = buildSystemPrompt({
-      userPrompt: config.systemPrompt,
+      internalPrompt: config.internalPrompt,
+      communicationPrompt: config.communicationPrompt,
       mode: 'auto_reply',
       knowledge,
       catalog: sdr.grounding,

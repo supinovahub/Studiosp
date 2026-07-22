@@ -130,7 +130,8 @@ export async function POST(request: Request) {
     });
 
     const systemPrompt = buildSystemPrompt({
-      userPrompt: config.systemPrompt,
+      internalPrompt: config.internalPrompt,
+      communicationPrompt: config.communicationPrompt,
       mode: 'draft',
       knowledge,
       catalog: sdr.grounding,

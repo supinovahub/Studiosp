@@ -104,7 +104,8 @@ export async function POST(request: Request) {
       classification,
     });
     const systemPrompt = buildSystemPrompt({
-      userPrompt: config.systemPrompt,
+      internalPrompt: config.internalPrompt,
+      communicationPrompt: config.communicationPrompt,
       mode: 'auto_reply',
       knowledge,
       catalog: sdr.grounding,
