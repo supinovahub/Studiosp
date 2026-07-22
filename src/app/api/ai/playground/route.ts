@@ -11,6 +11,8 @@ import { generateReply } from '@/lib/ai/generate';
 import { buildSystemPrompt } from '@/lib/ai/defaults';
 import { latestUserMessage } from '@/lib/ai/query';
 import { AiError, type ChatMessage } from '@/lib/ai/types';
+import { classifySdrTurn, emptySdrClassification } from '@/lib/ai/sdr-classify';
+import { buildSdrTurnContext } from '@/lib/ai/sdr-catalog';
 
 // Keep the tested transcript bounded, mirroring the live context window.
 const MAX_TURNS = 20;
@@ -92,10 +94,19 @@ export async function POST(request: Request) {
       config,
       latestUserMessage(messages)
     );
+    const classification = await classifySdrTurn({ config, messages }).catch(
+      () => emptySdrClassification()
+    );
+    const sdr = await buildSdrTurnContext({
+      db: supabase,
+      accountId,
+      classification,
+    });
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      catalog: sdr.grounding,
     });
 
     const { text, handoff } = await generateReply({
@@ -103,7 +114,17 @@ export async function POST(request: Request) {
       systemPrompt,
       messages,
     });
-    return NextResponse.json({ reply: text, handoff });
+    return NextResponse.json({
+      reply: text,
+      handoff: handoff || classification.requiresHandoff,
+      classification,
+      products: sdr.products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        cover_url: product.product_media[0]?.url ?? null,
+      })),
+    });
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(

@@ -14,6 +14,9 @@ import { latestUserMessage } from '@/lib/ai/query';
 import { logAiUsage } from '@/lib/ai/usage';
 import { supabaseAdmin } from '@/lib/ai/admin-client';
 import { AiError } from '@/lib/ai/types';
+import { classifySdrTurn, emptySdrClassification } from '@/lib/ai/sdr-classify';
+import { buildSdrTurnContext } from '@/lib/ai/sdr-catalog';
+import { persistSdrClassification } from '@/lib/ai/sdr-store';
 
 /**
  * POST /api/ai/draft  (agent+)
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
     // row means "not yours / not found" either way.
     const { data: conversation, error: convErr } = await supabase
       .from('conversations')
-      .select('id')
+      .select('id, contact_id')
       .eq('id', conversationId)
       .maybeSingle();
     if (convErr) {
@@ -114,10 +117,23 @@ export async function POST(request: Request) {
       latestUserMessage(messages)
     );
 
+    const classification = await classifySdrTurn({ config, messages }).catch(
+      (err) => {
+        console.error('[ai/draft] SDR classification failed:', err);
+        return emptySdrClassification();
+      }
+    );
+    const sdr = await buildSdrTurnContext({
+      db: supabase,
+      accountId,
+      classification,
+    });
+
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'draft',
       knowledge,
+      catalog: sdr.grounding,
     });
 
     const { text, usage } = await generateReply({
@@ -146,7 +162,35 @@ export async function POST(request: Request) {
       console.error('[ai/draft] usage log skipped:', logErr);
     }
 
-    return NextResponse.json({ draft: text });
+    if (conversation.contact_id) {
+      try {
+        void persistSdrClassification({
+          db: supabaseAdmin(),
+          accountId,
+          conversationId,
+          contactId: conversation.contact_id,
+          classification,
+          productIds: sdr.products.map((product) => product.id),
+          responseText: text,
+          outcome: classification.requiresHandoff ? 'handoff' : 'classified',
+        });
+      } catch (storeError) {
+        console.error('[ai/draft] SDR state skipped:', storeError);
+      }
+    }
+
+    return NextResponse.json({
+      draft: text,
+      classification,
+      products: sdr.products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        neighborhood: product.neighborhood,
+        city: product.city,
+        cover_url: product.product_media[0]?.url ?? null,
+      })),
+    });
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(

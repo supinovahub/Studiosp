@@ -7,7 +7,11 @@ const h = vi.hoisted(() => ({
   buildConversationContext: vi.fn(),
   retrieveKnowledge: vi.fn(),
   generateReply: vi.fn(),
+  classifySdrTurn: vi.fn(),
+  buildSdrTurnContext: vi.fn(),
+  persistSdrClassification: vi.fn(),
   engineSendText: vi.fn(),
+  engineSendMedia: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
@@ -21,7 +25,13 @@ vi.mock('./config', () => ({ loadAiConfig: h.loadAiConfig }))
 vi.mock('./context', () => ({ buildConversationContext: h.buildConversationContext }))
 vi.mock('./knowledge', () => ({ retrieveKnowledge: h.retrieveKnowledge }))
 vi.mock('./generate', () => ({ generateReply: h.generateReply }))
-vi.mock('@/lib/flows/meta-send', () => ({ engineSendText: h.engineSendText }))
+vi.mock('./sdr-classify', () => ({ classifySdrTurn: h.classifySdrTurn }))
+vi.mock('./sdr-catalog', () => ({ buildSdrTurnContext: h.buildSdrTurnContext }))
+vi.mock('./sdr-store', () => ({ persistSdrClassification: h.persistSdrClassification }))
+vi.mock('@/lib/flows/meta-send', () => ({
+  engineSendText: h.engineSendText,
+  engineSendMedia: h.engineSendMedia,
+}))
 vi.mock('./admin-client', () => ({
   supabaseAdmin: () => ({
     from: (table: string) => {
@@ -94,6 +104,18 @@ beforeEach(() => {
   h.loadAiConfig.mockResolvedValue(aiConfig())
   h.buildConversationContext.mockResolvedValue([{ role: 'user', content: 'hi' }])
   h.retrieveKnowledge.mockResolvedValue([])
+  h.classifySdrTurn.mockResolvedValue({
+    primaryIntent: 'other', intents: ['other'], leadStage: 'new',
+    temperature: 'cold', score: 0, budgetMin: null, budgetMax: null,
+    preferredCities: [], preferredNeighborhoods: [], propertyTypes: [],
+    minBedrooms: null, minAreaM2: null, needsParking: null,
+    financingInterest: null, purchaseTimeframe: null, wantsPhotos: false,
+    summary: '', nextBestAction: '', confidence: 0, requiresHandoff: false,
+  })
+  h.buildSdrTurnContext.mockResolvedValue({
+    classification: {}, products: [], grounding: [],
+  })
+  h.persistSdrClassification.mockResolvedValue(undefined)
   h.generateReply.mockResolvedValue({ text: 'Hello!', handoff: false })
   h.engineSendText.mockResolvedValue({ whatsapp_message_id: 'm1' })
 })

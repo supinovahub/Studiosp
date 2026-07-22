@@ -7,8 +7,11 @@ import { buildSystemPrompt } from './defaults'
 import { buildHandoffSummary } from './handoff'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
-import { engineSendText } from '@/lib/flows/meta-send'
+import { engineSendMedia, engineSendText } from '@/lib/flows/meta-send'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { classifySdrTurn, emptySdrClassification } from './sdr-classify'
+import { buildSdrTurnContext } from './sdr-catalog'
+import { persistSdrClassification } from './sdr-store'
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -106,10 +109,23 @@ export async function dispatchInboundToAiReply(
       latestUserMessage(messages),
     )
 
+    const classification = await classifySdrTurn({ config, messages }).catch(
+      (err) => {
+        console.error('[ai auto-reply] SDR classification failed:', err)
+        return emptySdrClassification()
+      },
+    )
+    const sdr = await buildSdrTurnContext({
+      db,
+      accountId,
+      classification,
+    })
+
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      catalog: sdr.grounding,
     })
 
     const { text, handoff, usage } = await generateReply({
@@ -132,7 +148,7 @@ export async function dispatchInboundToAiReply(
       usage,
     })
 
-    if (handoff || !text) {
+    if (handoff || classification.requiresHandoff || !text) {
       // The model can't (or shouldn't) answer — stop auto-replying on
       // this thread and hand it to a human. We (a) pause the bot here
       // (sticky until re-enabled), (b) route the conversation to the
@@ -154,6 +170,15 @@ export async function dispatchInboundToAiReply(
         update.assigned_agent_id = config.handoffAgentId
       }
       await db.from('conversations').update(update).eq('id', conversationId)
+      await persistSdrClassification({
+        db,
+        accountId,
+        conversationId,
+        contactId,
+        classification: { ...classification, leadStage: 'handoff' },
+        productIds: sdr.products.map((product) => product.id),
+        outcome: 'handoff',
+      })
       return
     }
 
@@ -186,6 +211,44 @@ export async function dispatchInboundToAiReply(
       contactId,
       text,
       aiGenerated: true,
+    })
+
+    if (classification.wantsPhotos) {
+      const images = sdr.products
+        .flatMap((product) =>
+          product.product_media
+            .filter((media) => media.media_type === 'image')
+            .slice(0, 1)
+            .map((media) => ({ product, media })),
+        )
+        .slice(0, 3)
+      for (const { product, media } of images) {
+        try {
+          await engineSendMedia({
+            accountId,
+            userId: configOwnerUserId,
+            conversationId,
+            contactId,
+            kind: 'image',
+            link: media.url,
+            caption: media.caption || product.name,
+            aiGenerated: true,
+          })
+        } catch (mediaError) {
+          console.error('[ai auto-reply] product photo send failed:', mediaError)
+        }
+      }
+    }
+
+    await persistSdrClassification({
+      db,
+      accountId,
+      conversationId,
+      contactId,
+      classification,
+      productIds: sdr.products.map((product) => product.id),
+      responseText: text,
+      outcome: 'replied',
     })
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err)

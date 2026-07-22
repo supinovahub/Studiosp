@@ -174,6 +174,8 @@ interface SendMediaEngineArgs {
   caption?: string;
   /** Document-only; ignored by Meta for image/video. */
   filename?: string;
+  /** Marks media selected and sent by the AI SDR. */
+  aiGenerated?: boolean;
 }
 
 /**
@@ -273,6 +275,7 @@ export async function engineSendMedia(
     content_text: args.caption ?? null,
     message_id: waMessageId,
     status: 'sent',
+    ai_generated: args.aiGenerated ?? false,
   });
   if (msgErr) {
     throw new Error(
