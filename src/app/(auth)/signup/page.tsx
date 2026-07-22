@@ -111,7 +111,7 @@ function SignupPageInner() {
               href={
                 inviteToken
                   ? `/login?invite=${encodeURIComponent(inviteToken)}`
-                  : '/Conectar'
+                  : '/login'
               }
             >
               <Button
@@ -233,7 +233,7 @@ function SignupPageInner() {
               href={
                 inviteToken
                   ? `/login?invite=${encodeURIComponent(inviteToken)}`
-                  : '/Conectar'
+                  : '/login'
               }
               className="text-primary hover:text-primary/80"
             >

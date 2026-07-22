@@ -153,7 +153,7 @@ function LoginPageInner() {
               href={
                 inviteToken
                   ? `/signup?invite=${encodeURIComponent(inviteToken)}`
-                  : '/inscrever-se'
+                  : '/signup'
               }
               className="text-primary hover:text-primary/80"
             >
