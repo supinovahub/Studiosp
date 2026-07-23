@@ -8,6 +8,7 @@ Este roteiro cobre somente validações que dependem de navegador, contas reais,
 - Não use dados de produção.
 - Os envios externos começam bloqueados.
 - O processamento recorrente roda a cada cinco minutos pelo Supabase; ele não depende do plano da Vercel.
+- O preview permanece protegido pela Vercel; o relógio usa um segredo de automação guardado no Vault do Supabase.
 - Para testar WhatsApp, cadastre primeiro números controlados em `OUTBOUND_TEST_NUMBERS`; não ative envios gerais.
 - Não promova a branch nem exclua o banco de homologação antes da aprovação expressa do dono.
 
