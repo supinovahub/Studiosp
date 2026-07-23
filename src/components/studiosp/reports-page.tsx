@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import {
   BarChart3,
   CircleDollarSign,
@@ -8,6 +9,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useStudiospData } from '@/hooks/use-studiosp-data';
 import {
   formatCurrencyBRL,
@@ -21,31 +23,53 @@ import { MetricStrip } from './metric-strip';
 import { EmptyState, ErrorState, LoadingState } from './operational-state';
 
 export function ReportsPage() {
-  const { data, loading, error, reload } = useStudiospData('reports');
+  const [filters, setFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
+    brokerId: '',
+    source: '',
+    developmentId: '',
+    stage: '',
+  });
+  const query = useMemo(() => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    return params.toString();
+  }, [filters]);
+  const { data, loading, error, reload } = useStudiospData(
+    'reports',
+    undefined,
+    query
+  );
   if (loading) return <LoadingState label="Consolidando métricas..." />;
   if (error || !data)
     return <ErrorState error={error ?? 'Resposta vazia.'} onRetry={reload} />;
-  const leads = data.leads ?? [];
-  const won = leads.filter((lead) => lead.stage === 'won');
-  const active = leads.filter((lead) => !['won', 'lost'].includes(lead.stage));
-  const revenue = won.reduce(
-    (sum, lead) => sum + Number(lead.won_gross_value ?? 0),
-    0
+  const report = data.report;
+  const leads = report?.leads ?? [];
+  const metrics = report?.metrics ?? {
+    leads_received: 0,
+    active_opportunities: 0,
+    meetings_completed: 0,
+    confirmed_revenue: 0,
+    won_count: 0,
+  };
+  const stageCounts = new Map(
+    (report?.stages ?? []).map((item) => [item.key, Number(item.count)])
   );
-  const meetingCompleted = new Set(
-    (data.events ?? [])
-      .filter((event) => event.event_type === 'meeting_completed')
-      .map((event) => String(event.opportunity_id))
-  ).size;
+  const sourceCounts = new Map(
+    (report?.sources ?? []).map((item) => [item.key, Number(item.count)])
+  );
   const stages = Object.entries(stageLabels).map(([key, label]) => ({
     key,
     label,
-    count: leads.filter((lead) => lead.stage === key).length,
+    count: stageCounts.get(key) ?? 0,
   }));
   const sources = Object.entries(sourceLabels).map(([key, label]) => ({
     key,
     label,
-    count: leads.filter((lead) => lead.source_type === key).length,
+    count: sourceCounts.get(key) ?? 0,
   }));
   const maxStage = Math.max(1, ...stages.map((item) => item.count));
   const maxSource = Math.max(1, ...sources.map((item) => item.count));
@@ -102,34 +126,102 @@ export function ReportsPage() {
         items={[
           {
             label: 'Leads recebidos',
-            value: leads.length,
-            detail: 'Total da base atual',
+            value: metrics.leads_received,
+            detail: 'No período filtrado',
             icon: Users,
             tone: 'primary',
           },
           {
             label: 'Oportunidades ativas',
-            value: active.length,
+            value: metrics.active_opportunities,
             detail: 'Ainda em andamento',
             icon: Target,
             tone: 'warning',
           },
           {
             label: 'Reuniões realizadas',
-            value: meetingCompleted,
+            value: metrics.meetings_completed,
             detail: 'Com fato humano registrado',
             icon: BarChart3,
             tone: 'success',
           },
           {
             label: 'Faturamento confirmado',
-            value: formatCurrencyBRL(revenue),
-            detail: `${won.length} venda(s)`,
+            value: formatCurrencyBRL(metrics.confirmed_revenue),
+            detail: `${metrics.won_count} venda(s)`,
             icon: CircleDollarSign,
             tone: 'neutral',
           },
         ]}
       />
+      <section className="border-border bg-card grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-6">
+        <Input
+          type="date"
+          aria-label="Período inicial"
+          value={filters.dateFrom}
+          onChange={(event) =>
+            setFilters((current) => ({
+              ...current,
+              dateFrom: event.target.value,
+            }))
+          }
+        />
+        <Input
+          type="date"
+          aria-label="Período final"
+          value={filters.dateTo}
+          onChange={(event) =>
+            setFilters((current) => ({
+              ...current,
+              dateTo: event.target.value,
+            }))
+          }
+        />
+        <ReportSelect
+          label="Todos os corretores"
+          value={filters.brokerId}
+          onChange={(brokerId) =>
+            setFilters((current) => ({ ...current, brokerId }))
+          }
+          options={(data.brokers ?? []).map((item) => ({
+            value: String(item.id),
+            label: String(item.display_name),
+          }))}
+        />
+        <ReportSelect
+          label="Todas as origens"
+          value={filters.source}
+          onChange={(source) =>
+            setFilters((current) => ({ ...current, source }))
+          }
+          options={Object.entries(sourceLabels).map(([value, label]) => ({
+            value,
+            label,
+          }))}
+        />
+        <ReportSelect
+          label="Todos os empreendimentos"
+          value={filters.developmentId}
+          onChange={(developmentId) =>
+            setFilters((current) => ({ ...current, developmentId }))
+          }
+          options={(data.developments ?? []).map((item) => ({
+            value: String(item.id),
+            label: String(item.name),
+          }))}
+        />
+        <ReportSelect
+          label="Todas as etapas"
+          value={filters.stage}
+          onChange={(stage) =>
+            setFilters((current) => ({ ...current, stage }))
+          }
+          options={Object.entries(stageLabels).map(([value, label]) => ({
+            value,
+            label,
+          }))}
+        />
+      </section>
       <div className="grid gap-5 lg:grid-cols-2">
         <BarList title="Distribuição por etapa" items={stages} max={maxStage} />
         <BarList title="Origem dos leads" items={sources} max={maxSource} />
@@ -226,5 +318,33 @@ function BarList({
         )}
       </div>
     </section>
+  );
+}
+
+function ReportSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="border-input bg-background text-foreground h-9 min-w-0 rounded-lg border px-2 text-sm"
+    >
+      <option value="">{label}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }

@@ -355,6 +355,11 @@ export function DevelopmentsPage() {
                         'Descrição ainda não cadastrada.'
                     )}
                   </p>
+                  {development.status !== 'published' ? (
+                    <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-300">
+                      Invisível para corretores até publicar.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="divide-border border-border bg-muted/15 grid grid-cols-2 divide-x border-b">
                   <div className="p-3">
@@ -515,6 +520,9 @@ function CatalogFoundation({
   const fileInput = useRef<HTMLInputElement>(null);
   const [uploadDevelopmentId, setUploadDevelopmentId] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState<
+    { name: string; ok: boolean; message: string }[]
+  >([]);
 
   async function submitSimple(
     event: FormEvent<HTMLFormElement>,
@@ -543,7 +551,9 @@ function CatalogFoundation({
       return;
     }
     setUploading(true);
+    setUploadResults([]);
     try {
+      const results: { name: string; ok: boolean; message: string }[] = [];
       for (const file of selectedFiles) {
         const form = new FormData();
         form.set('file', file);
@@ -554,13 +564,23 @@ function CatalogFoundation({
           method: 'POST',
           body: form,
         });
-        const payload = await response.json();
-        if (!response.ok)
-          throw new Error(payload.error ?? `Falha ao enviar ${file.name}.`);
+        const payload = await response.json().catch(() => ({}));
+        results.push({
+          name: file.name,
+          ok: response.ok,
+          message: response.ok
+            ? 'Enviado'
+            : (payload.error ?? `Falha ao enviar ${file.name}.`),
+        });
       }
+      setUploadResults(results);
+      const successful = results.filter((item) => item.ok).length;
+      const failed = results.length - successful;
       await onUploadResult(
-        true,
-        `${selectedFiles.length} arquivo(s) enviado(s).`
+        failed === 0,
+        failed === 0
+          ? `${successful} arquivo(s) enviado(s).`
+          : `${successful} enviado(s) e ${failed} com falha. Confira o resultado individual.`
       );
     } catch (error) {
       await onUploadResult(
@@ -720,6 +740,22 @@ function CatalogFoundation({
               {uploading ? 'Enviando...' : 'Enviar arquivos'}
             </Button>
           </div>
+          {uploadResults.length ? (
+            <ul className="space-y-1 text-xs" aria-label="Resultado dos uploads">
+              {uploadResults.map((result) => (
+                <li
+                  key={result.name}
+                  className={
+                    result.ok
+                      ? 'text-emerald-600 dark:text-emerald-300'
+                      : 'text-destructive'
+                  }
+                >
+                  {result.name}: {result.message}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       </div>
     </details>

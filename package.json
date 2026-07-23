@@ -35,6 +35,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "env:staging": "vercel env pull .env.local --environment=preview",
     "test": "vitest run",
     "test:watch": "vitest"
   },
