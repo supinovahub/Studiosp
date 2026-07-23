@@ -131,6 +131,11 @@ Referências dos advisors:
 - `npm run typecheck`: aprovado.
 - `npm run lint`: zero erros; permanecem avisos preexistentes fora deste pacote.
 - `npm run build`: aprovado, 71 páginas geradas.
+- Preview Vercel `studiosp-git-codex-v1-hardening-brio5.vercel.app`: `READY`.
+- Smoke test público: página de login carregada em português, sem erro de
+  runtime.
+- O smoke test autenticado no Preview não foi concluído porque a credencial
+  anteriormente fornecida não é mais aceita pelo projeto de staging.
 - Migration aplicada com sucesso no Supabase Staging.
 - RPC de relatório executada com contexto de owner.
 - Constraint de sobreposição confirmada no catálogo do Postgres.
