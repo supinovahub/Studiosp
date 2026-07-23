@@ -522,17 +522,29 @@ function CatalogFoundation({
     success: string
   ) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
-    if (await run(action, payload, success)) event.currentTarget.reset();
+    if (await run(action, payload, success)) formElement.reset();
   }
 
   async function uploadFiles() {
     const files = fileInput.current?.files;
     if (!files?.length || !uploadDevelopmentId) return;
+    const selectedFiles = Array.from(files);
+    const unsupported = selectedFiles.find(
+      (file) => !/\.(jpe?g|png|webp|gif|mp4|mov|pdf|pptx?)$/i.test(file.name)
+    );
+    if (unsupported) {
+      await onUploadResult(
+        false,
+        `O formato de "${unsupported.name}" não é permitido. Envie imagens JPG, PNG, WebP ou GIF; vídeos MP4 ou MOV; documentos PDF, PPT ou PPTX.`
+      );
+      return;
+    }
     setUploading(true);
     try {
-      for (const file of Array.from(files)) {
+      for (const file of selectedFiles) {
         const form = new FormData();
         form.set('file', file);
         form.set('developmentId', uploadDevelopmentId);
@@ -546,7 +558,10 @@ function CatalogFoundation({
         if (!response.ok)
           throw new Error(payload.error ?? `Falha ao enviar ${file.name}.`);
       }
-      await onUploadResult(true, `${files.length} arquivo(s) enviado(s).`);
+      await onUploadResult(
+        true,
+        `${selectedFiles.length} arquivo(s) enviado(s).`
+      );
     } catch (error) {
       await onUploadResult(
         false,

@@ -61,7 +61,7 @@ const settings = [
     managerOnly: false,
   },
   {
-    href: '/settings?tab=ai',
+    href: '/agents',
     title: 'Credencial do modelo de IA',
     description: 'Chave criptografada e provedor de linguagem',
     icon: KeyRound,

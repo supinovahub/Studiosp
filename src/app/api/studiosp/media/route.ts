@@ -4,6 +4,39 @@ import { hasMinRole } from '@/lib/auth/roles';
 
 export const runtime = 'nodejs';
 
+const ALLOWED_MEDIA_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'video/mp4',
+  'video/quicktime',
+  'application/pdf',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+]);
+
+const ALLOWED_MEDIA_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'gif',
+  'mp4',
+  'mov',
+  'pdf',
+  'ppt',
+  'pptx',
+]);
+
+function isAllowedMedia(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return (
+    ALLOWED_MEDIA_TYPES.has(file.type.toLowerCase()) ||
+    ALLOWED_MEDIA_EXTENSIONS.has(extension)
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getCurrentAccount();
@@ -86,6 +119,15 @@ export async function POST(request: NextRequest) {
     if (file.size > 100 * 1024 * 1024) {
       return NextResponse.json(
         { error: 'O arquivo deve ter no máximo 100 MB.' },
+        { status: 400 }
+      );
+    }
+    if (!isAllowedMedia(file)) {
+      return NextResponse.json(
+        {
+          error:
+            'Formato não permitido. Envie imagens JPG, PNG, WebP ou GIF; vídeos MP4 ou MOV; documentos PDF, PPT ou PPTX.',
+        },
         { status: 400 }
       );
     }

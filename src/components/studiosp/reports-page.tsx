@@ -32,15 +32,11 @@ export function ReportsPage() {
     (sum, lead) => sum + Number(lead.won_gross_value ?? 0),
     0
   );
-  const meetingCompleted = leads.filter((lead) =>
-    [
-      'meeting_completed',
-      'proposal_sent',
-      'negotiating',
-      'contract_pending',
-      'won',
-    ].includes(lead.stage)
-  ).length;
+  const meetingCompleted = new Set(
+    (data.events ?? [])
+      .filter((event) => event.event_type === 'meeting_completed')
+      .map((event) => String(event.opportunity_id))
+  ).size;
   const stages = Object.entries(stageLabels).map(([key, label]) => ({
     key,
     label,
@@ -84,8 +80,10 @@ export function ReportsPage() {
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = `studiosp-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   return (

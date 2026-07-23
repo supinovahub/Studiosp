@@ -178,11 +178,21 @@ function MessageContent({
 
     case 'audio':
       return (
-        <div>
+        <div className="space-y-2">
           {message.media_url ? (
             <audio src={message.media_url} controls className="max-w-60" />
           ) : (
             <MediaUnavailable label={t('audio')} t={t} />
+          )}
+          {message.transcription && (
+            <div className="bg-background/60 rounded-lg px-3 py-2">
+              <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                {t('transcription')}
+              </p>
+              <p className="mt-1 text-sm break-words whitespace-pre-wrap">
+                {message.transcription}
+              </p>
+            </div>
           )}
         </div>
       );

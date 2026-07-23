@@ -208,6 +208,7 @@
       "photo": "Foto",
       "video": "Vídeo",
       "audio": "Áudio",
+      "transcription": "Transcrição",
       "unavailable": "{label} indisponível",
       "document": "Documento",
       "locationShared": "Localização compartilhada",
@@ -1214,7 +1215,7 @@
       "tagsAndFields": "Tags e campos personalizados",
       "tagsCount": "{count} {count, plural, =1 {etiqueta} other {etiquetas}}",
       "fieldsCount": "{count} {count, plural, =1 {campo personalizado} other {campos personalizados}}",
-      "appearance": "modo {mode} · sotaque {theme}",
+      "appearance": "modo {mode} · tema {theme}",
       "yourAccount": "Sua conta",
       "loading": "Carregando…"
     },

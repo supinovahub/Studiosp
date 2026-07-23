@@ -253,6 +253,8 @@ export interface Message {
    * badge in the inbox. Migration 033.
    */
   ai_generated?: boolean;
+  /** Transcrição concluída associada a uma mensagem de áudio. */
+  transcription?: string;
 }
 
 export type ReactionActor = 'customer' | 'agent';

@@ -140,12 +140,28 @@ function groupMessagesByDate(messages: Message[]) {
 
 const STATUS_OPTIONS: {
   label: string;
+  translationKey: 'statusOpen' | 'statusPending' | 'statusClosed';
   value: ConversationStatus;
   color: string;
 }[] = [
-  { label: 'Aberta', value: 'open', color: 'text-primary' },
-  { label: 'Pendente', value: 'pending', color: 'text-amber-400' },
-  { label: 'Fechada', value: 'closed', color: 'text-muted-foreground' },
+  {
+    label: 'Aberta',
+    translationKey: 'statusOpen',
+    value: 'open',
+    color: 'text-primary',
+  },
+  {
+    label: 'Pendente',
+    translationKey: 'statusPending',
+    value: 'pending',
+    color: 'text-amber-400',
+  },
+  {
+    label: 'Fechada',
+    translationKey: 'statusClosed',
+    value: 'closed',
+    color: 'text-muted-foreground',
+  },
 ];
 
 /**
@@ -303,7 +319,38 @@ export function MessageThread({
       if (error) {
         console.error('Failed to fetch messages:', error);
       } else {
-        onMessagesLoadedRef.current(data ?? []);
+        const loadedMessages = (data ?? []) as Message[];
+        const audioMessageIds = loadedMessages
+          .filter((message) => message.content_type === 'audio')
+          .map((message) => message.id);
+        let transcriptions = new Map<string, string>();
+
+        if (audioMessageIds.length) {
+          const transcriptionResult = await supabase
+            .from('audio_transcriptions')
+            .select('message_id, transcript')
+            .eq('status', 'completed')
+            .in('message_id', audioMessageIds);
+          if (transcriptionResult.error) {
+            console.error(
+              'Failed to fetch audio transcriptions:',
+              transcriptionResult.error
+            );
+          } else {
+            transcriptions = new Map(
+              (transcriptionResult.data ?? [])
+                .filter((item) => item.transcript)
+                .map((item) => [item.message_id, item.transcript as string])
+            );
+          }
+        }
+
+        onMessagesLoadedRef.current(
+          loadedMessages.map((message) => ({
+            ...message,
+            transcription: transcriptions.get(message.id),
+          }))
+        );
       }
 
       if (!cancelled) setLoading(false);
@@ -991,7 +1038,7 @@ export function MessageThread({
                 currentStatus?.color ?? 'text-muted-foreground'
               )}
             >
-              {currentStatus ? t(`status${currentStatus.label}`) : t('status')}
+              {currentStatus ? t(currentStatus.translationKey) : t('status')}
               <ChevronDown className="h-3 w-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
@@ -1004,7 +1051,7 @@ export function MessageThread({
                   onClick={() => handleStatusChange(opt.value)}
                   className={cn('text-sm', opt.color)}
                 >
-                  {t(`status${opt.label}`)}
+                  {t(opt.translationKey)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

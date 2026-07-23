@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
@@ -12,8 +12,16 @@ import { PresenceHeartbeat } from '@/components/presence/presence-heartbeat';
 // client components can't export Next's metadata object.
 
 function DashboardShellInner({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, profileLoading, accountRole } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const isManager = accountRole === 'owner' || accountRole === 'admin';
+  const managerOnlyRoute = [
+    '/visao-geral',
+    '/pipeline',
+    '/follow-ups',
+    '/relatorios',
+  ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
 
   // Sidebar drawer state — only used on mobile. On lg+ the sidebar is
   // always visible and this stays at `false` (ignored by the component).
@@ -22,11 +30,17 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/login');
+      router.replace('/login');
     }
   }, [user, loading, router]);
 
-  if (loading) {
+  useEffect(() => {
+    if (!loading && !profileLoading && user && !isManager && managerOnlyRoute) {
+      router.replace('/meu-dia');
+    }
+  }, [isManager, loading, managerOnlyRoute, profileLoading, router, user]);
+
+  if (loading || profileLoading || (!!user && !isManager && managerOnlyRoute)) {
     return (
       <div className="bg-background flex h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-3">
