@@ -12,6 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useStudiospData } from '@/hooks/use-studiosp-data';
 import {
+  auditActionLabels,
+  auditActorLabels,
+  auditEntityLabels,
   formatCurrencyBRL,
   formatDateTime,
   labelFor,
@@ -213,9 +216,7 @@ export function ReportsPage() {
         <ReportSelect
           label="Todas as etapas"
           value={filters.stage}
-          onChange={(stage) =>
-            setFilters((current) => ({ ...current, stage }))
-          }
+          onChange={(stage) => setFilters((current) => ({ ...current, stage }))}
           options={Object.entries(stageLabels).map(([value, label]) => ({
             value,
             label,
@@ -244,15 +245,11 @@ export function ReportsPage() {
               >
                 <div>
                   <p className="text-foreground text-sm">
-                    {String(item.action).replaceAll('_', ' ')}
+                    {labelFor(auditActionLabels, String(item.action))}
                   </p>
                   <p className="text-muted-foreground text-xs">
-                    {String(item.entity_type).replaceAll('_', ' ')} ·{' '}
-                    {String(item.actor_type) === 'ai'
-                      ? 'IA'
-                      : String(item.actor_type) === 'user'
-                        ? 'Usuário'
-                        : 'Sistema'}
+                    {labelFor(auditEntityLabels, String(item.entity_type))} ·{' '}
+                    {labelFor(auditActorLabels, String(item.actor_type))}
                   </p>
                 </div>
                 <span className="text-muted-foreground text-xs">

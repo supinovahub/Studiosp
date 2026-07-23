@@ -172,6 +172,8 @@ Referências dos advisors:
   pt-BR.
 - O catálogo voltou a ser acessível ao corretor no servidor, limitado a
   empreendimentos publicados; rascunhos e arquivados continuam protegidos.
+- A auditoria dos relatórios passou a traduzir ações, entidades e responsáveis
+  para português, preservando os identificadores técnicos no banco.
 
 ### Validação adicional
 
