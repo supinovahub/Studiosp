@@ -12,6 +12,7 @@ function query(data: unknown = []) {
   const builder = {
     select: () => builder,
     eq: () => builder,
+    neq: () => builder,
     in: () => builder,
     order: () => builder,
     limit: () => builder,
@@ -23,20 +24,23 @@ function query(data: unknown = []) {
   return builder;
 }
 
-function supabaseStub() {
+function supabaseStub(rpcError: { code: string; message: string } | null = null) {
   return {
     from: (table: string) => {
       if (table === 'profiles') return query({ id: 'profile-1' });
       if (table === 'broker_profiles') return query({ id: 'broker-1' });
       return query([]);
     },
-    rpc: async () => ({ data: {}, error: null }),
+    rpc: async () => ({ data: {}, error: rpcError }),
   };
 }
 
-function context(role: 'owner' | 'admin' | 'agent' | 'viewer') {
+function context(
+  role: 'owner' | 'admin' | 'agent' | 'viewer',
+  rpcError: { code: string; message: string } | null = null
+) {
   return {
-    supabase: supabaseStub(),
+    supabase: supabaseStub(rpcError),
     userId: 'user-1',
     accountId: 'account-1',
     role,
@@ -82,5 +86,23 @@ describe('GET /api/studiosp/data authorization', () => {
     );
     expect(response.status).toBe(200);
   });
-});
 
+  it('returns a useful 503 when the reports migration is missing', async () => {
+    getCurrentAccount.mockResolvedValue(
+      context('owner', {
+        code: 'PGRST202',
+        message: 'Could not find the report function in the schema cache',
+      })
+    );
+    const { GET } = await import('./route');
+    const response = await GET(
+      new NextRequest('http://localhost/api/studiosp/data?view=reports')
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error:
+        'Relatórios indisponíveis neste ambiente. Verifique a migration de métricas.',
+    });
+  });
+});

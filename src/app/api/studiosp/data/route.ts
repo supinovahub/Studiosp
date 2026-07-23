@@ -580,6 +580,15 @@ export async function GET(request: NextRequest) {
             .neq('status', 'archived')
             .order('name'),
         ]);
+      if (reportResult.error?.code === 'PGRST202') {
+        return NextResponse.json(
+          {
+            error:
+              'Relatórios indisponíveis neste ambiente. Verifique a migration de métricas.',
+          },
+          { status: 503 }
+        );
+      }
       if (reportResult.error) throw reportResult.error;
       response.report = reportResult.data;
       response.audit = assertQuery<Row[]>(auditResult, 'auditoria');

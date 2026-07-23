@@ -145,3 +145,39 @@ Referências dos advisors:
 - Nenhum código de UAZAPI ou WhatsApp foi alterado.
 - Produção, branch `main` e projeto Supabase **Studiosp** permaneceram
   inalterados.
+
+## Correções adicionais — acentuação e métricas
+
+### Causa identificada
+
+- O Preview da branch `codex/v1-hardening` não herdou as variáveis que estavam
+  limitadas à branch `codex/v1-platform`.
+- Como consequência, esse Preview consultou o Supabase de produção: nele havia
+  textos padrão antigos com mojibake e ainda não existia a RPC
+  `studiosp_report_summary`.
+- O Supabase **Studiosp Staging** já possuía a RPC e os dados estavam
+  corretamente codificados.
+
+### Alterações realizadas
+
+- Adicionada a migration
+  `20260723193000_repair_studiosp_utf8_defaults.sql`.
+- A migration corrige somente textos padrão identificados por chaves estáveis:
+  prompt e conclusão da IA, cadência, perguntas, opções e motivos.
+- Conteúdo livre de empreendimentos não é alterado automaticamente.
+- A migration foi aplicada somente ao Supabase **Studiosp Staging**.
+- A API de relatórios passou a devolver `503` com mensagem operacional clara
+  quando a RPC não existe, em vez de um erro interno genérico.
+- Adicionado teste de regressão para o erro `PGRST202`.
+- Tempos relativos de presença, conversas e execuções foram localizados para
+  pt-BR.
+
+### Validação adicional
+
+- Staging: zero ocorrências de mojibake nos textos padrão verificados.
+- Staging: `studiosp_report_summary(date,date,uuid,text,uuid,text)` presente.
+- Staging: nome da política ativa validado como `Cadência padrão`.
+- Testes focados: **21 aprovados**.
+- `npm run typecheck`: aprovado.
+- `npm run build`: aprovado, 71 páginas geradas.
+- Produção foi apenas consultada para diagnóstico; nenhum dado foi alterado.
