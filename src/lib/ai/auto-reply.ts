@@ -1,27 +1,30 @@
-import { supabaseAdmin } from './admin-client'
-import { loadAiConfig } from './config'
-import { buildConversationContext } from './context'
-import { retrieveKnowledge } from './knowledge'
-import { generateReply } from './generate'
-import { buildSystemPrompt } from './defaults'
-import { buildHandoffSummary } from './handoff'
-import { logAiUsage } from './usage'
-import { latestUserMessage } from './query'
-import { engineSendMedia, engineSendText } from '@/lib/flows/meta-send'
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
-import { classifySdrTurn, emptySdrClassification } from './sdr-classify'
-import { buildSdrTurnContext } from './sdr-catalog'
-import { persistSdrClassification } from './sdr-store'
-import { splitAiMessage, waitBetweenAiMessages } from './message-parser'
+import { supabaseAdmin } from './admin-client';
+import { loadAiConfig } from './config';
+import { buildConversationContext } from './context';
+import { retrieveKnowledge } from './knowledge';
+import { generateReply } from './generate';
+import { buildSystemPrompt } from './defaults';
+import { buildHandoffSummary } from './handoff';
+import { logAiUsage } from './usage';
+import { latestUserMessage } from './query';
+import { engineSendText } from '@/lib/flows/meta-send';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { classifySdrTurn, emptySdrClassification } from './sdr-classify';
+import { persistSdrClassification } from './sdr-store';
+import { splitAiMessage, waitBetweenAiMessages } from './message-parser';
+import {
+  prepareStudiospTurn,
+  scheduleStudiospFollowups,
+} from './studiosp-orchestrator';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
-  accountId: string
-  conversationId: string
-  contactId: string
+  accountId: string;
+  conversationId: string;
+  contactId: string;
   /** The account's WhatsApp config owner, used for the outbound send's
    *  audit columns (mirrors how the flow runner passes it through). */
-  configOwnerUserId: string
+  configOwnerUserId: string;
 }
 
 /**
@@ -44,15 +47,15 @@ interface DispatchArgs {
  * window check is needed.
  */
 export async function dispatchInboundToAiReply(
-  args: DispatchArgs,
+  args: DispatchArgs
 ): Promise<void> {
-  const { accountId, conversationId, contactId, configOwnerUserId } = args
+  const { accountId, conversationId, contactId, configOwnerUserId } = args;
 
   try {
-    const db = supabaseAdmin()
+    const db = supabaseAdmin();
 
-    const config = await loadAiConfig(db, accountId)
-    if (!config || !config.autoReplyEnabled) return
+    const config = await loadAiConfig(db, accountId);
+    if (!config || !config.autoReplyEnabled) return;
 
     // Deterministic, user-configured responders win over the LLM — the
     // caller already excludes messages a Flow consumed. Message-level
@@ -68,23 +71,32 @@ export async function dispatchInboundToAiReply(
       .eq('account_id', accountId)
       .eq('is_active', true)
       .in('trigger_type', ['new_message_received', 'keyword_match'])
-      .limit(1)
-    if (autoResponders && autoResponders.length > 0) return
+      .limit(1);
+    if (autoResponders && autoResponders.length > 0) return;
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
       .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
       .eq('id', conversationId)
-      .maybeSingle()
-    if (convErr || !conv) return
-    if (conv.assigned_agent_id) return // a human owns this thread
-    if (conv.ai_autoreply_disabled) return // handed off / turned off here
+      .maybeSingle();
+    if (convErr || !conv) return;
+    if (conv.assigned_agent_id) return; // a human owns this thread
+    if (conv.ai_autoreply_disabled) return; // handed off / turned off here
     // Cheap early-out; the authoritative cap check is the atomic claim
     // below (this read can race a concurrent inbound).
-    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return
+    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return;
 
-    const messages = await buildConversationContext(db, conversationId)
-    if (messages.length === 0) return
+    const messages = await buildConversationContext(db, conversationId);
+    if (messages.length === 0) return;
+
+    const { data: triggerMessage } = await db
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('sender_type', 'customer')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     // Account-wide throttle on the shared BYO key. The per-conversation
     // cap bounds one thread; this bounds a burst across many threads (a
@@ -93,13 +105,13 @@ export async function dispatchInboundToAiReply(
     // the auto-reply; the inbound still sits in the inbox for a human.
     const acctLimit = checkRateLimit(
       `ai-autoreply:${accountId}`,
-      RATE_LIMITS.aiAutoReplyAccount,
-    )
+      RATE_LIMITS.aiAutoReplyAccount
+    );
     if (!acctLimit.success) {
       console.warn(
-        `[ai auto-reply] account ${accountId} hit the per-account rate limit — skipping this inbound.`,
-      )
-      return
+        `[ai auto-reply] account ${accountId} hit the per-account rate limit — skipping this inbound.`
+      );
+      return;
     }
 
     // Ground the reply in the account's knowledge base (best-effort).
@@ -107,34 +119,38 @@ export async function dispatchInboundToAiReply(
       db,
       accountId,
       config,
-      latestUserMessage(messages),
-    )
+      latestUserMessage(messages)
+    );
 
     const classification = await classifySdrTurn({ config, messages }).catch(
       (err) => {
-        console.error('[ai auto-reply] SDR classification failed:', err)
-        return emptySdrClassification()
-      },
-    )
-    const sdr = await buildSdrTurnContext({
+        console.error('[ai auto-reply] SDR classification failed:', err);
+        return emptySdrClassification();
+      }
+    );
+    const studiosp = await prepareStudiospTurn({
       db,
       accountId,
-      classification,
-    })
+      conversationId,
+      contactId,
+      triggerMessageId: triggerMessage?.id ?? null,
+      config,
+      messages,
+    });
 
     const systemPrompt = buildSystemPrompt({
       internalPrompt: config.internalPrompt,
       communicationPrompt: config.communicationPrompt,
       mode: 'auto_reply',
       knowledge,
-      catalog: sdr.grounding,
-    })
+      operation: studiosp.grounding,
+    });
 
     const { text, handoff, usage } = await generateReply({
       config,
       systemPrompt,
       messages,
-    })
+    });
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
     // never adds latency to the customer-facing send: `logAiUsage`
@@ -148,7 +164,7 @@ export async function dispatchInboundToAiReply(
       provider: config.provider,
       model: config.model,
       usage,
-    })
+    });
 
     if (handoff || classification.requiresHandoff || !text) {
       // The model can't (or shouldn't) answer — stop auto-replying on
@@ -161,27 +177,56 @@ export async function dispatchInboundToAiReply(
       const summary = buildHandoffSummary({
         messages,
         replyCount: conv.ai_reply_count ?? 0,
-      })
+      });
       const update: Record<string, unknown> = {
         ai_autoreply_disabled: true,
         ai_handoff_summary: summary,
-      }
+      };
       // Only set the assignee when a target is configured AND the thread
       // isn't already owned — never stomp an existing human assignment.
       if (config.handoffAgentId && !conv.assigned_agent_id) {
-        update.assigned_agent_id = config.handoffAgentId
+        update.assigned_agent_id = config.handoffAgentId;
       }
-      await db.from('conversations').update(update).eq('id', conversationId)
+      await db.from('conversations').update(update).eq('id', conversationId);
       await persistSdrClassification({
         db,
         accountId,
         conversationId,
         contactId,
         classification: { ...classification, leadStage: 'handoff' },
-        productIds: sdr.products.map((product) => product.id),
+        productIds: [],
         outcome: 'handoff',
-      })
-      return
+      });
+      if (studiosp.opportunityId) {
+        await db.rpc('studiosp_apply_opportunity_event', {
+          p_opportunity_id: studiosp.opportunityId,
+          p_event_type: 'ai_handoff',
+          p_expected_stage: null,
+          p_payload: { summary },
+          p_idempotency_key: triggerMessage?.id
+            ? `handoff:${triggerMessage.id}`
+            : null,
+          p_source_type: 'api',
+          p_reason: 'A IA solicitou atendimento humano.',
+          p_actor_type: 'ai',
+          p_actor_profile_id: null,
+        });
+        await db.from('attention_items').upsert(
+          {
+            account_id: accountId,
+            opportunity_id: studiosp.opportunityId,
+            assigned_role: 'owner',
+            kind: 'ai_handoff',
+            severity: 'warning',
+            title: 'Conversa transferida pela IA',
+            context: { summary },
+            due_at: new Date().toISOString(),
+            deduplication_key: `ai-handoff:${studiosp.opportunityId}`,
+          },
+          { onConflict: 'account_id,deduplication_key', ignoreDuplicates: true }
+        );
+      }
+      return;
     }
 
     // Atomically claim a reply slot: the cap check + increment happen in
@@ -194,21 +239,21 @@ export async function dispatchInboundToAiReply(
       {
         conversation_id: conversationId,
         max_replies: config.autoReplyMaxPerConversation,
-      },
-    )
+      }
+    );
     if (claimErr) {
       // A real error here (vs. losing the cap race) is almost always a
       // deploy issue — e.g. `claim_ai_reply_slot` not EXECUTE-able by the
       // service role, or the migration not applied. Log it loudly: a
       // silent return makes "auto-reply never fires" undiagnosable.
-      console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr)
-      return
+      console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr);
+      return;
     }
-    if (claimed !== true) return // lost the per-conversation cap race
+    if (claimed !== true) return; // lost the per-conversation cap race
 
-    const messageParts = splitAiMessage(text)
+    const messageParts = splitAiMessage(text);
     for (const [index, messagePart] of messageParts.entries()) {
-      if (index > 0) await waitBetweenAiMessages()
+      if (index > 0) await waitBetweenAiMessages();
       await engineSendText({
         accountId,
         userId: configOwnerUserId,
@@ -216,34 +261,7 @@ export async function dispatchInboundToAiReply(
         contactId,
         text: messagePart,
         aiGenerated: true,
-      })
-    }
-
-    if (classification.wantsPhotos) {
-      const images = sdr.products
-        .flatMap((product) =>
-          product.product_media
-            .filter((media) => media.media_type === 'image')
-            .slice(0, 1)
-            .map((media) => ({ product, media })),
-        )
-        .slice(0, 3)
-      for (const { product, media } of images) {
-        try {
-          await engineSendMedia({
-            accountId,
-            userId: configOwnerUserId,
-            conversationId,
-            contactId,
-            kind: 'image',
-            link: media.url,
-            caption: media.caption || product.name,
-            aiGenerated: true,
-          })
-        } catch (mediaError) {
-          console.error('[ai auto-reply] product photo send failed:', mediaError)
-        }
-      }
+      });
     }
 
     await persistSdrClassification({
@@ -252,11 +270,16 @@ export async function dispatchInboundToAiReply(
       conversationId,
       contactId,
       classification,
-      productIds: sdr.products.map((product) => product.id),
+      productIds: [],
       responseText: text,
       outcome: 'replied',
-    })
+    });
+    await scheduleStudiospFollowups({
+      db,
+      accountId,
+      opportunityId: studiosp.opportunityId,
+    });
   } catch (err) {
-    console.error('[ai auto-reply] dispatch failed:', err)
+    console.error('[ai auto-reply] dispatch failed:', err);
   }
 }

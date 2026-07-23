@@ -6,6 +6,12 @@ Especificação executável da primeira entrega: [Especificação da Versão 1](
 
 Contrato técnico do banco: [Modelo de Dados Executável da V1](./MODELO_DADOS_V1_STUDIOSP.md).
 
+Roteiro de validação com contas e integrações reais: [Homologação da V1](./HOMOLOGACAO_V1_STUDIOSP.md).
+
+## Estado da implementação
+
+A V1 está implementada na branch de homologação `codex/v1-platform`. Produção e `main` permanecem preservadas. A promoção depende da conclusão do roteiro de homologação e de autorização expressa do dono.
+
 ## 1. Visão do produto
 
 ### Confirmado

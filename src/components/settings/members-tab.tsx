@@ -367,7 +367,7 @@ export function MembersTab() {
                             {member.avatar_url ? (
                               <AvatarImage
                                 src={member.avatar_url}
-                                alt={member.full_name || 'Member'}
+                                alt={member.full_name || 'Membro'}
                               />
                             ) : null}
                             <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">

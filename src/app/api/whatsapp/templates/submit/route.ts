@@ -222,7 +222,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error: isRateLimit
-              ? 'Meta rate limit hit (100 template creates per hour). Try again later.'
+              ? 'O limite da Meta foi atingido (100 modelos criados por hora). Tente novamente mais tarde.'
               : message,
           },
           { status: isRateLimit ? 429 : 502 }

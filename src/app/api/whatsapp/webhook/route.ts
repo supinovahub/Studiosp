@@ -8,6 +8,11 @@ import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
+import {
+  ensureStudiospOpportunity,
+  transcribeStudiospAudio,
+} from '@/lib/ai/studiosp-orchestrator';
+import { handleBrokerOperationalReply } from '@/lib/studiosp/broker-whatsapp';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import {
   handleTemplateWebhookChange,
@@ -313,7 +318,9 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           // inserts that need it for NOT NULL FK compliance. Always
           // the admin who saved the WhatsApp config.
           config.user_id,
-          decryptedAccessToken
+          decryptedAccessToken,
+          config.id,
+          phoneNumberId
         );
       }
     }
@@ -582,10 +589,32 @@ async function processMessage(
   // (contacts, conversations). Always the admin who saved the
   // WhatsApp config; the choice is arbitrary post-017 but stable.
   configOwnerUserId: string,
-  accessToken: string
+  accessToken: string,
+  whatsappConfigId: string,
+  phoneNumberId: string
 ) {
   const senderPhone = normalizePhone(message.from);
   const contactName = contact.profile.name;
+
+  const brokerText =
+    message.text?.body ??
+    message.interactive?.button_reply?.title ??
+    message.interactive?.list_reply?.title ??
+    null;
+  const brokerHandled = await handleBrokerOperationalReply({
+    db: supabaseAdmin(),
+    accountId,
+    whatsappConfigId,
+    remoteChatId: message.from,
+    phone: senderPhone,
+    text: brokerText,
+    providerConfig: {
+      provider: 'meta',
+      phone_number_id: phoneNumberId,
+      accessToken,
+    },
+  });
+  if (brokerHandled) return;
 
   // Find or create contact
   const contactOutcome = await findOrCreateContact(
@@ -631,8 +660,9 @@ async function processMessage(
   }
 
   // Parse message content based on type
-  const { contentText, mediaUrl, mediaType, interactiveReplyId } =
-    await parseMessageContent(message, accessToken);
+  const parsedContent = await parseMessageContent(message, accessToken);
+  let { contentText } = parsedContent;
+  const { mediaUrl, mediaType, interactiveReplyId } = parsedContent;
 
   // Resolve swipe-reply context if present. A missing parent is fine —
   // we just store NULL and the UI renders the message without a quote.
@@ -691,9 +721,10 @@ async function processMessage(
     .eq('sender_type', 'customer');
   const isFirstInboundMessage = (priorCustomerMsgCount ?? 0) === 0;
 
-  const { error: msgError } = await supabaseAdmin()
+  const { data: storedMessage, error: msgError } = await supabaseAdmin()
     .from('messages')
     .insert({
+      account_id: accountId,
       conversation_id: conversation.id,
       sender_type: 'customer',
       content_type: contentType,
@@ -707,11 +738,42 @@ async function processMessage(
       // the column; null for every other content_type so existing inserts
       // behave identically.
       interactive_reply_id: interactiveReplyId,
-    });
+      provider_received_at: new Date(
+        parseInt(message.timestamp) * 1000
+      ).toISOString(),
+      author_type: 'lead',
+      provider_metadata: { provider: 'meta' },
+    })
+    .select('id')
+    .single();
 
   if (msgError) {
     console.error('Error inserting message:', msgError);
     return;
+  }
+
+  if (message.type === 'audio' && message.audio?.id && storedMessage?.id) {
+    try {
+      const media = await getMediaUrl({
+        mediaId: message.audio.id,
+        accessToken,
+      });
+      const audio = await downloadMedia({
+        downloadUrl: media.url,
+        accessToken,
+      });
+      const transcript = await transcribeStudiospAudio({
+        db: supabaseAdmin(),
+        accountId,
+        messageId: storedMessage.id,
+        bytes: new Uint8Array(audio.buffer),
+        mimeType: audio.contentType || media.mimeType,
+        filename: 'audio.ogg',
+      });
+      if (transcript) contentText = transcript;
+    } catch (error) {
+      console.error('[webhook] transcrição de áudio falhou:', error);
+    }
   }
 
   // Update conversation
@@ -733,6 +795,21 @@ async function processMessage(
   // so the broadcast's `replied_count` advances (via the aggregate
   // trigger installed in migration 003).
   await flagBroadcastReplyIfAny(accountId, contactRecord.id);
+
+  const referral = (
+    message as WhatsAppMessage & {
+      referral?: Record<string, unknown>;
+    }
+  ).referral;
+  await ensureStudiospOpportunity({
+    db: supabaseAdmin(),
+    accountId,
+    contactId: contactRecord.id,
+    conversationId: conversation.id,
+    sourceType: referral ? 'meta_ads' : 'other',
+    sourceMetadata: referral ? { provider: 'meta', referral } : {},
+    idempotencyKey: `meta:${message.id}`,
+  });
 
   // ============================================================
   // Flow runner dispatch.

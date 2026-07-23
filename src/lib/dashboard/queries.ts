@@ -440,7 +440,7 @@ export async function loadActivity(
       : l.automation;
     const contact = Array.isArray(l.contact) ? l.contact[0] : l.contact;
     const who = contact?.name || contact?.phone || 'a contact';
-    const autoName = automation?.name || 'Automation';
+    const autoName = automation?.name || 'Automação';
     items.push({
       id: `auto-${l.id}`,
       kind: 'automation',

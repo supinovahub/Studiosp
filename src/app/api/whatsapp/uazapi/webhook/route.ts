@@ -9,6 +9,11 @@ import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
+import {
+  ensureStudiospOpportunity,
+  transcribeStudiospAudio,
+} from '@/lib/ai/studiosp-orchestrator';
+import { handleBrokerOperationalReply } from '@/lib/studiosp/broker-whatsapp';
 
 export const maxDuration = 60;
 
@@ -336,6 +341,21 @@ async function handleInbound(
   const phone = phoneFromMessage(message, chat);
   if (!externalId || !phone) return;
 
+  const brokerHandled = await handleBrokerOperationalReply({
+    db: supabaseAdmin(),
+    accountId: config.account_id,
+    whatsappConfigId: config.id,
+    remoteChatId: message.chatid ?? phone,
+    phone,
+    text: contentText(message),
+    providerConfig: {
+      provider: 'uazapi',
+      uazapi_base_url: config.uazapi_base_url,
+      accessToken: decrypt(config.access_token),
+    },
+  });
+  if (brokerHandled) return;
+
   const contactOutcome = await findOrCreateContact(
     config.account_id,
     config.user_id,
@@ -420,9 +440,10 @@ async function handleInbound(
     .eq('sender_type', 'customer');
   const firstInbound = (priorCount ?? 0) === 0;
 
-  const { error: insertError } = await supabaseAdmin()
+  const { data: storedMessage, error: insertError } = await supabaseAdmin()
     .from('messages')
     .insert({
+      account_id: config.account_id,
       conversation_id: conversation.id,
       sender_type: 'customer',
       content_type: type,
@@ -433,10 +454,34 @@ async function handleInbound(
       created_at: timestampIso(message.messageTimestamp),
       reply_to_message_id: replyToInternalId,
       interactive_reply_id: interactiveReplyId,
-    });
+      provider_received_at: timestampIso(message.messageTimestamp),
+      author_type: 'lead',
+      provider_metadata: { provider: 'uazapi' },
+    })
+    .select('id')
+    .single();
   if (insertError) {
     console.error('[uazapi/webhook] message insert failed:', insertError);
     return;
+  }
+
+  if (type === 'audio' && mediaUrl && storedMessage?.id) {
+    try {
+      const audioResponse = await fetch(mediaUrl);
+      if (audioResponse.ok) {
+        const transcript = await transcribeStudiospAudio({
+          db: supabaseAdmin(),
+          accountId: config.account_id,
+          messageId: storedMessage.id,
+          bytes: new Uint8Array(await audioResponse.arrayBuffer()),
+          mimeType: audioResponse.headers.get('content-type') || 'audio/mpeg',
+          filename: 'audio.mp3',
+        });
+        if (transcript) text = transcript;
+      }
+    } catch (error) {
+      console.error('[uazapi/webhook] transcrição de áudio falhou:', error);
+    }
   }
 
   await supabaseAdmin()
@@ -450,6 +495,25 @@ async function handleInbound(
     .eq('id', conversation.id);
 
   await flagBroadcastReply(config.account_id, contactOutcome.contact.id);
+
+  const chatMetadata = chat ?? {};
+  const likelyMetaAd = Boolean(
+    chatMetadata.ad ||
+    chatMetadata.ad_id ||
+    chatMetadata.ctwa_clid ||
+    chatMetadata.source_url
+  );
+  await ensureStudiospOpportunity({
+    db: supabaseAdmin(),
+    accountId: config.account_id,
+    contactId: contactOutcome.contact.id,
+    conversationId: conversation.id,
+    sourceType: likelyMetaAd ? 'meta_ads' : 'other',
+    sourceMetadata: likelyMetaAd
+      ? { provider: 'uazapi', chat: chatMetadata }
+      : {},
+    idempotencyKey: `uazapi:${externalId}`,
+  });
 
   const flow = await dispatchInboundToFlows({
     accountId: config.account_id,

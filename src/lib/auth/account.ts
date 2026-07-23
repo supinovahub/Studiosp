@@ -72,7 +72,7 @@ export function toErrorResponse(err: unknown): NextResponse {
   }
   console.error('[toErrorResponse] uncategorized error:', err);
   return NextResponse.json(
-    { error: 'Erro do Servidor Interno' },
+    { error: 'Erro interno do servidor' },
     { status: 500 }
   );
 }

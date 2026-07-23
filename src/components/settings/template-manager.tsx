@@ -283,7 +283,7 @@ export function TemplateManager() {
       if (!res.ok) {
         throw new Error(
           data?.error ||
-            `${isEdit ? 'Edit' : 'Submit'} failed (HTTP ${res.status})`
+            `${isEdit ? 'A edição' : 'O envio'} falhou (HTTP ${res.status})`
         );
       }
       // Refresh first, then close — re-opening the dialog

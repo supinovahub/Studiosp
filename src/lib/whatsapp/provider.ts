@@ -17,6 +17,7 @@ import {
   sendUazapiText,
   type UazapiCredentials,
 } from '@/lib/whatsapp/uazapi';
+import { assertOutboundMessagingAllowed } from '@/lib/whatsapp/outbound-guard';
 
 export type WhatsAppProvider = 'meta' | 'uazapi';
 
@@ -51,6 +52,7 @@ export async function sendProviderText(args: {
   text: string;
   contextMessageId?: string;
 }): Promise<{ messageId: string }> {
+  assertOutboundMessagingAllowed(args.to);
   if (args.config.provider === 'uazapi') {
     return sendUazapiText({
       credentials: uazapiCredentials(args.config),
@@ -77,6 +79,7 @@ export async function sendProviderMedia(args: {
   filename?: string;
   contextMessageId?: string;
 }): Promise<{ messageId: string }> {
+  assertOutboundMessagingAllowed(args.to);
   if (args.config.provider === 'uazapi') {
     return sendUazapiMedia({
       credentials: uazapiCredentials(args.config),
@@ -106,6 +109,7 @@ export async function sendProviderInteractive(args: {
   payload: InteractiveMessagePayload;
   contextMessageId?: string;
 }): Promise<{ messageId: string }> {
+  assertOutboundMessagingAllowed(args.to);
   if (args.config.provider === 'uazapi') {
     return sendUazapiInteractive({
       credentials: uazapiCredentials(args.config),
@@ -187,6 +191,7 @@ export async function sendProviderTemplate(args: {
   messageParams?: SendTimeParams;
   contextMessageId?: string;
 }): Promise<{ messageId: string }> {
+  assertOutboundMessagingAllowed(args.to);
   if (args.config.provider === 'uazapi') {
     if (!args.template) {
       throw new Error(
@@ -223,6 +228,7 @@ export async function sendProviderReaction(args: {
   targetMessageId: string;
   emoji: string;
 }): Promise<{ messageId: string }> {
+  assertOutboundMessagingAllowed(args.to);
   if (args.config.provider === 'uazapi') {
     return sendUazapiReaction({
       credentials: uazapiCredentials(args.config),

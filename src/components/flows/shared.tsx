@@ -432,10 +432,10 @@ export function summarizeNode(
         cfg.mode === 'remove'
           ? t
             ? t('modeRemove')
-            : 'Remove'
+            : 'Remover'
           : t
             ? t('modeAdd')
-            : 'Add';
+            : 'Adicionar';
       const tagId = typeof cfg.tag_id === 'string' ? cfg.tag_id : '';
       // No tag name available without an async lookup here; show a
       // short prefix of the UUID so users can disambiguate between

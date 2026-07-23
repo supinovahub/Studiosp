@@ -185,6 +185,7 @@ function postContactTemplate(overrides: Record<string, unknown> = {}) {
 
 describe('POST /api/whatsapp/send — contact_id template path', () => {
   beforeEach(() => {
+    vi.stubEnv('OUTBOUND_MESSAGING_ENABLED', 'true');
     conversationInserts.length = 0;
     messageInserts.length = 0;
     existingConversation = null;
@@ -195,6 +196,7 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
