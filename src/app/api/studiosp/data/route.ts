@@ -322,6 +322,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (view === 'developments') {
+      let developmentsQuery = supabase
+        .from('developments')
+        .select('*')
+        .eq('account_id', accountId);
+      developmentsQuery =
+        role === 'agent'
+          ? developmentsQuery.eq('status', 'published')
+          : developmentsQuery.neq('status', 'archived');
+
       const [developerResult, neighborhoodResult, developmentResult] =
         await Promise.all([
           supabase
@@ -336,12 +345,7 @@ export async function GET(request: NextRequest) {
             .eq('account_id', accountId)
             .eq('is_active', true)
             .order('name'),
-          supabase
-            .from('developments')
-            .select('*')
-            .eq('account_id', accountId)
-            .neq('status', 'archived')
-            .order('updated_at', { ascending: false }),
+          developmentsQuery.order('updated_at', { ascending: false }),
         ]);
       const developmentRows = assertQuery<Row[]>(
         developmentResult,

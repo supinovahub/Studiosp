@@ -171,6 +171,8 @@ Referências dos advisors:
 - Adicionado teste de regressão para o erro `PGRST202`.
 - Tempos relativos de presença, conversas e execuções foram localizados para
   pt-BR.
+- O catálogo voltou a ser acessível ao corretor no servidor, limitado a
+  empreendimentos publicados; rascunhos e arquivados continuam protegidos.
 
 ### Validação adicional
 

@@ -6,7 +6,6 @@ const ADMIN_VIEWS = [
   'attention',
   'pipeline',
   'followups',
-  'developments',
   'intelligence',
   'settings',
   'reports',
@@ -22,7 +21,7 @@ describe('StudioSP view authorization', () => {
     expect(canAccessStudiospView('agent', view)).toBe(false);
   });
 
-  it.each(['my-day', 'leads', 'lead', 'agenda', 'team'])(
+  it.each(['my-day', 'leads', 'lead', 'agenda', 'team', 'developments'])(
     'allows a broker to access %s',
     (view) => expect(canAccessStudiospView('agent', view)).toBe(true)
   );

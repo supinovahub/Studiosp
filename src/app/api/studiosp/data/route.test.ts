@@ -56,7 +56,6 @@ describe('GET /api/studiosp/data authorization', () => {
     'attention',
     'pipeline',
     'followups',
-    'developments',
     'intelligence',
     'settings',
     'reports',
@@ -83,6 +82,17 @@ describe('GET /api/studiosp/data authorization', () => {
     const { GET } = await import('./route');
     const response = await GET(
       new NextRequest('http://localhost/api/studiosp/data?view=leads')
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it('allows a broker to load the published developments catalog', async () => {
+    getCurrentAccount.mockResolvedValue(context('agent'));
+    const { GET } = await import('./route');
+    const response = await GET(
+      new NextRequest(
+        'http://localhost/api/studiosp/data?view=developments'
+      )
     );
     expect(response.status).toBe(200);
   });
