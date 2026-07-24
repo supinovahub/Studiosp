@@ -203,9 +203,18 @@ export async function processNextDocumentAnalysis(
         requireActive: false,
       });
       if (!config) {
-        throw new Error(
-          'Configure uma credencial de IA válida antes de analisar documentos.'
-        );
+        await db.from('document_analysis_issues').insert({
+          account_id: batch.account_id,
+          batch_id: batch.id,
+          source_id: source.id,
+          issue_type: 'blocked',
+          severity: 'blocking',
+          code: 'ai_not_configured',
+          message:
+            'Extração e privacidade concluídas. Configure uma credencial de IA válida para gerar as propostas do preview.',
+        });
+        await completeSource(db, batch, source, leaseToken, false);
+        return { processed: 1, batchId: batch.id, sourceId: source.id };
       }
       const analysis = await analyzeSanitizedDocument({
         config,
