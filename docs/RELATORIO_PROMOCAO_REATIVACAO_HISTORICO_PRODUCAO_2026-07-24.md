@@ -76,6 +76,10 @@ Correções:
 - a ativação agora localiza o contato por `phone_normalized`;
 - uma criação concorrente do mesmo contato é resolvida reaproveitando o registro
   vencedor;
+- contatos suprimidos pela importação histórica continuam sem atendimento
+  automático até a ativação explícita de uma campanha de reativação;
+- a ativação da campanha remove a supressão somente dos contatos efetivamente
+  preparados para a reativação;
 - a interface passou a exibir os detalhes devolvidos pela API quando um lead não
   puder ser preparado.
 

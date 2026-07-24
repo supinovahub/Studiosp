@@ -88,7 +88,40 @@ export async function POST(
         );
         if (opportunityError) throw opportunityError;
         const opportunityId = String((opportunity as Row).id);
-        await db
+        const now = Date.now();
+        const { error: touchesError } = await db
+          .from('reactivation_touches')
+          .upsert(
+            [0, 2, 5, 9].map((days, index) => ({
+              account_id: accountId,
+              campaign_id: id,
+              reactivation_lead_id: lead.id,
+              step_number: index + 1,
+              scheduled_for: new Date(now + days * 86_400_000).toISOString(),
+            })),
+            {
+              onConflict: 'reactivation_lead_id,step_number',
+              ignoreDuplicates: true,
+            }
+          );
+        if (touchesError) throw touchesError;
+
+        const wasSuppressed = contact.automation_status === 'suppressed';
+        if (wasSuppressed) {
+          const { error: enableError } = await db
+            .from('contacts')
+            .update({
+              automation_status: 'enabled',
+              automation_block_reason: null,
+              automation_blocked_at: null,
+              automation_blocked_by_import_id: null,
+            })
+            .eq('id', contact.id)
+            .eq('account_id', accountId);
+          if (enableError) throw enableError;
+        }
+
+        const { error: leadUpdateError } = await db
           .from('reactivation_leads')
           .update({
             status: 'queued',
@@ -97,20 +130,22 @@ export async function POST(
             opportunity_id: opportunityId,
           })
           .eq('id', lead.id);
-        const now = Date.now();
-        await db.from('reactivation_touches').upsert(
-          [0, 2, 5, 9].map((days, index) => ({
-            account_id: accountId,
-            campaign_id: id,
-            reactivation_lead_id: lead.id,
-            step_number: index + 1,
-            scheduled_for: new Date(now + days * 86_400_000).toISOString(),
-          })),
-          {
-            onConflict: 'reactivation_lead_id,step_number',
-            ignoreDuplicates: true,
+        if (leadUpdateError) {
+          if (wasSuppressed) {
+            await db
+              .from('contacts')
+              .update({
+                automation_status: contact.automation_status,
+                automation_block_reason: contact.automation_block_reason,
+                automation_blocked_at: contact.automation_blocked_at,
+                automation_blocked_by_import_id:
+                  contact.automation_blocked_by_import_id,
+              })
+              .eq('id', contact.id)
+              .eq('account_id', accountId);
           }
-        );
+          throw leadUpdateError;
+        }
         queued++;
       } catch (error) {
         failures.push(
