@@ -5,6 +5,7 @@ import { decrypt } from '@/lib/whatsapp/encryption';
 import { sendProviderText } from '@/lib/whatsapp/provider';
 import { engineSendText } from '@/lib/flows/meta-send';
 import { processNextDocumentAnalysis } from '@/lib/document-analysis/worker';
+import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 
 export const maxDuration = 300;
 
@@ -29,12 +30,14 @@ export async function GET(request: Request) {
   const followups = await sendDueFollowups(db);
   const cancellations = await cancelUncoveredAppointments(db);
   const documentAnalysis = await processNextDocumentAnalysis(db);
+  const reactivation = await sendDueReactivationTouches(db);
   return NextResponse.json({
     reassigned,
     brokerNotifications,
     followups,
     cancellations,
     documentAnalysis,
+    reactivation,
   });
 }
 

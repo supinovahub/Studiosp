@@ -14,7 +14,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from('reactivation_campaigns')
       .select(
-        '*,reactivation_imports(*),reactivation_leads(id,status,objective,entry_value)'
+        '*,reactivation_imports(*),reactivation_leads(id,status,objective,entry_value),reactivation_touches(id,status,step_number),reactivation_events(id,event_type,created_at)'
       )
       .eq('account_id', accountId)
       .order('created_at', { ascending: false });
@@ -28,6 +28,12 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const { accountId, userId, supabase } = await requireRole('admin');
+    const { data: actor } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('account_id', accountId)
+      .eq('user_id', userId)
+      .single();
     const form = await request.formData();
     const file = form.get('file');
     if (!(file instanceof File))
@@ -84,7 +90,7 @@ export async function POST(request: Request) {
           : 'all',
         entry_value_min: optionalNumber(form.get('entryMin')),
         entry_value_max: optionalNumber(form.get('entryMax')),
-        created_by: userId,
+        created_by: actor?.id ?? null,
       })
       .select()
       .single();
@@ -99,7 +105,7 @@ export async function POST(request: Request) {
         total_rows: selected.length,
         valid_rows: valid.length,
         invalid_rows: selected.length - valid.length,
-        created_by: userId,
+        created_by: actor?.id ?? null,
       })
       .select()
       .single();

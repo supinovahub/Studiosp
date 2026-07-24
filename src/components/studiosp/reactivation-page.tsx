@@ -17,7 +17,8 @@ type Campaign = {
   name: string;
   status: string;
   objective_segment: string;
-  reactivation_leads: { id: string }[];
+  reactivation_leads: { id: string; status: string }[];
+  reactivation_touches: { id: string; status: string; step_number: number }[];
 };
 type PreviewRow = {
   rowNumber: number;
@@ -92,6 +93,29 @@ export function ReactivationPage() {
       setPreviewTotal(0);
       await load();
     }
+    setSending(false);
+  };
+
+  const campaignAction = async (
+    id: string,
+    action: 'activate' | 'pause' | 'resume' | 'cancel'
+  ) => {
+    setSending(true);
+    setError(null);
+    const response = await fetch(
+      `/api/studiosp/reactivation/${id}${action === 'activate' ? '/activate' : ''}`,
+      action === 'activate'
+        ? { method: 'POST' }
+        : {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action }),
+          }
+    );
+    const payload = await response.json();
+    if (!response.ok)
+      setError(payload.error || 'Não foi possível alterar a campanha.');
+    await load();
     setSending(false);
   };
 
@@ -265,12 +289,54 @@ export function ReactivationPage() {
                         campaign.objective_segment as keyof typeof objectiveLabel
                       ]}
                 </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {campaign.reactivation_touches?.filter(
+                    (touch) => touch.status === 'sent'
+                  ).length ?? 0}{' '}
+                  mensagens enviadas ·{' '}
+                  {campaign.reactivation_leads?.filter(
+                    (lead) => lead.status === 'replied'
+                  ).length ?? 0}{' '}
+                  respostas
+                </p>
               </div>
-              <span className="bg-muted h-fit rounded-full px-3 py-1 text-xs">
-                {campaign.status === 'draft'
-                  ? 'Aguardando revisão'
-                  : campaign.status}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="bg-muted h-fit rounded-full px-3 py-1 text-xs">
+                  {campaign.status === 'draft'
+                    ? 'Aguardando revisão'
+                    : campaign.status === 'active'
+                      ? 'Ativa'
+                      : campaign.status === 'paused'
+                        ? 'Pausada'
+                        : campaign.status}
+                </span>
+                {campaign.status === 'draft' ? (
+                  <Button
+                    size="sm"
+                    disabled={sending}
+                    onClick={() => void campaignAction(campaign.id, 'activate')}
+                  >
+                    Ativar campanha
+                  </Button>
+                ) : campaign.status === 'active' ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={sending}
+                    onClick={() => void campaignAction(campaign.id, 'pause')}
+                  >
+                    Pausar
+                  </Button>
+                ) : campaign.status === 'paused' ? (
+                  <Button
+                    size="sm"
+                    disabled={sending}
+                    onClick={() => void campaignAction(campaign.id, 'resume')}
+                  >
+                    Retomar
+                  </Button>
+                ) : null}
+              </div>
             </article>
           ))
         ) : (

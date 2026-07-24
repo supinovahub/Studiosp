@@ -155,7 +155,13 @@ export async function ensureStudiospOpportunity(args: {
   accountId: string;
   contactId: string;
   conversationId: string;
-  sourceType?: 'meta_ads' | 'manual' | 'referral' | 'google_ads' | 'other';
+  sourceType?:
+    | 'meta_ads'
+    | 'manual'
+    | 'referral'
+    | 'google_ads'
+    | 'reactivation'
+    | 'other';
   sourceMetadata?: Record<string, unknown>;
   idempotencyKey?: string;
 }) {
@@ -240,6 +246,29 @@ export async function prepareStudiospTurn(args: {
     .limit(1)
     .maybeSingle();
   if (!opportunity) return empty;
+
+  if (opportunity.source_type === 'reactivation') {
+    const { data: reactivationRows } = await args.db
+      .from('reactivation_leads')
+      .select('id')
+      .eq('account_id', args.accountId)
+      .eq('opportunity_id', opportunity.id);
+    const reactivationIds = (reactivationRows ?? []).map((item) => item.id);
+    await args.db
+      .from('reactivation_leads')
+      .update({ status: 'replied' })
+      .eq('account_id', args.accountId)
+      .eq('opportunity_id', opportunity.id)
+      .in('status', ['queued', 'contacted']);
+    if (reactivationIds.length) {
+      await args.db
+        .from('reactivation_touches')
+        .update({ status: 'cancelled', last_error: 'lead_replied' })
+        .eq('account_id', args.accountId)
+        .eq('status', 'scheduled')
+        .in('reactivation_lead_id', reactivationIds);
+    }
+  }
 
   const [
     { data: configVersion },
@@ -466,6 +495,9 @@ export async function prepareStudiospTurn(args: {
     .maybeSingle();
 
   const grounding = [
+    opportunity.source_type === 'reactivation'
+      ? `Este lead veio de uma campanha de reativação. Reconheça que já houve contato anterior, confirme os dados conhecidos em source_metadata sem tratá-los como verdade atual e depois siga a qualificação normal. Dados conhecidos: ${JSON.stringify(opportunity.source_metadata ?? {}).slice(0, 1200)}.`
+      : null,
     configVersion?.identity_name
       ? `Nome configurado da assistente: ${configVersion.identity_name}.`
       : 'Nome configurado da assistente: Assistente Studiosp.',
@@ -484,7 +516,7 @@ export async function prepareStudiospTurn(args: {
       ? `A reserva foi concluída com sucesso para ${slotLabel(reservedAppointment)}. Diga que ficou pré-agendada e que o corretor confirmará.`
       : 'Nenhuma nova reserva foi concluída neste turno.',
     'Faça no máximo uma pergunta por mensagem. Responda desvios úteis e retome a próxima pergunta depois, sem interrogatório.',
-  ];
+  ].filter((item): item is string => Boolean(item));
 
   return {
     opportunityId: opportunity.id,
