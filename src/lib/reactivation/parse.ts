@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { Readable } from 'node:stream';
 export type ReactivationRow = {
   rowNumber: number;
   name: string | null;
@@ -28,6 +29,7 @@ const field = (v: unknown) => {
   return null;
 };
 const phone = (v: string) => {
+  if (/^\s*[\d.,]+\s*e[+-]?\d+\s*$/i.test(v)) return null;
   let d = v.replace(/\D/g, '');
   if (d.length === 10 || d.length === 11) d = `55${d}`;
   return d.length >= 10 && d.length <= 15 ? `+${d}` : null;
@@ -50,9 +52,17 @@ const money = (v: string) => {
 export async function parseReactivationFile(file: File) {
   const wb = new ExcelJS.Workbook();
   const bytes = Buffer.from(await file.arrayBuffer());
-  if (file.name.toLowerCase().endsWith('.csv'))
-    await wb.csv.read(bytes as never);
-  else await wb.xlsx.load(bytes as never);
+  if (file.name.toLowerCase().endsWith('.csv')) {
+    const firstLine = bytes.toString('utf8').split(/\r?\n/, 1)[0] ?? '';
+    const delimiter =
+      (firstLine.match(/;/g)?.length ?? 0) >
+      (firstLine.match(/,/g)?.length ?? 0)
+        ? ';'
+        : ',';
+    await wb.csv.read(Readable.from(bytes), {
+      parserOptions: { delimiter },
+    });
+  } else await wb.xlsx.load(bytes as never);
   const sheet = wb.worksheets[0];
   if (!sheet) throw new Error('A planilha não possui aba legível.');
   const headers = new Map<number, string>();
@@ -70,7 +80,11 @@ export async function parseReactivationFile(file: File) {
     if (!Object.values(v).some(Boolean)) return;
     const p = phone(v.phone ?? '');
     const notes: string[] = [];
-    if (!p) notes.push('Número inválido.');
+    if (/^\s*[\d.,]+\s*e[+-]?\d+\s*$/i.test(v.phone ?? ''))
+      notes.push(
+        'Número em notação científica. No Excel, formate a coluna como Texto e exporte novamente.'
+      );
+    else if (!p) notes.push('Número inválido.');
     if (!v.name) notes.push('Nome ausente.');
     if (!v.objective) notes.push('Objetivo ausente.');
     if (!v.entryValue) notes.push('Valor de entrada ausente.');

@@ -39,12 +39,14 @@ const objectiveLabel = {
 
 export function ReactivationPage() {
   const formRef = useRef<HTMLFormElement>(null);
+  const feedbackRef = useRef<HTMLDivElement>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [preview, setPreview] = useState<PreviewRow[] | null>(null);
   const [previewTotal, setPreviewTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,7 +59,6 @@ export function ReactivationPage() {
 
   useEffect(() => {
     // Carregamento inicial sincroniza a tela com o backend.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -75,25 +76,50 @@ export function ReactivationPage() {
     if (!form?.reportValidity()) return;
     setSending(true);
     setError(null);
-    const data = new FormData(form);
-    data.set('mode', mode);
-    const response = await fetch('/api/studiosp/reactivation', {
-      method: 'POST',
-      body: data,
-    });
-    const payload = await response.json();
-    if (!response.ok)
-      setError(payload.error || 'Falha ao processar a planilha.');
-    else if (mode === 'preview') {
-      setPreview(payload.rows);
-      setPreviewTotal(payload.total);
-    } else {
-      form.reset();
-      setPreview(null);
-      setPreviewTotal(0);
-      await load();
+    setSuccess(null);
+    try {
+      const data = new FormData(form);
+      data.set('mode', mode);
+      const response = await fetch('/api/studiosp/reactivation', {
+        method: 'POST',
+        body: data,
+      });
+      const payload = await response
+        .json()
+        .catch(() => ({ error: 'O servidor retornou uma resposta inválida.' }));
+      if (!response.ok) {
+        setError(payload.error || 'Falha ao processar a planilha.');
+        requestAnimationFrame(() =>
+          feedbackRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
+        );
+      } else if (mode === 'preview') {
+        setPreview(payload.rows);
+        setPreviewTotal(payload.total);
+      } else {
+        form.reset();
+        setPreview(null);
+        setPreviewTotal(0);
+        setSuccess(
+          `Campanha criada como rascunho com ${payload.imported} lead${payload.imported === 1 ? '' : 's'}.`
+        );
+        await load();
+        requestAnimationFrame(() =>
+          feedbackRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
+        );
+      }
+    } catch {
+      setError(
+        'Não foi possível concluir a importação. Verifique sua conexão e tente novamente.'
+      );
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   };
 
   const campaignAction = async (
@@ -143,13 +169,15 @@ export function ReactivationPage() {
             Nada será enviado antes da revisão e ativação pelo dono.
           </p>
         </div>
-        <Input
-          name="name"
-          required
-          minLength={3}
-          placeholder="Nome da campanha"
-          onChange={() => setPreview(null)}
-        />
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Nome da campanha</span>
+          <Input
+            name="name"
+            minLength={3}
+            placeholder="Opcional — usaremos o nome do arquivo"
+            onChange={() => setPreview(null)}
+          />
+        </label>
         <select
           name="objective"
           onChange={() => setPreview(null)}
@@ -184,9 +212,6 @@ export function ReactivationPage() {
           className="lg:col-span-2"
           onChange={() => setPreview(null)}
         />
-        {error ? (
-          <p className="text-destructive text-sm lg:col-span-2">{error}</p>
-        ) : null}
         <Button
           type="button"
           variant="outline"
@@ -198,6 +223,21 @@ export function ReactivationPage() {
           {sending ? 'Analisando...' : 'Analisar planilha'}
         </Button>
       </form>
+
+      <div ref={feedbackRef} aria-live="polite">
+        {error ? (
+          <div className="border-destructive/40 bg-destructive/5 text-destructive rounded-lg border p-4 text-sm">
+            <p className="font-medium">A importação não foi concluída.</p>
+            <p>{error}</p>
+          </div>
+        ) : null}
+        {success ? (
+          <div className="border-emerald-500/40 bg-emerald-500/5 rounded-lg border p-4 text-sm text-emerald-700">
+            <p className="font-medium">Rascunho criado com sucesso.</p>
+            <p>{success}</p>
+          </div>
+        ) : null}
+      </div>
 
       {preview && summary ? (
         <section className="border-border bg-card space-y-4 rounded-xl border p-5">

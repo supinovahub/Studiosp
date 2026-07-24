@@ -47,4 +47,40 @@ describe('parseReactivationFile', () => {
     expect(row.objective).toBe('unknown');
     expect(row.notes).toContain('Número inválido.');
   });
+
+  it('aceita CSV separado por ponto e vírgula', async () => {
+    const file = new File(
+      [
+        'nome;número;email;objetivo principal;valor entrada\n' +
+          'Ana;5527999990000;ana@example.com;investimento;100000\n',
+      ],
+      'base.csv',
+      { type: 'text/csv' }
+    );
+
+    const [row] = await parseReactivationFile(file);
+
+    expect(row).toMatchObject({
+      name: 'Ana',
+      phoneE164: '+5527999990000',
+      objective: 'invest',
+      entryValue: 100000,
+    });
+  });
+
+  it('rejeita telefone em notação científica com orientação clara', async () => {
+    const file = new File(
+      [
+        'nome;número;email;objetivo principal;valor entrada\n' +
+          'Arthur;5,52798E+12;arthur@example.com;investimento;100000\n',
+      ],
+      'base.csv',
+      { type: 'text/csv' }
+    );
+
+    const [row] = await parseReactivationFile(file);
+
+    expect(row.phoneE164).toBeNull();
+    expect(row.notes.join(' ')).toContain('notação científica');
+  });
 });

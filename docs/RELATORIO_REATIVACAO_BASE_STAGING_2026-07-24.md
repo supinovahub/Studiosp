@@ -36,6 +36,18 @@
 - build Next.js: aprovado;
 - tabelas, função de claim e RLS verificadas no staging.
 
+## Correção da importação CSV
+
+- o leitor passou a detectar CSV separado por vírgula ou ponto e vírgula;
+- telefones convertidos pelo Excel para notação científica são bloqueados, pois
+  os últimos dígitos podem ter sido perdidos;
+- a interface orienta formatar a coluna de telefone como **Texto** antes de
+  exportar novamente;
+- o nome da campanha tornou-se opcional e usa o nome do arquivo como padrão;
+- sucesso, falha de rede e respostas inválidas do servidor agora aparecem em
+  um aviso visível, com confirmação explícita quando o rascunho é criado;
+- foram adicionados dois testes automatizados para o CSV real reportado.
+
 ## Pendência de homologação real
 
 A execução com WhatsApp deve usar exclusivamente o número controlado autorizado.
