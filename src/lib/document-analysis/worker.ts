@@ -394,7 +394,12 @@ async function finalizeBatch(
   batchId: string,
   leaseToken: string
 ) {
-  const [{ count: remaining }, { count: completed }, { count: failed }] =
+  const [
+    { count: active },
+    { count: retryable },
+    { count: completed },
+    { count: failed },
+  ] =
     await Promise.all([
       db
         .from('document_analysis_sources')
@@ -411,6 +416,12 @@ async function finalizeBatch(
         .from('document_analysis_sources')
         .select('id', { count: 'exact', head: true })
         .eq('batch_id', batchId)
+        .eq('status', 'failed')
+        .lt('attempts', 3),
+      db
+        .from('document_analysis_sources')
+        .select('id', { count: 'exact', head: true })
+        .eq('batch_id', batchId)
         .eq('status', 'ready'),
       db
         .from('document_analysis_sources')
@@ -418,6 +429,7 @@ async function finalizeBatch(
         .eq('batch_id', batchId)
         .eq('status', 'failed'),
     ]);
+  const remaining = Number(active ?? 0) + Number(retryable ?? 0);
 
   if (!remaining) {
     const [items, sources, issues] = await Promise.all([
