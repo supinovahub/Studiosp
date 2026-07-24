@@ -451,8 +451,10 @@ function dateValue(value: unknown) {
 }
 
 function timingValue(value: unknown) {
-  const text = stringValue(value);
-  return ['off_plan', 'ready', 'both'].includes(text) ? text : 'off_plan';
+  const text = normalizeName(stringValue(value));
+  if (['ready', 'pronto', 'entregue'].includes(text)) return 'ready';
+  if (['both', 'ambos', 'na planta e pronto'].includes(text)) return 'both';
+  return 'off_plan';
 }
 
 function addressPart(value: unknown, key: string) {

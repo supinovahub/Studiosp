@@ -32,6 +32,8 @@
   o limite curto usado no atendimento de WhatsApp.
 - Retomada explícita de lotes em estado `falhou`, reiniciando somente as fontes
   com falha e preservando fontes já concluídas.
+- Consolidação idempotente do preview: novas tentativas reutilizam itens
+  existentes e atualizam campos repetidos sem duplicação.
 
 ## Segurança preservada
 

@@ -16,7 +16,9 @@ function cleanError(error: unknown) {
   const message =
     error instanceof Error
       ? error.message
-      : 'Falha desconhecida no processamento.';
+      : error && typeof error === 'object' && 'message' in error
+        ? String(error.message)
+        : 'Falha desconhecida no processamento.';
   return message
     .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[DADO REMOVIDO]')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[DADO REMOVIDO]')
@@ -313,39 +315,67 @@ async function persistAnalysis(
   analysis: Awaited<ReturnType<typeof analyzeSanitizedDocument>>
 ) {
   const insertedItems: Row[] = [];
+  const { data: existingItems, error: existingItemsError } = await db
+    .from('document_analysis_items')
+    .select('*')
+    .eq('batch_id', batch.id);
+  if (existingItemsError) throw existingItemsError;
+  const existingByKey = new Map(
+    (existingItems ?? []).map((item) => [
+      itemKey(
+        item.item_type,
+        item.normalized_key || item.display_name
+      ),
+      item,
+    ])
+  );
   for (let index = 0; index < analysis.items.length; index++) {
     const item = analysis.items[index];
     const parent =
       item.parentIndex != null ? insertedItems[item.parentIndex] : null;
-    const { data: inserted, error } = await db
-      .from('document_analysis_items')
-      .insert({
-        account_id: batch.account_id,
-        batch_id: batch.id,
-        item_type: item.type,
-        proposed_action: item.action,
-        parent_item_id: parent?.id ?? null,
-        display_name: item.displayName,
-        normalized_key: item.normalizedKey ?? null,
-        confidence: item.confidence,
-        sort_order: index,
-      })
-      .select()
-      .single();
+    const key = itemKey(item.type, item.normalizedKey || item.displayName);
+    const existing = existingByKey.get(key);
+    const values = {
+      account_id: batch.account_id,
+      batch_id: batch.id,
+      item_type: item.type,
+      proposed_action: item.action,
+      parent_item_id: parent?.id ?? existing?.parent_item_id ?? null,
+      display_name: item.displayName,
+      normalized_key: item.normalizedKey ?? null,
+      confidence: item.confidence,
+      sort_order: index,
+    };
+    const { data: inserted, error } = existing
+      ? await db
+          .from('document_analysis_items')
+          .update(values)
+          .eq('id', existing.id)
+          .select()
+          .single()
+      : await db
+          .from('document_analysis_items')
+          .insert(values)
+          .select()
+          .single();
     if (error || !inserted) throw error ?? new Error('Item não persistido');
+    existingByKey.set(key, inserted);
     insertedItems.push(inserted);
 
     for (const field of item.fields) {
       const { data: insertedField, error: fieldError } = await db
         .from('document_analysis_fields')
-        .insert({
-          account_id: batch.account_id,
-          batch_id: batch.id,
-          item_id: inserted.id,
-          field_name: field.name,
-          proposed_value: field.value,
-          confidence: field.confidence,
-        })
+        .upsert(
+          {
+            account_id: batch.account_id,
+            batch_id: batch.id,
+            item_id: inserted.id,
+            field_name: field.name,
+            proposed_value: field.value,
+            confidence: field.confidence,
+          },
+          { onConflict: 'item_id,field_name' }
+        )
         .select('id')
         .single();
       if (fieldError || !insertedField)
@@ -376,6 +406,15 @@ async function persistAnalysis(
       }))
     );
   }
+}
+
+function itemKey(type: string, value: string) {
+  return `${type}:${value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()}`;
 }
 
 async function completeSource(
