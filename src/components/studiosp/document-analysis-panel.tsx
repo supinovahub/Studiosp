@@ -111,6 +111,23 @@ export function DocumentAnalysisPanel() {
     return payload as BatchDetail;
   }, []);
 
+  const processBatch = useCallback(
+    async (id: string) => {
+      setError(null);
+      const response = await fetch('/api/studiosp/document-analysis/process', {
+        method: 'POST',
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          payload.error ?? 'Não foi possível retomar o processamento.'
+        );
+      }
+      await Promise.all([loadBatch(id), loadBatches()]);
+    },
+    [loadBatch, loadBatches]
+  );
+
   useEffect(() => {
     if (!open) return;
     void loadBatches().catch((requestError) =>
@@ -342,6 +359,25 @@ export function DocumentAnalysisPanel() {
                     </li>
                   ))}
                 </ul>
+                {ACTIVE_STATES.has(selected.batch.status) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3"
+                    onClick={() =>
+                      void processBatch(selected.batch.id).catch(
+                        (requestError) =>
+                          setError(
+                            requestError instanceof Error
+                              ? requestError.message
+                              : 'Não foi possível retomar o processamento.'
+                          )
+                      )
+                    }
+                  >
+                    Retomar processamento
+                  </Button>
+                ) : null}
               </div>
 
               <div className="border-border rounded-lg border p-3">
