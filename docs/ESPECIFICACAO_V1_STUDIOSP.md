@@ -458,6 +458,40 @@ Não existe unidade individual na V1.
 - Corretor pode visualizar condição vencida com aviso, sem usá-la como promessa.
 - Toda edição registra autor e horário.
 
+### 8.3 Agente de análise documental
+
+O dono inicia `Analisar documentos com IA` dentro de Empreendimentos. O fluxo
+retomável possui Fontes, Processamento, Preview e Aprovação. Upload ou link
+compartilhado cria um lote isolado; análise e conversa nunca escrevem no
+catálogo nem na base da IA-SDR.
+
+Estados do lote e de cada fonte:
+
+```text
+awaiting, extracting, privacy_check, analyzing, consolidating,
+ready, failed, cancelled, expired
+```
+
+Regras obrigatórias:
+
+- somente dono ou administrador acessa lote, fonte, preview ou conversa;
+- o arquivo entra em quarentena privada e é validado por tamanho, extensão,
+  MIME e assinatura;
+- extração e detecção de PII acontecem antes do provedor externo;
+- somente fragmentos higienizados podem sair do ambiente controlado;
+- documento que não puder ser higienizado com segurança é bloqueado;
+- cada campo proposto guarda fonte, página ou trecho e confiança;
+- duplicidade e conflito nunca são resolvidos automaticamente;
+- refinamento conversacional cria nova versão recuperável do preview;
+- aprovação revalida identidade, conta, role, estado e versão no servidor;
+- aprovação é transacional e granular, mas publicar para corretores e indexar
+  para a IA continuam desativados;
+- lote não aprovado expira em 30 dias e nunca modifica tabelas operacionais.
+
+Limites iniciais: 50 MB por arquivo, 20 arquivos e 250 MB por lote, 300 páginas
+por documento e três tentativas com espera progressiva. O processamento usa
+checkpoints, lease e fila separada das rotinas de WhatsApp.
+
 ## 9. Biblioteca de mídias
 
 ### 9.1 Tipos

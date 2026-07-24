@@ -338,8 +338,8 @@ export function WhatsAppConfig() {
             <CardHeader>
               <CardTitle>Provedor do WhatsApp</CardTitle>
               <CardDescription>
-                A UAZAPI é a opçãA UAZAPI é uma opção principal do Studiosp. A
-                Meta permanece disponível como alternativa oficial.
+                A UAZAPI é uma opção principal do Studiosp. A Meta permanece
+                disponível como alternativa oficial.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -382,8 +382,8 @@ export function WhatsAppConfig() {
                     onChange={(event) => setUazapiBaseUrl(event.target.value)}
                   />
                   <p className="text-muted-foreground text-xs">
-                    Use a URL HTTPS inforUse uma URL HTTPS informada no painel
-                    da UAZAPI, sem caminho adicional.
+                    Use uma URL HTTPS informada no painel da UAZAPI, sem caminho
+                    adicional.
                   </p>
                 </div>
               ) : (
@@ -625,7 +625,7 @@ export function WhatsAppConfig() {
                     className="text-primary inline-flex items-center gap-1"
                   >
                     <ExternalLink className="size-3.5" />
-                    Abrir documentação daAbrir documentação da UAZAPI
+                    Abrir documentação da UAZAPI
                   </a>
                 </>
               ) : (
@@ -646,7 +646,7 @@ export function WhatsAppConfig() {
                     className="text-primary inline-flex items-center gap-1"
                   >
                     <ExternalLink className="size-3.5" />
-                    Abrir documentação daAbrir documentação do Meta
+                    Abrir documentação do Meta
                   </a>
                 </>
               )}

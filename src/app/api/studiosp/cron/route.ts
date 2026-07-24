@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/automations/admin-client';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sendProviderText } from '@/lib/whatsapp/provider';
 import { engineSendText } from '@/lib/flows/meta-send';
+import { processNextDocumentAnalysis } from '@/lib/document-analysis/worker';
 
 export const maxDuration = 60;
 
@@ -27,11 +28,13 @@ export async function GET(request: Request) {
   const brokerNotifications = await notifyPendingBrokers(db);
   const followups = await sendDueFollowups(db);
   const cancellations = await cancelUncoveredAppointments(db);
+  const documentAnalysis = await processNextDocumentAnalysis(db);
   return NextResponse.json({
     reassigned,
     brokerNotifications,
     followups,
     cancellations,
+    documentAnalysis,
   });
 }
 

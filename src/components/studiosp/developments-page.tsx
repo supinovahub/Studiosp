@@ -22,6 +22,7 @@ import { formatCurrencyBRL } from '@/lib/studiosp/labels';
 import { PageHeader } from './page-header';
 import { EmptyState, ErrorState, LoadingState } from './operational-state';
 import { StatusBadge } from './status-badge';
+import { DocumentAnalysisPanel } from './document-analysis-panel';
 
 // O formulário recebe a projeção dinâmica do catálogo retornada pela API.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -115,14 +116,17 @@ export function DevelopmentsPage() {
         }
         actions={
           canManage ? (
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setShowForm(true);
-              }}
-            >
-              <Plus /> Novo empreendimento
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <DocumentAnalysisPanel />
+              <Button
+                onClick={() => {
+                  setEditing(null);
+                  setShowForm(true);
+                }}
+              >
+                <Plus /> Novo empreendimento
+              </Button>
+            </div>
           ) : undefined
         }
       />

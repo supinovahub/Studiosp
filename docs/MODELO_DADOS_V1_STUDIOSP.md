@@ -408,6 +408,37 @@ O navegador envia arquivos e caminhos relativos. O servidor:
 
 Arquivos grandes usam upload retomável. O Postgres guarda metadados, nunca o binário.
 
+### 10.5 Quarentena e preview do agente documental
+
+O agente documental usa estruturas não operacionais:
+
+| Estrutura | Responsabilidade |
+|---|---|
+| `document_analysis_batches` | lote, dono, estado, versão atual, lease, tentativas, expiração e cancelamento |
+| `document_analysis_sources` | arquivo/link, hash, metadados, caminho privado, extração, privacidade e erro |
+| `document_analysis_items` | empreendimento ou oferta proposta, ação sugerida, alvo possível e decisão |
+| `document_analysis_fields` | campo proposto, valor tipado, confiança, decisão e edição do dono |
+| `document_analysis_provenance` | fonte, página, trecho higienizado e coordenadas opcionais |
+| `document_analysis_issues` | PII, conflito, duplicidade, validade, baixa confiança e bloqueio |
+| `document_analysis_versions` | snapshots recuperáveis do preview e origem da alteração |
+| `document_analysis_messages` | conversa do dono com o rascunho, sem capacidade de importar |
+| `document_analysis_events` | auditoria técnica e funcional append-only |
+
+Todas recebem `account_id`, RLS e índices de conta, estado e data. Somente
+owner/admin acessa as linhas; corretores não recebem acesso funcional. O bucket
+`document-analysis-quarantine` é privado e usa caminho
+`account_id/batch_id/source_id/arquivo`.
+
+O upload cria apenas lote e fonte. Workers reivindicam uma etapa com lease
+curto, persistem checkpoint e liberam a execução antes de chamadas externas.
+Somente conteúdo higienizado pode ser enviado ao provedor de IA. Texto
+extraído, prompt, resposta bruta e erro são sanitizados contra PII.
+
+A futura aplicação do preview ocorre por operação transacional controlada, com
+versão esperada e seleção explícita. A transação cria ou atualiza somente os
+campos aprovados, registra antes e depois e deixa novos empreendimentos em
+rascunho, sem publicação ou indexação automática.
+
 ## 11. Matching
 
 ### 11.1 `property_match_runs`
@@ -577,6 +608,7 @@ Regras:
 | Respostas | administra | lê atribuídas | por função |
 | Catálogo | administra | publicados | publicados |
 | Mídias | administra | conforme visibilidade | URL temporária |
+| Agente documental | administra | sem acesso | processamento controlado |
 | Matching | administra | atribuídos | controlado |
 | Agenda/ofertas | administra | próprias | por função |
 | Custos e logs de IA | administra | sem acesso | controlado |

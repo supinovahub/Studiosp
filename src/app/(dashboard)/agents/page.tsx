@@ -1,16 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bot, Sparkles, Settings2, BarChart3, Building2 } from 'lucide-react';
+import { Bot, Sparkles, Settings2, BarChart3 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AiPlayground } from '@/components/agents/ai-playground';
 import { AiUsageCard } from '@/components/agents/ai-usage';
 import { AiConfig } from '@/components/settings/ai-config';
 import { useAuth } from '@/hooks/use-auth';
 import { canEditSettings } from '@/lib/auth/roles';
-import { PropertyCatalog } from '@/components/agents/property-catalog';
 
-type Tab = 'playground' | 'catalog' | 'setup' | 'usage';
+type Tab = 'playground' | 'setup' | 'usage';
 
 export default function AgentsPage() {
   const { accountRole } = useAuth();
@@ -60,9 +59,6 @@ export default function AgentsPage() {
             <TabsTrigger value="playground">
               <Sparkles className="mr-1.5 h-4 w-4" /> Testes
             </TabsTrigger>
-            <TabsTrigger value="catalog">
-              <Building2 className="mr-1.5 h-4 w-4" /> Imóveis
-            </TabsTrigger>
             <TabsTrigger value="setup">
               <Settings2 className="mr-1.5 h-4 w-4" /> Configuração
             </TabsTrigger>
@@ -75,10 +71,6 @@ export default function AgentsPage() {
 
           <TabsContent value="playground" className="mt-4">
             <AiPlayground onGoToSetup={() => setTab('setup')} />
-          </TabsContent>
-
-          <TabsContent value="catalog" className="mt-4">
-            <PropertyCatalog canEdit={canViewUsage} />
           </TabsContent>
 
           <TabsContent value="setup" className="mt-4">
