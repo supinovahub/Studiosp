@@ -14,6 +14,7 @@ import {
   transcribeStudiospAudio,
 } from '@/lib/ai/studiosp-orchestrator';
 import { handleBrokerOperationalReply } from '@/lib/studiosp/broker-whatsapp';
+import { isContactAutomationSuppressed } from '@/lib/contacts/automation';
 
 export const maxDuration = 60;
 
@@ -465,7 +466,16 @@ async function handleInbound(
     return;
   }
 
-  if (type === 'audio' && mediaUrl && storedMessage?.id) {
+  const automationSuppressed = isContactAutomationSuppressed(
+    contactOutcome.contact
+  );
+
+  if (
+    !automationSuppressed &&
+    type === 'audio' &&
+    mediaUrl &&
+    storedMessage?.id
+  ) {
     try {
       const audioResponse = await fetch(mediaUrl);
       if (audioResponse.ok) {
@@ -495,6 +505,23 @@ async function handleInbound(
     .eq('id', conversation.id);
 
   await flagBroadcastReply(config.account_id, contactOutcome.contact.id);
+
+  if (automationSuppressed) {
+    await dispatchWebhookEvent(
+      supabaseAdmin(),
+      config.account_id,
+      'message.received',
+      {
+        conversation_id: conversation.id,
+        contact_id: contactOutcome.contact.id,
+        whatsapp_message_id: externalId,
+        content_type: type,
+        text,
+        automation_suppressed: true,
+      }
+    );
+    return;
+  }
 
   const chatMetadata = chat ?? {};
   const likelyMetaAd = Boolean(

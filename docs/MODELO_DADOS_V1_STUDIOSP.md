@@ -83,12 +83,12 @@ erDiagram
 
 `profiles` mantém a ligação com `auth.users`. Os papéis técnicos e seus nomes de interface são:
 
-| Banco | Interface | Uso na V1 |
-|---|---|---|
-| `owner` | Dono | administração total |
-| `admin` | Gestor | preservado, oculto por padrão |
-| `agent` | Corretor | atendimento e operação comercial |
-| `viewer` | Analista | preservado, oculto por padrão |
+| Banco    | Interface | Uso na V1                        |
+| -------- | --------- | -------------------------------- |
+| `owner`  | Dono      | administração total              |
+| `admin`  | Gestor    | preservado, oculto por padrão    |
+| `agent`  | Corretor  | atendimento e operação comercial |
+| `viewer` | Analista  | preservado, oculto por padrão    |
 
 A V1 apresenta apenas Dono e Corretor, sem destruir a compatibilidade dos outros perfis.
 
@@ -96,18 +96,18 @@ A V1 apresenta apenas Dono e Corretor, sem destruir a compatibilidade dos outros
 
 Especializa um perfil como corretor operacional.
 
-| Campo | Tipo e regra |
-|---|---|
-| `id` | uuid, PK |
-| `account_id` | uuid, FK, obrigatório |
-| `profile_id` | uuid, FK, único por conta |
-| `display_name` | text, obrigatório |
-| `whatsapp_e164` | text, único por conta quando preenchido |
-| `whatsapp_verified_at` | timestamptz, opcional |
-| `max_parallel_assignments` | integer positivo, padrão 1 |
-| `is_available`, `is_active` | boolean, padrão true |
-| `last_assignment_at` | timestamptz, opcional |
-| `created_at`, `updated_at` | timestamptz |
+| Campo                       | Tipo e regra                            |
+| --------------------------- | --------------------------------------- |
+| `id`                        | uuid, PK                                |
+| `account_id`                | uuid, FK, obrigatório                   |
+| `profile_id`                | uuid, FK, único por conta               |
+| `display_name`              | text, obrigatório                       |
+| `whatsapp_e164`             | text, único por conta quando preenchido |
+| `whatsapp_verified_at`      | timestamptz, opcional                   |
+| `max_parallel_assignments`  | integer positivo, padrão 1              |
+| `is_available`, `is_active` | boolean, padrão true                    |
+| `last_assignment_at`        | timestamptz, opcional                   |
+| `created_at`, `updated_at`  | timestamptz                             |
 
 Tokens de Google ou UAZAPI não ficam em colunas expostas ao cliente. Credenciais ficam em secrets ou estrutura criptografada acessível apenas pelo servidor.
 
@@ -124,27 +124,52 @@ Tokens de Google ou UAZAPI não ficam em colunas expostas ao cliente. Credenciai
 
 Mensagens têm chave única `(account_id, connection_id, provider_message_id)` para tornar webhooks repetidos idempotentes.
 
+#### Histórico importado do WhatsApp
+
+`whatsapp_history_imports` controla uploads JSONL feitos pelo Dono. Cada lote
+registra conta, conexão, autor, caminho privado, tamanho, checksum SHA-256,
+estado, contadores da prévia, cursor, relatório e timestamps. A combinação
+`(account_id, connection_key, checksum_sha256)` é única.
+
+Campos adicionados às fontes operacionais:
+
+| Entidade        | Campos e regra                                                                          |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `contacts`      | `automation_status` (`enabled` ou `suppressed`), motivo, data da trava e lote de origem |
+| `conversations` | `history_import_id` e `ai_context_started_at`                                           |
+| `messages`      | `history_import_id`, `is_historical` e `history_source_line`                            |
+
+Contatos do histórico ficam suprimidos antes de as mensagens serem gravadas.
+Webhooks posteriores continuam persistindo dados, mas encerram o processamento
+antes de IA, fluxo, oportunidade, transcrição e automação. Consultas de contexto
+da IA usam `ai_context_started_at` como limite inferior.
+
+O lote é gravado por funções `security definer` disponíveis somente para
+`service_role`. A tabela de controle e o bucket privado possuem acesso
+owner-only. O processamento por cursor e os identificadores determinísticos
+das mensagens tornam a operação retomável e idempotente.
+
 ### 5.2 `opportunities`
 
 Representa a intenção comercial. Na V1, um contato possui somente uma oportunidade ativa, mas pode manter encerradas no histórico.
 
-| Campo | Tipo e regra |
-|---|---|
-| `id`, `account_id`, `contact_id` | uuid; PK e FKs obrigatórias |
-| `primary_conversation_id` | uuid, FK opcional |
-| `stage` | text, estado canônico |
-| `attention_state` | text, estado transversal |
-| `assigned_broker_id` | uuid, FK opcional |
-| `qualification_status` | `not_started`, `in_progress`, `completed`, `needs_review` |
-| `meeting_status`, `commercial_status` | text, projeções resumidas |
-| `source_type` | `meta_ads`, `manual`, `referral`, `google_ads`, `other` |
-| `source_metadata` | jsonb, padrão `{}` |
-| `lost_reason_id`, `lost_notes` | motivo configurável e detalhe opcional |
-| `won_gross_value` | numeric(14,2), opcional e não negativo |
-| `currency` | char(3), padrão `BRL` |
-| `last_lead_message_at`, `last_outbound_message_at` | timestamptz, projeções |
-| `next_action_at`, `stage_changed_at`, `closed_at` | timestamptz |
-| `created_at`, `updated_at` | timestamptz |
+| Campo                                              | Tipo e regra                                              |
+| -------------------------------------------------- | --------------------------------------------------------- |
+| `id`, `account_id`, `contact_id`                   | uuid; PK e FKs obrigatórias                               |
+| `primary_conversation_id`                          | uuid, FK opcional                                         |
+| `stage`                                            | text, estado canônico                                     |
+| `attention_state`                                  | text, estado transversal                                  |
+| `assigned_broker_id`                               | uuid, FK opcional                                         |
+| `qualification_status`                             | `not_started`, `in_progress`, `completed`, `needs_review` |
+| `meeting_status`, `commercial_status`              | text, projeções resumidas                                 |
+| `source_type`                                      | `meta_ads`, `manual`, `referral`, `google_ads`, `other`   |
+| `source_metadata`                                  | jsonb, padrão `{}`                                        |
+| `lost_reason_id`, `lost_notes`                     | motivo configurável e detalhe opcional                    |
+| `won_gross_value`                                  | numeric(14,2), opcional e não negativo                    |
+| `currency`                                         | char(3), padrão `BRL`                                     |
+| `last_lead_message_at`, `last_outbound_message_at` | timestamptz, projeções                                    |
+| `next_action_at`, `stage_changed_at`, `closed_at`  | timestamptz                                               |
+| `created_at`, `updated_at`                         | timestamptz                                               |
 
 Estados de `stage`:
 
@@ -171,19 +196,19 @@ WHERE stage NOT IN ('won', 'lost')
 
 Histórico append-only que explica qualquer alteração.
 
-| Campo | Tipo e regra |
-|---|---|
-| `id`, `account_id`, `opportunity_id` | uuid, PK/FKs |
-| `event_type` | text, obrigatório |
-| `from_stage`, `to_stage` | text, opcionais |
-| `actor_type` | `lead`, `ai`, `user`, `system`, `integration` |
-| `actor_profile_id` | uuid, opcional |
-| `source_type` | `whatsapp`, `dashboard`, `job`, `webhook`, `migration` |
-| `source_id` | text, referência externa opcional |
-| `idempotency_key` | text, único por conta quando preenchido |
-| `payload` | jsonb, detalhes versionados |
-| `correlation_id` | uuid, obrigatório |
-| `occurred_at`, `created_at` | timestamptz |
+| Campo                                | Tipo e regra                                           |
+| ------------------------------------ | ------------------------------------------------------ |
+| `id`, `account_id`, `opportunity_id` | uuid, PK/FKs                                           |
+| `event_type`                         | text, obrigatório                                      |
+| `from_stage`, `to_stage`             | text, opcionais                                        |
+| `actor_type`                         | `lead`, `ai`, `user`, `system`, `integration`          |
+| `actor_profile_id`                   | uuid, opcional                                         |
+| `source_type`                        | `whatsapp`, `dashboard`, `job`, `webhook`, `migration` |
+| `source_id`                          | text, referência externa opcional                      |
+| `idempotency_key`                    | text, único por conta quando preenchido                |
+| `payload`                            | jsonb, detalhes versionados                            |
+| `correlation_id`                     | uuid, obrigatório                                      |
+| `occurred_at`, `created_at`          | timestamptz                                            |
 
 Eventos iniciais incluem criação, início e conclusão da qualificação, resposta registrada, matching, preferência de agenda, reserva, aceite/rejeição/transferência, cancelamento, reunião realizada, ausência, proposta, negociação, contrato, venda, perda e handoff humano.
 
@@ -193,18 +218,18 @@ Usuários do painel não recebem permissão de `UPDATE` ou `DELETE` nessa tabela
 
 Centraliza tudo que exige ação humana.
 
-| Campo | Tipo e regra |
-|---|---|
-| `id`, `account_id`, `opportunity_id` | uuid, PK/FKs |
-| `assigned_profile_id`, `assigned_role` | destino opcional |
-| `kind` | text, motivo canônico |
-| `severity` | `info`, `warning`, `critical` |
-| `status` | `open`, `snoozed`, `resolved`, `cancelled` |
-| `title`, `context` | text e jsonb |
-| `due_at`, `snoozed_until`, `resolved_at` | timestamptz opcionais |
-| `resolved_by`, `resolution` | uuid e jsonb opcionais |
-| `deduplication_key` | text |
-| `created_at`, `updated_at` | timestamptz |
+| Campo                                    | Tipo e regra                               |
+| ---------------------------------------- | ------------------------------------------ |
+| `id`, `account_id`, `opportunity_id`     | uuid, PK/FKs                               |
+| `assigned_profile_id`, `assigned_role`   | destino opcional                           |
+| `kind`                                   | text, motivo canônico                      |
+| `severity`                               | `info`, `warning`, `critical`              |
+| `status`                                 | `open`, `snoozed`, `resolved`, `cancelled` |
+| `title`, `context`                       | text e jsonb                               |
+| `due_at`, `snoozed_until`, `resolved_at` | timestamptz opcionais                      |
+| `resolved_by`, `resolution`              | uuid e jsonb opcionais                     |
+| `deduplication_key`                      | text                                       |
+| `created_at`, `updated_at`               | timestamptz                                |
 
 Uma restrição parcial impede dois itens abertos com a mesma `deduplication_key`.
 
@@ -214,17 +239,17 @@ Uma restrição parcial impede dois itens abertos com a mesma `deduplication_key
 
 É o contrato entre o painel do dono, a conversa da IA e o dado normalizado.
 
-| Campo | Tipo e regra |
-|---|---|
-| `id`, `account_id` | uuid |
-| `key` | text estável, único por conta |
-| `label`, `prompt_instruction` | text |
-| `data_type` | `text`, `single_choice`, `multi_choice`, `money_range`, `location`, `date_range`, `boolean` |
-| `normalization_strategy` | text controlado |
-| `is_required`, `is_system`, `is_active` | boolean |
-| `display_order` | integer |
-| `validation_schema` | jsonb |
-| `created_at`, `updated_at` | timestamptz |
+| Campo                                   | Tipo e regra                                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `id`, `account_id`                      | uuid                                                                                        |
+| `key`                                   | text estável, único por conta                                                               |
+| `label`, `prompt_instruction`           | text                                                                                        |
+| `data_type`                             | `text`, `single_choice`, `multi_choice`, `money_range`, `location`, `date_range`, `boolean` |
+| `normalization_strategy`                | text controlado                                                                             |
+| `is_required`, `is_system`, `is_active` | boolean                                                                                     |
+| `display_order`                         | integer                                                                                     |
+| `validation_schema`                     | jsonb                                                                                       |
+| `created_at`, `updated_at`              | timestamptz                                                                                 |
 
 Perguntas do sistema aceitam edição de texto, ordem e orientação, mas sua `key` e seu tipo não são alteráveis livremente.
 
@@ -236,18 +261,18 @@ Contém `question_id`, `value` estável, `label`, `aliases`, `display_order` e `
 
 Cada extração gera uma versão; somente uma é atual por pergunta e oportunidade.
 
-| Campo | Tipo e regra |
-|---|---|
-| `id`, `account_id`, `opportunity_id`, `question_id` | uuid |
-| `version` | integer crescente |
-| `status` | `provisional`, `confirmed`, `rejected`, `superseded` |
-| `raw_text` | resposta original |
-| `normalized_value` | jsonb conforme o tipo |
-| `confidence` | numeric(5,4), 0 a 1 |
-| `source_message_id`, `extracted_by_run_id` | uuid opcionais |
-| `confirmed_by`, `confirmed_at` | uuid e timestamptz opcionais |
-| `is_current` | boolean |
-| `created_at` | timestamptz |
+| Campo                                               | Tipo e regra                                         |
+| --------------------------------------------------- | ---------------------------------------------------- |
+| `id`, `account_id`, `opportunity_id`, `question_id` | uuid                                                 |
+| `version`                                           | integer crescente                                    |
+| `status`                                            | `provisional`, `confirmed`, `rejected`, `superseded` |
+| `raw_text`                                          | resposta original                                    |
+| `normalized_value`                                  | jsonb conforme o tipo                                |
+| `confidence`                                        | numeric(5,4), 0 a 1                                  |
+| `source_message_id`, `extracted_by_run_id`          | uuid opcionais                                       |
+| `confirmed_by`, `confirmed_at`                      | uuid e timestamptz opcionais                         |
+| `is_current`                                        | boolean                                              |
+| `created_at`                                        | timestamptz                                          |
 
 Restrição parcial:
 
@@ -306,16 +331,16 @@ Versões publicáveis com nome, fuso, dias permitidos, janela diária e `steps` 
 
 ### 8.2 `followup_executions`
 
-| Campo | Tipo e regra |
-|---|---|
-| IDs de conta, oportunidade e política | uuid, obrigatórios |
-| `step_number` | integer |
-| `status` | `scheduled`, `claimed`, `sent`, `cancelled`, `failed` |
-| `scheduled_for`, `claimed_at` | timestamptz |
-| `sent_message_id`, `cancel_reason` | opcionais |
-| `idempotency_key` | único por conta |
-| `attempt_count`, `last_error` | controle técnico |
-| timestamps | criação e atualização |
+| Campo                                 | Tipo e regra                                          |
+| ------------------------------------- | ----------------------------------------------------- |
+| IDs de conta, oportunidade e política | uuid, obrigatórios                                    |
+| `step_number`                         | integer                                               |
+| `status`                              | `scheduled`, `claimed`, `sent`, `cancelled`, `failed` |
+| `scheduled_for`, `claimed_at`         | timestamptz                                           |
+| `sent_message_id`, `cancel_reason`    | opcionais                                             |
+| `idempotency_key`                     | único por conta                                       |
+| `attempt_count`, `last_error`         | controle técnico                                      |
+| timestamps                            | criação e atualização                                 |
 
 Resposta do lead, opt-out, encerramento ou handoff cancela execuções ainda não enviadas.
 
@@ -333,20 +358,20 @@ Aliases ligam grafias alternativas ao bairro. Alias ambíguo não escolhe silenc
 
 ### 9.3 `developments`
 
-| Campo | Tipo e regra |
-|---|---|
-| IDs de conta, incorporadora e bairro | uuid, obrigatórios |
-| `name`, `normalized_name`, `internal_code` | text |
-| `description`, `address` | text e jsonb |
-| `latitude`, `longitude` | numeric opcionais |
-| `property_timing` | `off_plan`, `ready`, `both` |
-| `expected_delivery_date` | date opcional |
-| `highlights` | text[] |
-| `knowledge_notes` | contexto permitido para IA |
-| `internal_notes` | nunca enviado à IA de contato |
-| `status` | `draft`, `published`, `paused`, `archived` |
-| `terms_valid_until`, `cover_media_id` | opcionais |
-| autores e timestamps | obrigatórios |
+| Campo                                      | Tipo e regra                               |
+| ------------------------------------------ | ------------------------------------------ |
+| IDs de conta, incorporadora e bairro       | uuid, obrigatórios                         |
+| `name`, `normalized_name`, `internal_code` | text                                       |
+| `description`, `address`                   | text e jsonb                               |
+| `latitude`, `longitude`                    | numeric opcionais                          |
+| `property_timing`                          | `off_plan`, `ready`, `both`                |
+| `expected_delivery_date`                   | date opcional                              |
+| `highlights`                               | text[]                                     |
+| `knowledge_notes`                          | contexto permitido para IA                 |
+| `internal_notes`                           | nunca enviado à IA de contato              |
+| `status`                                   | `draft`, `published`, `paused`, `archived` |
+| `terms_valid_until`, `cover_media_id`      | opcionais                                  |
+| autores e timestamps                       | obrigatórios                               |
 
 Publicação exige incorporadora ativa, bairro ativo, descrição e pelo menos uma oferta ativa. Somente publicados participam do matching.
 
@@ -354,20 +379,20 @@ Publicação exige incorporadora ativa, bairro ativo, descrição e pelo menos u
 
 Representa faixas comerciais, não unidades individuais.
 
-| Campo | Tipo e regra |
-|---|---|
-| `development_id`, `account_id` | uuid |
-| `label` | exemplo `Studio 30 m²` |
-| `area_min_sqm`, `area_max_sqm` | numeric(10,2) |
-| `price_from`, `price_to` | numeric(14,2) |
-| `entry_from`, `entry_to` | numeric(14,2) |
-| `installment_from`, `installment_to` | numeric(14,2) |
-| `currency` | `BRL` na V1 |
-| `terms_summary` | text |
-| `property_timing` | `off_plan`, `ready`, `both` |
-| `valid_from`, `valid_until` | date |
-| `is_active`, `display_order` | boolean e integer |
-| timestamps | criação e atualização |
+| Campo                                | Tipo e regra                |
+| ------------------------------------ | --------------------------- |
+| `development_id`, `account_id`       | uuid                        |
+| `label`                              | exemplo `Studio 30 m²`      |
+| `area_min_sqm`, `area_max_sqm`       | numeric(10,2)               |
+| `price_from`, `price_to`             | numeric(14,2)               |
+| `entry_from`, `entry_to`             | numeric(14,2)               |
+| `installment_from`, `installment_to` | numeric(14,2)               |
+| `currency`                           | `BRL` na V1                 |
+| `terms_summary`                      | text                        |
+| `property_timing`                    | `off_plan`, `ready`, `both` |
+| `valid_from`, `valid_until`          | date                        |
+| `is_active`, `display_order`         | boolean e integer           |
+| timestamps                           | criação e atualização       |
 
 Mínimos não podem superar máximos. Oferta vencida não participa do matching ativo.
 
@@ -412,17 +437,17 @@ Arquivos grandes usam upload retomável. O Postgres guarda metadados, nunca o bi
 
 O agente documental usa estruturas não operacionais:
 
-| Estrutura | Responsabilidade |
-|---|---|
-| `document_analysis_batches` | lote, dono, estado, versão atual, lease, tentativas, expiração e cancelamento |
-| `document_analysis_sources` | arquivo/link, hash, metadados, caminho privado, extração, privacidade e erro |
-| `document_analysis_items` | empreendimento ou oferta proposta, ação sugerida, alvo possível e decisão |
-| `document_analysis_fields` | campo proposto, valor tipado, confiança, decisão e edição do dono |
-| `document_analysis_provenance` | fonte, página, trecho higienizado e coordenadas opcionais |
-| `document_analysis_issues` | PII, conflito, duplicidade, validade, baixa confiança e bloqueio |
-| `document_analysis_versions` | snapshots recuperáveis do preview e origem da alteração |
-| `document_analysis_messages` | conversa do dono com o rascunho, sem capacidade de importar |
-| `document_analysis_events` | auditoria técnica e funcional append-only |
+| Estrutura                      | Responsabilidade                                                              |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `document_analysis_batches`    | lote, dono, estado, versão atual, lease, tentativas, expiração e cancelamento |
+| `document_analysis_sources`    | arquivo/link, hash, metadados, caminho privado, extração, privacidade e erro  |
+| `document_analysis_items`      | empreendimento ou oferta proposta, ação sugerida, alvo possível e decisão     |
+| `document_analysis_fields`     | campo proposto, valor tipado, confiança, decisão e edição do dono             |
+| `document_analysis_provenance` | fonte, página, trecho higienizado e coordenadas opcionais                     |
+| `document_analysis_issues`     | PII, conflito, duplicidade, validade, baixa confiança e bloqueio              |
+| `document_analysis_versions`   | snapshots recuperáveis do preview e origem da alteração                       |
+| `document_analysis_messages`   | conversa do dono com o rascunho, sem capacidade de importar                   |
+| `document_analysis_events`     | auditoria técnica e funcional append-only                                     |
 
 Todas recebem `account_id`, RLS e índices de conta, estado e data. Somente
 owner/admin acessa as linhas; corretores não recebem acesso funcional. O bucket
@@ -480,17 +505,17 @@ Bloqueios ou capacidade extra por corretor, com início, fim, motivo, autor e ti
 
 ### 12.4 `appointments`
 
-| Campo | Tipo e regra |
-|---|---|
-| IDs de conta, oportunidade, corretor e política | uuid |
-| `status` | estado da reunião |
-| `starts_at`, `ends_at`, `timezone` | horário reservado |
-| `channel` | `video`, `phone`, `undefined` |
-| `meeting_url` | opcional |
-| confirmações do lead e do corretor | timestamptz |
-| provedor e ID externo do calendário | opcionais na V1 |
-| `cancel_reason` | opcional |
-| timestamps | criação e atualização |
+| Campo                                           | Tipo e regra                  |
+| ----------------------------------------------- | ----------------------------- |
+| IDs de conta, oportunidade, corretor e política | uuid                          |
+| `status`                                        | estado da reunião             |
+| `starts_at`, `ends_at`, `timezone`              | horário reservado             |
+| `channel`                                       | `video`, `phone`, `undefined` |
+| `meeting_url`                                   | opcional                      |
+| confirmações do lead e do corretor              | timestamptz                   |
+| provedor e ID externo do calendário             | opcionais na V1               |
+| `cancel_reason`                                 | opcional                      |
+| timestamps                                      | criação e atualização         |
 
 Estados:
 
@@ -529,23 +554,23 @@ Catálogo configurável de motivos de perda, rejeição, transferência, cancela
 
 Todos os FKs recebem índice. Além deles:
 
-| Tabela | Índice principal | Uso |
-|---|---|---|
-| `opportunities` | `(account_id, stage, stage_changed_at DESC, id DESC)` | funil |
-| `opportunities` | `(account_id, assigned_broker_id, stage, updated_at DESC)` | carteira |
-| `opportunities` | `(account_id, attention_state, next_action_at)` | SLA |
-| `opportunity_events` | `(opportunity_id, occurred_at DESC, id DESC)` | linha do tempo |
-| `attention_items` | parcial `(account_id, due_at, severity)` onde aberto | atenção |
-| `qualification_answers` | `(opportunity_id, question_id, version DESC)` | histórico |
-| `messages` | `(conversation_id, created_at DESC, id DESC)` | conversa |
-| `followup_executions` | parcial `(scheduled_for, id)` onde agendado | workers |
-| `developments` | `(account_id, status, neighborhood_id, developer_id)` | catálogo |
-| `development_offers` | parcial `(development_id, valid_until)` onde ativa | matching |
-| `development_media` | `(development_id, status, display_order)` | galeria |
-| `property_match_results` | `(match_run_id, rank)` | ranking |
-| `appointments` | `(account_id, broker_profile_id, starts_at, ends_at)` | agenda |
-| `assignment_offers` | parcial `(expires_at, id)` onde pendente | SLA |
-| `ai_runs`, `audit_events` | `(account_id, created_at DESC, id DESC)` | diagnóstico |
+| Tabela                    | Índice principal                                           | Uso            |
+| ------------------------- | ---------------------------------------------------------- | -------------- |
+| `opportunities`           | `(account_id, stage, stage_changed_at DESC, id DESC)`      | funil          |
+| `opportunities`           | `(account_id, assigned_broker_id, stage, updated_at DESC)` | carteira       |
+| `opportunities`           | `(account_id, attention_state, next_action_at)`            | SLA            |
+| `opportunity_events`      | `(opportunity_id, occurred_at DESC, id DESC)`              | linha do tempo |
+| `attention_items`         | parcial `(account_id, due_at, severity)` onde aberto       | atenção        |
+| `qualification_answers`   | `(opportunity_id, question_id, version DESC)`              | histórico      |
+| `messages`                | `(conversation_id, created_at DESC, id DESC)`              | conversa       |
+| `followup_executions`     | parcial `(scheduled_for, id)` onde agendado                | workers        |
+| `developments`            | `(account_id, status, neighborhood_id, developer_id)`      | catálogo       |
+| `development_offers`      | parcial `(development_id, valid_until)` onde ativa         | matching       |
+| `development_media`       | `(development_id, status, display_order)`                  | galeria        |
+| `property_match_results`  | `(match_run_id, rank)`                                     | ranking        |
+| `appointments`            | `(account_id, broker_profile_id, starts_at, ends_at)`      | agenda         |
+| `assignment_offers`       | parcial `(expires_at, id)` onde pendente                   | SLA            |
+| `ai_runs`, `audit_events` | `(account_id, created_at DESC, id DESC)`                   | diagnóstico    |
 
 Listas longas usam paginação por cursor com `(created_at, id)`, nunca `OFFSET` profundo.
 
@@ -596,23 +621,23 @@ Regras:
 
 ## 17. Matriz de acesso por RLS
 
-| Domínio | Dono | Corretor | Servidor IA/webhook |
-|---|---|---|---|
-| Conta e configurações | administra | mínimo necessário | operação controlada |
-| Usuários/corretores | administra | próprio perfil | controlado |
-| Contatos e conversas | todos da conta | atribuídos | controlado |
-| Oportunidades | administra | atribuídas | por função |
-| Eventos | lê | lê atribuídos | append-only |
-| Central de atenção | administra | atribuída | cria/resolve por regra |
-| Perguntas e prompts | administra | lê efetivo | lê versão ativa |
-| Respostas | administra | lê atribuídas | por função |
-| Catálogo | administra | publicados | publicados |
-| Mídias | administra | conforme visibilidade | URL temporária |
-| Agente documental | administra | sem acesso | processamento controlado |
-| Matching | administra | atribuídos | controlado |
-| Agenda/ofertas | administra | próprias | por função |
-| Custos e logs de IA | administra | sem acesso | controlado |
-| Auditoria | lê | sem acesso | append-only |
+| Domínio               | Dono           | Corretor              | Servidor IA/webhook      |
+| --------------------- | -------------- | --------------------- | ------------------------ |
+| Conta e configurações | administra     | mínimo necessário     | operação controlada      |
+| Usuários/corretores   | administra     | próprio perfil        | controlado               |
+| Contatos e conversas  | todos da conta | atribuídos            | controlado               |
+| Oportunidades         | administra     | atribuídas            | por função               |
+| Eventos               | lê             | lê atribuídos         | append-only              |
+| Central de atenção    | administra     | atribuída             | cria/resolve por regra   |
+| Perguntas e prompts   | administra     | lê efetivo            | lê versão ativa          |
+| Respostas             | administra     | lê atribuídas         | por função               |
+| Catálogo              | administra     | publicados            | publicados               |
+| Mídias                | administra     | conforme visibilidade | URL temporária           |
+| Agente documental     | administra     | sem acesso            | processamento controlado |
+| Matching              | administra     | atribuídos            | controlado               |
+| Agenda/ofertas        | administra     | próprias              | por função               |
+| Custos e logs de IA   | administra     | sem acesso            | controlado               |
+| Auditoria             | lê             | sem acesso            | append-only              |
 
 Padrão de política:
 
@@ -636,17 +661,17 @@ Funções usadas em RLS evitam consultas repetidas e as colunas avaliadas recebe
 
 ## 19. Migração do modelo atual
 
-| Atual | Alvo | Estratégia |
-|---|---|---|
-| `deals` | `opportunities` | backfill incremental |
-| pipeline | `opportunity_events` | evento inicial e novos eventos |
-| `conversation_sdr_state` | `qualification_answers` | campos conhecidos + JSON original |
-| `recommended_product_ids` | match runs/results | importar como legado |
-| `products` | developments/offers | separar empreendimento e faixa |
-| `product_media` | media/versions | copiar ao bucket privado com checksum |
-| notificações | `attention_items` | somente pendências úteis |
-| configuração de IA | `ai_config_versions` | snapshot inicial |
-| logs de IA | `ai_runs` e eventos | adaptar leitura antes de descontinuar |
+| Atual                     | Alvo                    | Estratégia                            |
+| ------------------------- | ----------------------- | ------------------------------------- |
+| `deals`                   | `opportunities`         | backfill incremental                  |
+| pipeline                  | `opportunity_events`    | evento inicial e novos eventos        |
+| `conversation_sdr_state`  | `qualification_answers` | campos conhecidos + JSON original     |
+| `recommended_product_ids` | match runs/results      | importar como legado                  |
+| `products`                | developments/offers     | separar empreendimento e faixa        |
+| `product_media`           | media/versions          | copiar ao bucket privado com checksum |
+| notificações              | `attention_items`       | somente pendências úteis              |
+| configuração de IA        | `ai_config_versions`    | snapshot inicial                      |
+| logs de IA                | `ai_runs` e eventos     | adaptar leitura antes de descontinuar |
 
 Sequência segura:
 

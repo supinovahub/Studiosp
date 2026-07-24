@@ -5,6 +5,7 @@ import { decrypt } from '@/lib/whatsapp/encryption';
 import { sendProviderText } from '@/lib/whatsapp/provider';
 import { engineSendText } from '@/lib/flows/meta-send';
 import { processNextDocumentAnalysis } from '@/lib/document-analysis/worker';
+import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 
 export const maxDuration = 300;
 
@@ -29,12 +30,14 @@ export async function GET(request: Request) {
   const followups = await sendDueFollowups(db);
   const cancellations = await cancelUncoveredAppointments(db);
   const documentAnalysis = await processNextDocumentAnalysis(db);
+  const reactivation = await sendDueReactivationTouches(db);
   return NextResponse.json({
     reassigned,
     brokerNotifications,
     followups,
     cancellations,
     documentAnalysis,
+    reactivation,
   });
 }
 
@@ -255,6 +258,22 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         .update({
           status: 'cancelled',
           cancel_reason: 'opportunity_not_eligible',
+        })
+        .eq('id', followup.id);
+      continue;
+    }
+    const { data: contactControl } = await db
+      .from('contacts')
+      .select('automation_status')
+      .eq('account_id', followup.account_id)
+      .eq('id', opportunity.contact_id)
+      .maybeSingle();
+    if (contactControl?.automation_status === 'suppressed') {
+      await db
+        .from('followup_executions')
+        .update({
+          status: 'cancelled',
+          cancel_reason: 'contact_automation_suppressed',
         })
         .eq('id', followup.id);
       continue;

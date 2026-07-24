@@ -76,7 +76,9 @@ export async function dispatchInboundToAiReply(
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
-      .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
+      .select(
+        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_context_started_at'
+      )
       .eq('id', conversationId)
       .maybeSingle();
     if (convErr || !conv) return;
@@ -86,7 +88,12 @@ export async function dispatchInboundToAiReply(
     // below (this read can race a concurrent inbound).
     if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return;
 
-    const messages = await buildConversationContext(db, conversationId);
+    const messages = await buildConversationContext(
+      db,
+      conversationId,
+      undefined,
+      conv.ai_context_started_at
+    );
     if (messages.length === 0) return;
 
     const { data: triggerMessage } = await db
@@ -128,6 +135,43 @@ export async function dispatchInboundToAiReply(
         return emptySdrClassification();
       }
     );
+    if (
+      classification.primaryIntent === 'opt_out' ||
+      classification.intents.includes('opt_out')
+    ) {
+      const now = new Date().toISOString();
+      const { data: reactivationLeads } = await db
+        .from('reactivation_leads')
+        .select('id')
+        .eq('account_id', accountId)
+        .eq('contact_id', contactId);
+      const ids = (reactivationLeads ?? []).map((item) => item.id);
+      await Promise.all([
+        db
+          .from('contacts')
+          .update({ opted_out_at: now })
+          .eq('account_id', accountId)
+          .eq('id', contactId),
+        db
+          .from('reactivation_leads')
+          .update({ status: 'opted_out' })
+          .eq('account_id', accountId)
+          .eq('contact_id', contactId),
+      ]);
+      if (ids.length) {
+        await db
+          .from('reactivation_touches')
+          .update({ status: 'cancelled', last_error: 'lead_opted_out' })
+          .eq('account_id', accountId)
+          .eq('status', 'scheduled')
+          .in('reactivation_lead_id', ids);
+      }
+      await db
+        .from('conversations')
+        .update({ ai_autoreply_disabled: true })
+        .eq('id', conversationId);
+      return;
+    }
     const studiosp = await prepareStudiospTurn({
       db,
       accountId,

@@ -13,6 +13,7 @@ import {
   transcribeStudiospAudio,
 } from '@/lib/ai/studiosp-orchestrator';
 import { handleBrokerOperationalReply } from '@/lib/studiosp/broker-whatsapp';
+import { isContactAutomationSuppressed } from '@/lib/contacts/automation';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import {
   handleTemplateWebhookChange,
@@ -752,7 +753,14 @@ async function processMessage(
     return;
   }
 
-  if (message.type === 'audio' && message.audio?.id && storedMessage?.id) {
+  const automationSuppressed = isContactAutomationSuppressed(contactRecord);
+
+  if (
+    !automationSuppressed &&
+    message.type === 'audio' &&
+    message.audio?.id &&
+    storedMessage?.id
+  ) {
     try {
       const media = await getMediaUrl({
         mediaId: message.audio.id,
@@ -795,6 +803,18 @@ async function processMessage(
   // so the broadcast's `replied_count` advances (via the aggregate
   // trigger installed in migration 003).
   await flagBroadcastReplyIfAny(accountId, contactRecord.id);
+
+  if (automationSuppressed) {
+    await dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.received', {
+      conversation_id: conversation.id,
+      contact_id: contactRecord.id,
+      whatsapp_message_id: message.id,
+      content_type: contentType,
+      text: contentText,
+      automation_suppressed: true,
+    });
+    return;
+  }
 
   const referral = (
     message as WhatsAppMessage & {

@@ -61,12 +61,12 @@ Não fazem parte da V1:
 
 Os papéis atuais permanecem no banco durante a V1:
 
-| Papel técnico | Nome na interface | Uso |
-|---|---|---|
-| owner | Dono | acesso integral |
-| admin | Gestor de operação | preparado para delegação |
-| agent | Corretor | operação dos leads atribuídos |
-| viewer | Analista | somente leitura |
+| Papel técnico | Nome na interface  | Uso                           |
+| ------------- | ------------------ | ----------------------------- |
+| owner         | Dono               | acesso integral               |
+| admin         | Gestor de operação | preparado para delegação      |
+| agent         | Corretor           | operação dos leads atribuídos |
+| viewer        | Analista           | somente leitura               |
 
 Na primeira entrega, a interface oferece apenas Dono e Corretor.
 
@@ -74,20 +74,20 @@ Na primeira entrega, a interface oferece apenas Dono e Corretor.
 
 ### 4.1 Etapa principal
 
-| Código | Rótulo | Entrada |
-|---|---|---|
-| received | Lead recebido | contato e oportunidade criados |
-| contacting | Primeiro contato | primeira tentativa de atendimento |
-| qualifying | Em qualificação | primeira pergunta de qualificação enviada ou respondida |
-| qualified | Qualificado | todos os campos obrigatórios confirmados |
-| awaiting_schedule | Aguardando agendamento | IA iniciou coleta ou oferta de horário |
-| meeting_scheduled | Reunião agendada | reserva válida criada |
-| meeting_completed | Reunião realizada | fato informado após o horário |
-| proposal_sent | Proposta enviada | corretor registra envio |
-| negotiating | Em negociação | corretor registra negociação |
-| contract_pending | Contrato/assinatura | contrato informado como enviado ou aguardando assinatura |
-| won | Venda realizada | venda confirmada por humano autorizado |
-| lost | Perdido | perda registrada com motivo |
+| Código            | Rótulo                 | Entrada                                                  |
+| ----------------- | ---------------------- | -------------------------------------------------------- |
+| received          | Lead recebido          | contato e oportunidade criados                           |
+| contacting        | Primeiro contato       | primeira tentativa de atendimento                        |
+| qualifying        | Em qualificação        | primeira pergunta de qualificação enviada ou respondida  |
+| qualified         | Qualificado            | todos os campos obrigatórios confirmados                 |
+| awaiting_schedule | Aguardando agendamento | IA iniciou coleta ou oferta de horário                   |
+| meeting_scheduled | Reunião agendada       | reserva válida criada                                    |
+| meeting_completed | Reunião realizada      | fato informado após o horário                            |
+| proposal_sent     | Proposta enviada       | corretor registra envio                                  |
+| negotiating       | Em negociação          | corretor registra negociação                             |
+| contract_pending  | Contrato/assinatura    | contrato informado como enviado ou aguardando assinatura |
+| won               | Venda realizada        | venda confirmada por humano autorizado                   |
+| lost              | Perdido                | perda registrada com motivo                              |
 
 ### 4.2 Estados paralelos
 
@@ -175,7 +175,7 @@ Cada evento registra conta, oportunidade, contato, conversa, ator, horário, dad
 
 ### 4.5 Fluxo principal
 
-~~~mermaid
+```mermaid
 flowchart LR
   A[Lead recebido] --> B[Primeiro contato]
   B --> C[Em qualificação]
@@ -197,7 +197,7 @@ flowchart LR
   H -. perda .-> L
   I -. perda .-> L
   J -. perda .-> L
-~~~
+```
 
 ## 5. Qualificação
 
@@ -559,13 +559,13 @@ Somente entra no matching:
 
 ### 10.2 Pontuação padrão
 
-| Critério | Peso |
-|---|---:|
-| localização | 30 |
-| entrada e parcela | 30 |
-| faixa de preço total | 10 |
-| na planta ou pronto | 20 |
-| urgência e entrega | 10 |
+| Critério             | Peso |
+| -------------------- | ---: |
+| localização          |   30 |
+| entrada e parcela    |   30 |
+| faixa de preço total |   10 |
+| na planta ou pronto  |   20 |
+| urgência e entrega   |   10 |
 
 Pontuação mínima inicial: 60 de 100.
 
@@ -611,7 +611,7 @@ Todos são configuráveis pelo dono dentro de limites válidos.
 
 ### 11.4 Fluxo
 
-~~~mermaid
+```mermaid
 sequenceDiagram
   participant L as Lead
   participant IA as IA-SDR
@@ -634,7 +634,7 @@ sequenceDiagram
     S->>C: Próximo corretor elegível
     S->>D: Escalonar se a fila esgotar
   end
-~~~
+```
 
 ## 12. Corretores e WhatsApp operacional
 
@@ -980,6 +980,8 @@ Publicação:
 - empresa;
 - usuários e permissões;
 - WhatsApp do lead;
+- importação de histórico do WhatsApp, exclusiva do Dono, com prévia e
+  confirmação;
 - WhatsApp dos corretores;
 - agenda e horários garantidos;
 - follow-up;
