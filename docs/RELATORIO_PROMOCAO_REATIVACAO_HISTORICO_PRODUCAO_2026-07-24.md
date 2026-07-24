@@ -90,3 +90,21 @@ Validação do hotfix:
 - 82 arquivos de teste e 718 testes aprovados;
 - TypeScript aprovado;
 - build de produção aprovado.
+
+## Execução da cadência e gestão das campanhas
+
+Foi identificado que o D0 era criado como `scheduled`, mas nenhum executor
+periódico chamava a fila. Por isso a campanha podia ser ativada sem que a
+mensagem chegasse ao WhatsApp, independentemente das opções do assistente.
+
+Correções:
+
+- D0 processado imediatamente ao ativar ou retomar uma campanha;
+- cadência futura processada diariamente pelo Cron de produção;
+- disparo da reativação mantido independente dos interruptores “Habilitar
+  assistente de IA” e “Resposta automática”;
+- campanhas em rascunho podem ser editadas e excluídas;
+- campanhas ativas podem ser pausadas ou canceladas;
+- campanhas pausadas podem ser retomadas ou canceladas;
+- campanhas já ativadas não podem ser excluídas, preservando eventos e
+  auditoria.

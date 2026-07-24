@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { supabaseAdmin } from '@/lib/automations/admin-client';
+import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
 
 type Row = Record<string, unknown>;
+
+export const maxDuration = 60;
 
 export async function POST(
   _request: Request,
@@ -174,7 +177,8 @@ export async function POST(
         payload: { queued, failed: failures.length },
       }),
     ]);
-    return NextResponse.json({ queued, failures });
+    const sent = await sendDueReactivationTouches(db);
+    return NextResponse.json({ queued, sent, failures });
   } catch (error) {
     return toErrorResponse(error);
   }

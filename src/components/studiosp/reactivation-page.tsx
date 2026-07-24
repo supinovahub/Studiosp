@@ -5,7 +5,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   FileSpreadsheet,
+  Pencil,
   RefreshCcw,
+  Save,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +21,9 @@ type Campaign = {
   name: string;
   status: string;
   objective_segment: string;
+  entry_value_min: number | null;
+  entry_value_max: number | null;
+  activated_at: string | null;
   reactivation_leads: { id: string; status: string }[];
   reactivation_touches: { id: string; status: string; step_number: number }[];
 };
@@ -47,6 +54,11 @@ export function ReactivationPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editObjective, setEditObjective] = useState('all');
+  const [editMin, setEditMin] = useState('');
+  const [editMax, setEditMax] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -151,8 +163,72 @@ export function ReactivationPage() {
           .filter(Boolean)
           .join(' ')
       );
+    } else if (action === 'activate' || action === 'resume') {
+      setSuccess(
+        payload.sent > 0
+          ? `${payload.sent} mensagem inicial enviada com sucesso.`
+          : 'Campanha preparada. Não havia mensagem vencida para envio imediato.'
+      );
     }
     await load();
+    setSending(false);
+  };
+
+  const startEditing = (campaign: Campaign) => {
+    setEditingId(campaign.id);
+    setEditName(campaign.name);
+    setEditObjective(campaign.objective_segment);
+    setEditMin(
+      campaign.entry_value_min == null ? '' : String(campaign.entry_value_min)
+    );
+    setEditMax(
+      campaign.entry_value_max == null ? '' : String(campaign.entry_value_max)
+    );
+  };
+
+  const saveCampaign = async (id: string) => {
+    setSending(true);
+    setError(null);
+    const response = await fetch(`/api/studiosp/reactivation/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: editName,
+        objectiveSegment: editObjective,
+        entryValueMin: editMin,
+        entryValueMax: editMax,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok)
+      setError(payload.error || 'Não foi possível atualizar a campanha.');
+    else {
+      setEditingId(null);
+      setSuccess('Campanha atualizada.');
+      await load();
+    }
+    setSending(false);
+  };
+
+  const deleteCampaign = async (campaign: Campaign) => {
+    if (
+      !window.confirm(
+        `Excluir o rascunho “${campaign.name}” e todos os leads importados nele?`
+      )
+    )
+      return;
+    setSending(true);
+    setError(null);
+    const response = await fetch(`/api/studiosp/reactivation/${campaign.id}`, {
+      method: 'DELETE',
+    });
+    const payload = await response.json();
+    if (!response.ok)
+      setError(payload.error || 'Não foi possível excluir a campanha.');
+    else {
+      setSuccess('Campanha excluída.');
+      await load();
+    }
     setSending(false);
   };
 
@@ -244,7 +320,7 @@ export function ReactivationPage() {
         ) : null}
         {success ? (
           <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm text-emerald-700">
-            <p className="font-medium">Rascunho criado com sucesso.</p>
+            <p className="font-medium">Operação concluída.</p>
             <p>{success}</p>
           </div>
         ) : null}
@@ -330,8 +406,47 @@ export function ReactivationPage() {
               key={campaign.id}
               className="border-border bg-card flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div>
-                <p className="font-medium">{campaign.name}</p>
+              <div className="min-w-0 flex-1">
+                {editingId === campaign.id ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      value={editName}
+                      minLength={3}
+                      maxLength={120}
+                      aria-label="Nome da campanha"
+                      onChange={(event) => setEditName(event.target.value)}
+                    />
+                    <select
+                      value={editObjective}
+                      aria-label="Objetivo da campanha"
+                      onChange={(event) => setEditObjective(event.target.value)}
+                      className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                    >
+                      <option value="all">Todos os objetivos</option>
+                      <option value="live">Somente moradia</option>
+                      <option value="invest">Somente investimento</option>
+                      <option value="unknown">Objetivo não informado</option>
+                    </select>
+                    <Input
+                      value={editMin}
+                      type="number"
+                      min="0"
+                      step=".01"
+                      placeholder="Entrada mínima"
+                      onChange={(event) => setEditMin(event.target.value)}
+                    />
+                    <Input
+                      value={editMax}
+                      type="number"
+                      min="0"
+                      step=".01"
+                      placeholder="Entrada máxima"
+                      onChange={(event) => setEditMax(event.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <p className="font-medium">{campaign.name}</p>
+                )}
                 <p className="text-muted-foreground text-xs">
                   {campaign.reactivation_leads?.length ?? 0} leads ·{' '}
                   {campaign.objective_segment === 'all'
@@ -359,33 +474,95 @@ export function ReactivationPage() {
                       ? 'Ativa'
                       : campaign.status === 'paused'
                         ? 'Pausada'
-                        : campaign.status}
+                        : campaign.status === 'cancelled'
+                          ? 'Cancelada'
+                          : campaign.status === 'completed'
+                            ? 'Concluída'
+                            : campaign.status}
                 </span>
-                {campaign.status === 'draft' ? (
-                  <Button
-                    size="sm"
-                    disabled={sending}
-                    onClick={() => void campaignAction(campaign.id, 'activate')}
-                  >
-                    Ativar campanha
-                  </Button>
+                {editingId === campaign.id ? (
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={sending || editName.trim().length < 3}
+                      onClick={() => void saveCampaign(campaign.id)}
+                    >
+                      <Save className="size-4" /> Salvar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sending}
+                      onClick={() => setEditingId(null)}
+                    >
+                      <X className="size-4" /> Cancelar edição
+                    </Button>
+                  </>
+                ) : campaign.status === 'draft' ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sending}
+                      onClick={() => startEditing(campaign)}
+                    >
+                      <Pencil className="size-4" /> Editar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sending}
+                      onClick={() => void deleteCampaign(campaign)}
+                    >
+                      <Trash2 className="size-4" /> Excluir
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={sending}
+                      onClick={() =>
+                        void campaignAction(campaign.id, 'activate')
+                      }
+                    >
+                      Ativar campanha
+                    </Button>
+                  </>
                 ) : campaign.status === 'active' ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={sending}
-                    onClick={() => void campaignAction(campaign.id, 'pause')}
-                  >
-                    Pausar
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sending}
+                      onClick={() => void campaignAction(campaign.id, 'pause')}
+                    >
+                      Pausar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sending}
+                      onClick={() => void campaignAction(campaign.id, 'cancel')}
+                    >
+                      Cancelar campanha
+                    </Button>
+                  </>
                 ) : campaign.status === 'paused' ? (
-                  <Button
-                    size="sm"
-                    disabled={sending}
-                    onClick={() => void campaignAction(campaign.id, 'resume')}
-                  >
-                    Retomar
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      disabled={sending}
+                      onClick={() => void campaignAction(campaign.id, 'resume')}
+                    >
+                      Retomar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={sending}
+                      onClick={() => void campaignAction(campaign.id, 'cancel')}
+                    >
+                      Cancelar campanha
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </article>
