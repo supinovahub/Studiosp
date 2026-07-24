@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import {
   parseReactivationFile,
+  ReactivationImportError,
   type ReactivationRow,
 } from '@/lib/reactivation/parse';
 
@@ -21,6 +22,8 @@ export async function GET() {
     if (error) throw error;
     return NextResponse.json({ campaigns: data ?? [] });
   } catch (error) {
+    if (error instanceof ReactivationImportError)
+      return NextResponse.json({ error: error.message }, { status: 400 });
     return toErrorResponse(error);
   }
 }

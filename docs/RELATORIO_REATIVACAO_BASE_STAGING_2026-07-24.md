@@ -47,6 +47,9 @@
 - sucesso, falha de rede e respostas inválidas do servidor agora aparecem em
   um aviso visível, com confirmação explícita quando o rascunho é criado;
 - foram adicionados dois testes automatizados para o CSV real reportado.
+- CSVs exportados pelo Excel em Windows-1252 também são reconhecidos;
+- erros de estrutura da planilha retornam validação HTTP 400 com mensagem
+  orientativa, em vez de erro interno HTTP 500.
 
 ## Pendência de homologação real
 

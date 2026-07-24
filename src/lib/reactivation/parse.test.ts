@@ -68,6 +68,23 @@ describe('parseReactivationFile', () => {
     });
   });
 
+  it('aceita CSV do Excel em Windows-1252', async () => {
+    const csv =
+      'nome;número;email;objetivo principal;valor entrada\r\n' +
+      'Ana;5527999990000;;moradia;80000\r\n';
+    const bytes = Buffer.from(csv, 'latin1');
+    const file = new File([bytes], 'excel.csv', { type: 'text/csv' });
+
+    const [row] = await parseReactivationFile(file);
+
+    expect(row).toMatchObject({
+      name: 'Ana',
+      phoneE164: '+5527999990000',
+      objective: 'live',
+      entryValue: 80000,
+    });
+  });
+
   it('rejeita telefone em notação científica com orientação clara', async () => {
     const file = new File(
       [

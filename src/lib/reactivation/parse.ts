@@ -1,5 +1,12 @@
 import ExcelJS from 'exceljs';
 import { Readable } from 'node:stream';
+
+export class ReactivationImportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ReactivationImportError';
+  }
+}
 export type ReactivationRow = {
   rowNumber: number;
   name: string | null;
@@ -53,25 +60,34 @@ export async function parseReactivationFile(file: File) {
   const wb = new ExcelJS.Workbook();
   const bytes = Buffer.from(await file.arrayBuffer());
   if (file.name.toLowerCase().endsWith('.csv')) {
-    const firstLine = bytes.toString('utf8').split(/\r?\n/, 1)[0] ?? '';
+    const utf8 = bytes.toString('utf8');
+    const csvText = utf8.includes('\uFFFD')
+      ? new TextDecoder('windows-1252').decode(bytes)
+      : utf8;
+    const firstLine = csvText.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0] ?? '';
     const delimiter =
       (firstLine.match(/;/g)?.length ?? 0) >
       (firstLine.match(/,/g)?.length ?? 0)
         ? ';'
         : ',';
-    await wb.csv.read(Readable.from(bytes), {
+    await wb.csv.read(Readable.from([csvText]), {
       parserOptions: { delimiter },
     });
   } else await wb.xlsx.load(bytes as never);
   const sheet = wb.worksheets[0];
-  if (!sheet) throw new Error('A planilha não possui aba legível.');
+  if (!sheet)
+    throw new ReactivationImportError(
+      'A planilha não possui uma aba legível.'
+    );
   const headers = new Map<number, string>();
   sheet.getRow(1).eachCell((c, i) => {
     const f = field(c.text);
     if (f) headers.set(i, f);
   });
   if (![...headers.values()].includes('phone'))
-    throw new Error('A coluna “Número” é obrigatória.');
+    throw new ReactivationImportError(
+      'A coluna “Número” é obrigatória. Confira o cabeçalho e tente novamente.'
+    );
   const out: ReactivationRow[] = [];
   sheet.eachRow((r, rowNumber) => {
     if (rowNumber === 1) return;
