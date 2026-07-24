@@ -66,3 +66,17 @@
 - A ação `Aprovar e cadastrar` ficou habilitada.
 - A aprovação não foi acionada durante a homologação; nenhum novo
   empreendimento foi gravado no catálogo operacional.
+
+## Correção de UX posterior
+
+- O agente deixou de expandir dentro da página de Empreendimentos e passou a
+  abrir em modal sobreposto de tela inteira.
+- A página ao fundo fica bloqueada e não é mais comprimida pelo preview.
+- Cabeçalho e rodapé permanecem visíveis; somente o conteúdo central possui
+  rolagem.
+- A ação `Aprovar e cadastrar` permanece fixa no rodapé.
+- A aprovação ganhou uma segunda confirmação com a quantidade de itens que
+  serão cadastrados.
+- Textos longos agora quebram dentro dos cartões, sem gerar vazamento ou rolagem
+  horizontal.
+- Campos técnicos do preview receberam nomes visíveis em português.
