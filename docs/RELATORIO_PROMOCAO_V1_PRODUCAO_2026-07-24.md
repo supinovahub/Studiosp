@@ -64,3 +64,8 @@ As mudanças são aditivas. O rollback recomendado é reverter o código para o 
 - a auditoria de dependências aponta vulnerabilidades que exigem avaliação de compatibilidade antes de atualização forçada;
 - testes reais de áudio e redistribuição para um segundo corretor exigem uma segunda identidade controlada.
 
+## Ajuste posterior ao deploy
+
+- removido do repositório o componente legado da aba “Imóveis” em Agentes de IA;
+- preservados o catálogo oficial em Empreendimentos, suas APIs e seus dados;
+- a configuração da IA permanece somente com Testes, Configuração e Uso, conforme a permissão do usuário.
