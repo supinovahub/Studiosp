@@ -1501,3 +1501,13 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - atualizar o documento antes de implementar uma mudança relevante de escopo;
 - ligar futuras especificações de tela, banco e automação às seções correspondentes;
 - evitar duplicar estas regras em uma skill; uma futura skill do Studiosp deverá consultar este documento como fonte de verdade.
+
+## 19. Estado da promoção da V1 em 24/07/2026
+
+- a V1 homologada em `codex/v1-platform` foi promovida para `main`;
+- as migrações finais foram aplicadas ao projeto Supabase Studiosp de produção;
+- o inbox passou a projetar somente mensagens da conexão atual do WhatsApp, sem apagar o histórico anterior;
+- o scheduler foi validado no staging e configurado com credenciais próprias em produção;
+- a oferta inicial ao corretor inclui o resumo do interesse do lead;
+- o agente documental permanece dentro de Empreendimentos e exige preview e aprovação do dono antes da persistência;
+- o relatório técnico da promoção está em `docs/RELATORIO_PROMOCAO_V1_PRODUCAO_2026-07-24.md`.
