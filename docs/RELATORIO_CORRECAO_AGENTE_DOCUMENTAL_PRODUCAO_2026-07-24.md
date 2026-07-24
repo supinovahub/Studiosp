@@ -28,6 +28,8 @@
   `preview_approved` na auditoria.
 - Aumento do tempo máximo das rotas de processamento documental para suportar
   documentos extensos.
+- Retomada explícita de lotes em estado `falhou`, reiniciando somente as fontes
+  com falha e preservando fontes já concluídas.
 
 ## Segurança preservada
 

@@ -125,6 +125,8 @@ export function DocumentAnalysisPanel({
       setError(null);
       const response = await fetch('/api/studiosp/document-analysis/process', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId: id }),
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -401,7 +403,8 @@ export function DocumentAnalysisPanel({
                     </li>
                   ))}
                 </ul>
-                {ACTIVE_STATES.has(selected.batch.status) ? (
+                {ACTIVE_STATES.has(selected.batch.status) ||
+                selected.batch.status === 'failed' ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -417,7 +420,9 @@ export function DocumentAnalysisPanel({
                       )
                     }
                   >
-                    Retomar processamento
+                    {selected.batch.status === 'failed'
+                      ? 'Tentar novamente'
+                      : 'Retomar processamento'}
                   </Button>
                 ) : null}
               </div>
