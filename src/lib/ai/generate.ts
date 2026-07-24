@@ -19,6 +19,8 @@ export interface GenerateArgs {
   maxOutputTokens?: number;
   /** Ask providers that support it to enforce a JSON object response. */
   jsonMode?: boolean;
+  /** Workflow-specific provider timeout; ordinary replies keep the global cap. */
+  requestTimeoutMs?: number;
 }
 
 /**
@@ -30,7 +32,7 @@ export async function generateReply(
   args: GenerateArgs
 ): Promise<GenerateResult> {
   const { config, systemPrompt, messages } = args;
-  const timeoutMs = aiRequestTimeoutMs();
+  const timeoutMs = args.requestTimeoutMs ?? aiRequestTimeoutMs();
   const providerArgs = {
     apiKey: config.apiKey,
     model: config.model,

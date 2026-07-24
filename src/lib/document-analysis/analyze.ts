@@ -106,6 +106,7 @@ export async function analyzeSanitizedDocument(args: {
       ],
       maxOutputTokens: 4096,
       jsonMode: true,
+      requestTimeoutMs: 120_000,
     });
     results.push({
       parsed: extractJson(generated.text),
