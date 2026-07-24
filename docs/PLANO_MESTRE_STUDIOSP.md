@@ -8,6 +8,9 @@ Contrato técnico do banco: [Modelo de Dados Executável da V1](./MODELO_DADOS_V
 
 Roteiro de validação com contas e integrações reais: [Homologação da V1](./HOMOLOGACAO_V1_STUDIOSP.md).
 
+Especificação da importação segura de conversas antigas:
+[Importação de histórico do WhatsApp](./IMPORTACAO_HISTORICO_WHATSAPP.md).
+
 ## Estado da implementação
 
 A V1 está implementada na branch de homologação `codex/v1-platform`. Produção e `main` permanecem preservadas. A promoção depende da conclusão do roteiro de homologação e de autorização expressa do dono.
@@ -1527,5 +1530,25 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - após a resposta, qualificação, matching, agendamento e fila de corretores
   reutilizam o núcleo operacional da IA-SDR;
 - somente o dono administra importações e campanhas;
-- desenvolvimento e homologação acontecem na branch
+- desenvolvimento e homologação acontecem na branch integrada
   `feature/reactivacao-leads` e no Supabase staging.
+
+## 21. Importação de histórico do WhatsApp
+
+### Confirmado em 24/07/2026
+
+- a importação é uma ação do Dono em **Configurações**, não uma carga técnica
+  executada fora do produto;
+- o JSONL passa por upload privado, prévia obrigatória e confirmação explícita;
+- contatos reconhecidos no backup entram com automações suprimidas;
+- mensagens novas desses contatos continuam visíveis no inbox, mas não acionam
+  IA, fluxos, follow-ups ou criação automática de oportunidade;
+- mensagens importadas são dados históricos, nunca instruções ou fonte de
+  condição comercial atual;
+- o contexto da IA possui uma fronteira explícita por conversa;
+- a importação é idempotente, retomável e não cria oportunidades;
+- a reativação de contatos é uma feature separada e não faz parte desta
+  entrega;
+- a implementação foi integrada à branch `feature/reactivacao-leads` e
+  permanece no Supabase Staging até homologação e autorização expressa para
+  promoção.

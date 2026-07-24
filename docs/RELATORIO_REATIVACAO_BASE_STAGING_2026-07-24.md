@@ -60,6 +60,19 @@
 - a interface deixou de ocultar a mensagem devolvida pela API e agora informa
   o motivo específico, como URL inválida, token rejeitado ou falha da UAZAPI.
 
+## Integração com a importação de histórico do WhatsApp
+
+- a branch `feature/whatsapp-history-import` foi integrada à
+  `feature/reactivacao-leads`;
+- os fluxos de reativação e importação histórica permanecem separados na
+  interface e no modelo operacional;
+- contatos reconhecidos no histórico mantêm automações suprimidas até uma
+  decisão operacional explícita;
+- cron, contexto da IA, webhooks e navegação administrativa foram combinados
+  preservando os comportamentos das duas features;
+- os nomes locais das migrations foram alinhados às versões já registradas no
+  Supabase Staging, evitando reexecução de migrations previamente aplicadas.
+
 ## Pendência de homologação real
 
 A execução com WhatsApp deve usar exclusivamente o número controlado autorizado.

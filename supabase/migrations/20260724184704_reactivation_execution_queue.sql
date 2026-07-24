@@ -78,4 +78,3 @@ begin
 end $$;
 revoke all on function public.studiosp_claim_reactivation_touches(text,integer) from public,anon,authenticated;
 grant execute on function public.studiosp_claim_reactivation_touches(text,integer) to service_role;
-

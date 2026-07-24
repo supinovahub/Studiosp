@@ -1,4 +1,6 @@
--- Feature isolada e expansiva para campanhas de reativacao.
+-- Migração já aplicada ao staging pela feature isolada de reativação.
+-- Mantida aqui com a versão registrada remotamente para que outras
+-- features possam evoluir o mesmo banco sem reexecutar ou reparar o histórico.
 create table public.reactivation_campaigns (
   id uuid primary key default gen_random_uuid(),
   account_id uuid not null references public.accounts(id) on delete cascade,

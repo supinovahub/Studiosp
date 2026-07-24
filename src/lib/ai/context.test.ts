@@ -4,12 +4,19 @@ import { buildConversationContext } from './context';
 
 /** Minimal fake matching the query chain in buildConversationContext:
  *  from().select().eq().in().order().limit() → { data, error }. */
-function fakeDb(rows: unknown[]): SupabaseClient {
+function fakeDb(
+  rows: unknown[],
+  onSince?: (column: string, value: string) => void
+): SupabaseClient {
   const chain = {
     from: () => chain,
     select: () => chain,
     eq: () => chain,
     in: () => chain,
+    gte: (column: string, value: string) => {
+      onSince?.(column, value);
+      return chain;
+    },
     order: () => chain,
     limit: () => Promise.resolve({ data: rows, error: null }),
   };
@@ -50,5 +57,19 @@ describe('buildConversationContext', () => {
       'conv-1'
     );
     expect(out).toEqual([{ role: 'user', content: 'real' }]);
+  });
+
+  it('exclui mensagens anteriores ao início permitido do contexto', async () => {
+    let filter: [string, string] | null = null;
+    const since = '2026-07-24T12:00:00.000Z';
+    await buildConversationContext(
+      fakeDb([], (column, value) => {
+        filter = [column, value];
+      }),
+      'conv-1',
+      20,
+      since
+    );
+    expect(filter).toEqual(['created_at', since]);
   });
 });

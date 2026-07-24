@@ -5,6 +5,7 @@ import {
   Bot,
   ChevronRight,
   Clock3,
+  DatabaseBackup,
   KeyRound,
   MessageSquare,
   Settings,
@@ -38,6 +39,14 @@ const settings = [
     description: 'Conexão, QR Code, webhook e provedor ativo',
     icon: MessageSquare,
     managerOnly: true,
+  },
+  {
+    href: '/configuracoes/importacao-historico',
+    title: 'Importar histórico do WhatsApp',
+    description: 'Prévia, proteção contra IA e relatório da importação',
+    icon: DatabaseBackup,
+    managerOnly: true,
+    ownerOnly: true,
   },
   {
     href: '/settings?tab=members',
@@ -107,7 +116,13 @@ export function SettingsHubPage() {
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         {settings
-          .filter((item) => manager || !item.managerOnly)
+          .filter(
+            (item) =>
+              (manager || !item.managerOnly) &&
+              (!('ownerOnly' in item) ||
+                !item.ownerOnly ||
+                data.role === 'owner')
+          )
           .map((item) => (
             <Link
               key={item.title}
