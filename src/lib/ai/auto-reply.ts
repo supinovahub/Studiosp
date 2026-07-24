@@ -76,7 +76,9 @@ export async function dispatchInboundToAiReply(
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
-      .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
+      .select(
+        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_context_started_at'
+      )
       .eq('id', conversationId)
       .maybeSingle();
     if (convErr || !conv) return;
@@ -86,7 +88,12 @@ export async function dispatchInboundToAiReply(
     // below (this read can race a concurrent inbound).
     if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return;
 
-    const messages = await buildConversationContext(db, conversationId);
+    const messages = await buildConversationContext(
+      db,
+      conversationId,
+      undefined,
+      conv.ai_context_started_at
+    );
     if (messages.length === 0) return;
 
     const { data: triggerMessage } = await db

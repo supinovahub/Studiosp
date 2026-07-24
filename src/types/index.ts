@@ -110,6 +110,12 @@ export interface Contact {
   avatar_url?: string;
   created_at: string;
   updated_at: string;
+  /** Trava central de execução automática. Históricos importados ficam
+   *  suprimidos até uma ação futura e explícita de reativação. */
+  automation_status?: 'enabled' | 'suppressed';
+  automation_block_reason?: string | null;
+  automation_blocked_at?: string | null;
+  automation_blocked_by_import_id?: string | null;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the
    *  Inbox conversation list, for tag filtering). Absent otherwise. */
   tags?: Tag[];
@@ -182,6 +188,8 @@ export interface Conversation {
   ai_autoreply_disabled?: boolean;
   ai_reply_count?: number;
   ai_handoff_summary?: string | null;
+  history_import_id?: string | null;
+  ai_context_started_at?: string | null;
 }
 
 // ============================================================
@@ -257,6 +265,11 @@ export interface Message {
   ai_generated?: boolean;
   /** Transcrição concluída associada a uma mensagem de áudio. */
   transcription?: string;
+  /** Mensagens históricas são visíveis, mas nunca entram como instrução
+   *  ou gatilho automático. */
+  history_import_id?: string | null;
+  is_historical?: boolean;
+  history_source_line?: number | null;
 }
 
 export type ReactionActor = 'customer' | 'agent';

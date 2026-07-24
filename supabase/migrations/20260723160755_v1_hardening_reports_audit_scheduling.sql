@@ -163,4 +163,3 @@ alter table public.appointments
     broker_profile_id is not null
     and status in ('reserved', 'broker_confirmed', 'reschedule_requested')
   );
-

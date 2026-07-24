@@ -259,6 +259,22 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         .eq('id', followup.id);
       continue;
     }
+    const { data: contactControl } = await db
+      .from('contacts')
+      .select('automation_status')
+      .eq('account_id', followup.account_id)
+      .eq('id', opportunity.contact_id)
+      .maybeSingle();
+    if (contactControl?.automation_status === 'suppressed') {
+      await db
+        .from('followup_executions')
+        .update({
+          status: 'cancelled',
+          cancel_reason: 'contact_automation_suppressed',
+        })
+        .eq('id', followup.id);
+      continue;
+    }
     const messages = [
       'Oi! Passando para saber se você conseguiu ver minha última mensagem 😊',
       'Posso continuar te ajudando a encontrar oportunidades que façam sentido para o seu momento?',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { Message, MessageReaction } from '@/types';
 import {
@@ -12,6 +12,7 @@ import {
   MapPin,
   LayoutTemplate,
   ImageOff,
+  History,
   CornerDownLeft,
   Sparkles,
 } from 'lucide-react';
@@ -63,43 +64,45 @@ function MediaUnavailable({
 }
 
 function MediaImage({ url, alt }: { url: string; alt: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  const loadImage = useCallback(async () => {
-    if (!url) return;
-
-    // Proxy URLs need auth fetch to create blob URL
-    if (url.startsWith('/api/whatsapp/media/')) {
-      try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Falha ao carregar mídia');
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        setSrc(blobUrl);
-      } catch {
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      setSrc(url);
-      setLoading(false);
-    }
-  }, [url]);
+  const isProxyUrl = url.startsWith('/api/whatsapp/media/');
+  const [proxyImage, setProxyImage] = useState<{
+    sourceUrl: string;
+    blobUrl: string | null;
+    failed: boolean;
+  }>({ sourceUrl: '', blobUrl: null, failed: false });
 
   useEffect(() => {
-    loadImage();
-    return () => {
-      if (src?.startsWith('blob:')) {
-        URL.revokeObjectURL(src);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadImage]);
+    if (!isProxyUrl) return;
 
-  if (error) {
+    const controller = new AbortController();
+    let blobUrl: string | null = null;
+
+    void fetch(url, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('Falha ao carregar mídia');
+        return response.blob();
+      })
+      .then((blob) => {
+        blobUrl = URL.createObjectURL(blob);
+        setProxyImage({ sourceUrl: url, blobUrl, failed: false });
+      })
+      .catch((requestError) => {
+        if (
+          requestError instanceof DOMException &&
+          requestError.name === 'AbortError'
+        ) {
+          return;
+        }
+        setProxyImage({ sourceUrl: url, blobUrl: null, failed: true });
+      });
+
+    return () => {
+      controller.abort();
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [isProxyUrl, url]);
+
+  if (isProxyUrl && proxyImage.sourceUrl === url && proxyImage.failed) {
     return (
       <div className="bg-muted flex h-40 w-60 items-center justify-center rounded-lg">
         <ImageOff className="text-muted-foreground h-8 w-8" />
@@ -107,7 +110,7 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
     );
   }
 
-  if (loading) {
+  if (isProxyUrl && proxyImage.sourceUrl !== url) {
     return (
       <div className="bg-muted flex h-40 w-60 items-center justify-center rounded-lg">
         <div className="border-primary h-5 w-5 animate-spin rounded-full border-2 border-t-transparent" />
@@ -117,10 +120,12 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
 
   return (
     <img
-      src={src ?? ''}
+      src={isProxyUrl ? (proxyImage.blobUrl ?? '') : url}
       alt={alt}
       className="max-h-64 max-w-60 rounded-lg object-cover"
-      onError={() => setError(true)}
+      onError={() =>
+        setProxyImage({ sourceUrl: url, blobUrl: null, failed: true })
+      }
     />
   );
 }
@@ -310,6 +315,17 @@ export function MessageBubble({
             : 'bg-muted text-foreground rounded-bl-md'
         )}
       >
+        {message.is_historical ? (
+          <span
+            className={cn(
+              'mb-1.5 inline-flex items-center gap-1 text-[10px] font-semibold tracking-wide uppercase',
+              isAgent ? 'text-primary-foreground/70' : 'text-muted-foreground'
+            )}
+          >
+            <History className="size-3" />
+            Histórico importado
+          </span>
+        ) : null}
         {reply && (
           <ReplyQuote
             authorLabel={reply.authorLabel}
