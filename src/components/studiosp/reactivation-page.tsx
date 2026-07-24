@@ -163,6 +163,20 @@ export function ReactivationPage() {
           .filter(Boolean)
           .join(' ')
       );
+    } else if (
+      Array.isArray(payload.deliveryFailures) &&
+      payload.deliveryFailures.length
+    ) {
+      setError(
+        payload.deliveryFailures
+          .map((failure: { step_number?: number; last_error?: string }) => {
+            const cadenceDay = [0, 2, 5, 9][
+              Math.max(0, Number(failure.step_number ?? 1) - 1)
+            ];
+            return `D${cadenceDay}: ${failure.last_error || 'falha no envio'}`;
+          })
+          .join(' ')
+      );
     } else if (action === 'activate' || action === 'resume') {
       setSuccess(
         payload.sent > 0

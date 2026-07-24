@@ -178,7 +178,17 @@ export async function POST(
       }),
     ]);
     const sent = await sendDueReactivationTouches(db);
-    return NextResponse.json({ queued, sent, failures });
+    const { data: deliveryFailures } = await db
+      .from('reactivation_touches')
+      .select('step_number,last_error')
+      .eq('campaign_id', id)
+      .not('last_error', 'is', null);
+    return NextResponse.json({
+      queued,
+      sent,
+      failures,
+      deliveryFailures: deliveryFailures ?? [],
+    });
   } catch (error) {
     return toErrorResponse(error);
   }

@@ -103,6 +103,9 @@ Correções:
 - cadência futura processada diariamente pelo Cron de produção;
 - disparo da reativação mantido independente dos interruptores “Habilitar
   assistente de IA” e “Resposta automática”;
+- números controlados de teste liberados em produção por
+  `OUTBOUND_TEST_NUMBERS`, sem habilitar envios irrestritos;
+- falhas do provedor ou da proteção de saída exibidas na própria campanha;
 - campanhas em rascunho podem ser editadas e excluídas;
 - campanhas ativas podem ser pausadas ou canceladas;
 - campanhas pausadas podem ser retomadas ou canceladas;

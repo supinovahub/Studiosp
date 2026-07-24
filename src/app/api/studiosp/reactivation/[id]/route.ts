@@ -107,7 +107,19 @@ export async function PATCH(
     });
     const sent =
       action === 'resume' ? await sendDueReactivationTouches(db) : undefined;
-    return NextResponse.json({ campaign: data, sent });
+    const { data: deliveryFailures } =
+      action === 'resume'
+        ? await db
+            .from('reactivation_touches')
+            .select('step_number,last_error')
+            .eq('campaign_id', id)
+            .not('last_error', 'is', null)
+        : { data: [] };
+    return NextResponse.json({
+      campaign: data,
+      sent,
+      deliveryFailures: deliveryFailures ?? [],
+    });
   } catch (error) {
     return toErrorResponse(error);
   }
