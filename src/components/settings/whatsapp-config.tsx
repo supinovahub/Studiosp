@@ -50,6 +50,7 @@ interface ConnectResult {
   phone?: string;
   qrcode?: string;
   paircode?: string;
+  already_connected?: boolean;
   error?: string;
 }
 
@@ -249,7 +250,9 @@ export function WhatsAppConfig() {
       setConnectResult(result);
       setConnectionStatus(result.connected ? 'connected' : 'connecting');
       toast.success(
-        result.connected
+        result.already_connected
+          ? 'O número atual continua conectado. O QR Code só é gerado para uma instância desconectada.'
+          : result.connected
           ? 'Número conectado.'
           : result.paircode
             ? 'Código de pareamento gerado.'
