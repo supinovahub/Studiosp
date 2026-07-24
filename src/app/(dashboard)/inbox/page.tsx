@@ -56,6 +56,9 @@ function InboxPageInner() {
   const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(
     null
   );
+  const [whatsappConnectionKey, setWhatsappConnectionKey] = useState<
+    string | null
+  >(null);
   /**
    * Bumped whenever we want children (ConversationList, MessageThread)
    * to refetch from the DB — used as a safety net against missed
@@ -134,6 +137,7 @@ function InboxPageInner() {
   // Also self-heals if a realtime event was missed: callers can invoke
   // this whenever they reference a conversation id they don't recognise.
   const hydrateConversation = useCallback(async (convId: string) => {
+    if (!whatsappConnectionKey) return;
     if (hydratingConvIdsRef.current.has(convId)) return;
     hydratingConvIdsRef.current.add(convId);
     try {
@@ -142,6 +146,7 @@ function InboxPageInner() {
         .from('conversations')
         .select(CONVERSATION_SELECT)
         .eq('id', convId)
+        .eq('whatsapp_connection_key', whatsappConnectionKey)
         .maybeSingle();
       if (error) {
         // Supabase errors have non-enumerable properties — log fields
@@ -175,7 +180,7 @@ function InboxPageInner() {
     } finally {
       hydratingConvIdsRef.current.delete(convId);
     }
-  }, []);
+  }, [whatsappConnectionKey]);
 
   // Check WhatsApp connection status on mount
   useEffect(() => {
@@ -207,11 +212,22 @@ function InboxPageInner() {
 
       const { data } = await supabase
         .from('whatsapp_config')
-        .select('status')
+        .select('id, status, provider, phone_number_id, uazapi_instance_id')
         .eq('account_id', accountId)
         .maybeSingle();
 
       setWhatsappConnected(data?.status === 'connected');
+      if (!data) {
+        setWhatsappConnectionKey(null);
+        return;
+      }
+      const providerIdentity =
+        data.provider === 'uazapi'
+          ? data.uazapi_instance_id
+          : data.phone_number_id;
+      setWhatsappConnectionKey(
+        `${data.provider}:${providerIdentity || data.id}`
+      );
     };
 
     checkConnection();
@@ -221,6 +237,12 @@ function InboxPageInner() {
   const handleMessageEvent = useCallback(
     (event: { eventType: string; new: Message; old: Partial<Message> }) => {
       const newMsg = event.new;
+      if (
+        !whatsappConnectionKey ||
+        newMsg.whatsapp_connection_key !== whatsappConnectionKey
+      ) {
+        return;
+      }
 
       if (event.eventType === 'INSERT') {
         // Add to messages if it belongs to active conversation
@@ -277,7 +299,7 @@ function InboxPageInner() {
         );
       }
     },
-    [activeConversation, hydrateConversation]
+    [activeConversation, hydrateConversation, whatsappConnectionKey]
   );
 
   // Handle realtime conversation events
@@ -288,6 +310,12 @@ function InboxPageInner() {
       old: Partial<Conversation>;
     }) => {
       const conv = event.new;
+      if (
+        !whatsappConnectionKey ||
+        conv.whatsapp_connection_key !== whatsappConnectionKey
+      ) {
+        return;
+      }
 
       if (event.eventType === 'INSERT') {
         // Prepend immediately for snappy UX so the new conv shows in the
@@ -337,7 +365,7 @@ function InboxPageInner() {
         }
       }
     },
-    [activeConversation, hydrateConversation]
+    [activeConversation, hydrateConversation, whatsappConnectionKey]
   );
 
   // Subscribe to realtime. The `isConnected` flag below feeds the
@@ -583,6 +611,7 @@ function InboxPageInner() {
           )}
         >
           <ConversationList
+            whatsappConnectionKey={whatsappConnectionKey}
             activeConversationId={activeConversation?.id ?? null}
             onSelect={handleSelectConversation}
             conversations={conversations}
@@ -608,6 +637,7 @@ function InboxPageInner() {
           )}
         >
           <MessageThread
+            whatsappConnectionKey={whatsappConnectionKey}
             conversation={activeConversation}
             contact={activeContact}
             messages={messages}

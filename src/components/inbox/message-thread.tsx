@@ -66,6 +66,7 @@ function renderTemplateBody(body: string, params: string[]): string {
 }
 
 interface MessageThreadProps {
+  whatsappConnectionKey: string | null;
   conversation: Conversation | null;
   contact: Contact | null;
   messages: Message[];
@@ -177,6 +178,7 @@ const DOODLE_BG_CLASSES =
   "bg-background bg-[url('/inbox-doodle.svg')] bg-repeat";
 
 export function MessageThread({
+  whatsappConnectionKey,
   conversation,
   contact,
   messages,
@@ -300,7 +302,7 @@ export function MessageThread({
   // arriving while the thread is open don't trigger a full refetch —
   // they only flip hasUnread, which only the reset effect listens to.
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !whatsappConnectionKey) return;
 
     const supabase = createClient();
     let cancelled = false;
@@ -312,6 +314,7 @@ export function MessageThread({
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
+        .eq('whatsapp_connection_key', whatsappConnectionKey)
         .order('created_at', { ascending: true });
 
       if (cancelled) return;
@@ -363,7 +366,7 @@ export function MessageThread({
     // the realtime channel reconnects or the tab regains focus —
     // realtime is best-effort and any message events sent while the WS
     // was disconnected or throttled are otherwise lost.
-  }, [conversationId, resyncToken]);
+  }, [conversationId, resyncToken, whatsappConnectionKey]);
 
   // Reactions fetch — pulls the current state from the DB. Kept separate
   // from the channel subscription below so a `resyncToken` bump just
