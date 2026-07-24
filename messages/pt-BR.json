@@ -31,7 +31,7 @@
     "unreadNotifications": "{count} {count, plural, =1 {notificação não lida} other {notificações não lidas}}",
     "roleOwner": "Proprietário",
     "roleAdmin": "Administrador",
-    "roleAgent": "Atendente",
+    "roleAgent": "Corretor",
     "roleViewer": "Visualizador",
     "closeMenu": "Fechar menu",
     "defaultUser": "Usuário",
@@ -905,9 +905,9 @@
         "unknown": "{id} (campo desconhecido)"
       },
       "agents": {
-        "select": "Selecione um agente…",
-        "placeholder": "ID do agente",
-        "unknown": "{id} (agente desconhecido)"
+        "select": "Selecione um corretor…",
+        "placeholder": "ID do corretor",
+        "unknown": "{id} (corretor desconhecido)"
       },
       "pipelines": {
         "pipelineLabel": "Funil",
@@ -940,9 +940,9 @@
         "modeLabel": "Modo",
         "modes": {
           "round_robin": "Rodada",
-          "specific": "Agente específico"
+          "specific": "Corretor específico"
         },
-        "agentLabel": "Atendente",
+        "agentLabel": "Corretor",
         "fieldLabel": "Campo",
         "valueLabel": "Valor",
         "placeholderValue": "Texto ou {{ vars.x }} / {{ message.text }}",
@@ -1412,7 +1412,7 @@
     "roles": {
       "admin": "Administrador",
       "adminHint": "Gerenciar membros + tudo",
-      "agent": "Atendente",
+      "agent": "Corretor",
       "agentHint": "Usar recursos; sem configurações",
       "viewer": "Visualizador",
       "viewerHint": "Somente leitura em todo o aplicativo",

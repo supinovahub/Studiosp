@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { decrypt } from '@/lib/whatsapp/encryption';
-import { configureUazapiWebhook, connectUazapi } from '@/lib/whatsapp/uazapi';
+import {
+  configureUazapiWebhook,
+  connectUazapi,
+  getUazapiStatus,
+} from '@/lib/whatsapp/uazapi';
 
 export async function POST(request: Request) {
   try {
@@ -16,10 +20,13 @@ export async function POST(request: Request) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_id, role')
+      .select('account_id, account_role')
       .eq('user_id', user.id)
       .maybeSingle();
-    if (!profile?.account_id || !['owner', 'admin'].includes(profile.role)) {
+    if (
+      !profile?.account_id ||
+      !['owner', 'admin'].includes(profile.account_role)
+    ) {
       return NextResponse.json(
         {
           error:
@@ -59,6 +66,27 @@ export async function POST(request: Request) {
     }
 
     const token = decrypt(config.access_token);
+    const currentStatus = await getUazapiStatus({
+      baseUrl: config.uazapi_base_url,
+      token,
+    });
+    if (currentStatus.connected || currentStatus.loggedIn) {
+      return NextResponse.json({
+        connected: true,
+        logged_in: currentStatus.loggedIn,
+        status: currentStatus.instance.status,
+        phone: currentStatus.phone,
+        qrcode: null,
+        paircode: null,
+        instance: {
+          id: currentStatus.instance.id,
+          name: currentStatus.instance.name,
+          profile_name: currentStatus.instance.profileName,
+        },
+        webhook_configured: false,
+        already_connected: true,
+      });
+    }
     const status = await connectUazapi(
       { baseUrl: config.uazapi_base_url, token },
       phone

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentAccount, toErrorResponse } from '@/lib/auth/account';
+import {
+  ForbiddenError,
+  getCurrentAccount,
+  toErrorResponse,
+} from '@/lib/auth/account';
+import { canAccessStudiospView } from '@/lib/studiosp/access';
 import type { StudiospLead } from '@/lib/studiosp/types';
 
 // A resposta agrega projeções heterogêneas de várias tabelas.
@@ -23,6 +28,9 @@ export async function GET(request: NextRequest) {
     const view = request.nextUrl.searchParams.get('view') ?? 'overview';
     const id = request.nextUrl.searchParams.get('id');
     const { supabase, accountId, role, userId } = ctx;
+    if (!canAccessStudiospView(role, view)) {
+      throw new ForbiddenError('Esta área é exclusiva da gestão.');
+    }
 
     const profileResult = await supabase
       .from('profiles')
@@ -44,6 +52,11 @@ export async function GET(request: NextRequest) {
       : { data: null, error: null };
     if (currentBrokerResult.error) throw currentBrokerResult.error;
     const brokerProfileId = currentBrokerResult.data?.id ?? null;
+    if (role === 'agent' && !brokerProfileId) {
+      throw new ForbiddenError(
+        'Seu usuário ainda não possui um perfil de corretor ativo.'
+      );
+    }
 
     const response: Record<string, unknown> = {
       view,
@@ -60,7 +73,6 @@ export async function GET(request: NextRequest) {
       'lead',
       'agenda',
       'followups',
-      'reports',
       'attention',
     ]);
 
@@ -75,7 +87,7 @@ export async function GET(request: NextRequest) {
         .select('*')
         .eq('account_id', accountId)
         .order('updated_at', { ascending: false })
-        .limit(view === 'lead' ? 1 : 500);
+        .limit(view === 'lead' ? 1 : 200);
       if (view === 'lead' && id)
         opportunitiesQuery = opportunitiesQuery.eq('id', id);
       if (role === 'agent' && brokerProfileId) {
@@ -135,6 +147,9 @@ export async function GET(request: NextRequest) {
         .limit(100);
       if (view === 'lead' && id)
         attentionQuery = attentionQuery.eq('opportunity_id', id);
+      if (role === 'agent' && profileId) {
+        attentionQuery = attentionQuery.eq('assigned_profile_id', profileId);
+      }
       const attention = assertQuery<Row[]>(await attentionQuery, 'pendências');
       const leadMap = new Map(leads.map((lead) => [lead.id, lead]));
       response.attention = attention.map((item) => ({
@@ -171,13 +186,13 @@ export async function GET(request: NextRequest) {
       }));
     }
 
-    if (['overview', 'lead', 'reports'].includes(view)) {
+    if (['overview', 'lead'].includes(view)) {
       let eventsQuery = supabase
         .from('opportunity_events')
         .select('*')
         .eq('account_id', accountId)
         .order('occurred_at', { ascending: false })
-        .limit(view === 'reports' ? 500 : 100);
+        .limit(100);
       if (view === 'lead' && id)
         eventsQuery = eventsQuery.eq('opportunity_id', id);
       response.events = assertQuery<Row[]>(
@@ -307,6 +322,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (view === 'developments') {
+      let developmentsQuery = supabase
+        .from('developments')
+        .select('*')
+        .eq('account_id', accountId);
+      developmentsQuery =
+        role === 'agent'
+          ? developmentsQuery.eq('status', 'published')
+          : developmentsQuery.neq('status', 'archived');
+
       const [developerResult, neighborhoodResult, developmentResult] =
         await Promise.all([
           supabase
@@ -321,12 +345,7 @@ export async function GET(request: NextRequest) {
             .eq('account_id', accountId)
             .eq('is_active', true)
             .order('name'),
-          supabase
-            .from('developments')
-            .select('*')
-            .eq('account_id', accountId)
-            .neq('status', 'archived')
-            .order('updated_at', { ascending: false }),
+          developmentsQuery.order('updated_at', { ascending: false }),
         ]);
       const developmentRows = assertQuery<Row[]>(
         developmentResult,
@@ -383,6 +402,44 @@ export async function GET(request: NextRequest) {
     }
 
     if (view === 'team') {
+      let brokerQuery = supabase
+        .from('broker_profiles')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('display_name');
+      let profilesQuery = supabase
+        .from('profiles')
+        .select('id, full_name, email, account_role, avatar_url')
+        .eq('account_id', accountId)
+        .order('full_name');
+      let windowsQuery = supabase
+        .from('guaranteed_windows')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('is_active', true)
+        .order('weekday');
+      let offersQuery = supabase
+        .from('assignment_offers')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('offered_at', { ascending: false })
+        .limit(200);
+      let teamAppointmentsQuery = supabase
+        .from('appointments')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('starts_at', { ascending: false })
+        .limit(200);
+      if (role === 'agent' && brokerProfileId && profileId) {
+        brokerQuery = brokerQuery.eq('id', brokerProfileId);
+        profilesQuery = profilesQuery.eq('id', profileId);
+        windowsQuery = windowsQuery.eq('broker_profile_id', brokerProfileId);
+        offersQuery = offersQuery.eq('broker_profile_id', brokerProfileId);
+        teamAppointmentsQuery = teamAppointmentsQuery.eq(
+          'broker_profile_id',
+          brokerProfileId
+        );
+      }
       const [
         brokerResult,
         profilesResult,
@@ -391,28 +448,10 @@ export async function GET(request: NextRequest) {
         reasonsResult,
         appointmentsResult,
       ] = await Promise.all([
-        supabase
-          .from('broker_profiles')
-          .select('*')
-          .eq('account_id', accountId)
-          .order('display_name'),
-        supabase
-          .from('profiles')
-          .select('id, full_name, email, account_role, avatar_url')
-          .eq('account_id', accountId)
-          .order('full_name'),
-        supabase
-          .from('guaranteed_windows')
-          .select('*')
-          .eq('account_id', accountId)
-          .eq('is_active', true)
-          .order('weekday'),
-        supabase
-          .from('assignment_offers')
-          .select('*')
-          .eq('account_id', accountId)
-          .order('offered_at', { ascending: false })
-          .limit(200),
+        brokerQuery,
+        profilesQuery,
+        windowsQuery,
+        offersQuery,
         supabase
           .from('reason_definitions')
           .select('*')
@@ -420,12 +459,7 @@ export async function GET(request: NextRequest) {
           .in('category', ['broker_rejection', 'transfer'])
           .eq('is_active', true)
           .order('display_order'),
-        supabase
-          .from('appointments')
-          .select('*')
-          .eq('account_id', accountId)
-          .order('starts_at', { ascending: false })
-          .limit(200),
+        teamAppointmentsQuery,
       ]);
       response.brokers = assertQuery<Row[]>(brokerResult, 'corretores');
       response.profiles = assertQuery<Row[]>(profilesResult, 'equipe');
@@ -519,13 +553,54 @@ export async function GET(request: NextRequest) {
     }
 
     if (view === 'reports') {
-      const auditResult = await supabase
-        .from('audit_events')
-        .select('*')
-        .eq('account_id', accountId)
-        .order('created_at', { ascending: false })
-        .limit(300);
+      const reportFilters = {
+        p_date_from: request.nextUrl.searchParams.get('dateFrom') || null,
+        p_date_to: request.nextUrl.searchParams.get('dateTo') || null,
+        p_broker_id: request.nextUrl.searchParams.get('brokerId') || null,
+        p_source_type: request.nextUrl.searchParams.get('source') || null,
+        p_development_id:
+          request.nextUrl.searchParams.get('developmentId') || null,
+        p_stage: request.nextUrl.searchParams.get('stage') || null,
+      };
+      const [reportResult, auditResult, brokerResult, developmentResult] =
+        await Promise.all([
+          supabase.rpc('studiosp_report_summary', reportFilters),
+          supabase
+            .from('audit_events')
+            .select('*')
+            .eq('account_id', accountId)
+            .order('created_at', { ascending: false })
+            .limit(100),
+          supabase
+            .from('broker_profiles')
+            .select('id, display_name')
+            .eq('account_id', accountId)
+            .eq('is_active', true)
+            .order('display_name'),
+          supabase
+            .from('developments')
+            .select('id, name')
+            .eq('account_id', accountId)
+            .neq('status', 'archived')
+            .order('name'),
+        ]);
+      if (reportResult.error?.code === 'PGRST202') {
+        return NextResponse.json(
+          {
+            error:
+              'Relatórios indisponíveis neste ambiente. Verifique a migration de métricas.',
+          },
+          { status: 503 }
+        );
+      }
+      if (reportResult.error) throw reportResult.error;
+      response.report = reportResult.data;
       response.audit = assertQuery<Row[]>(auditResult, 'auditoria');
+      response.brokers = assertQuery<Row[]>(brokerResult, 'corretores');
+      response.developments = assertQuery<Row[]>(
+        developmentResult,
+        'empreendimentos'
+      );
     }
 
     return NextResponse.json(response);

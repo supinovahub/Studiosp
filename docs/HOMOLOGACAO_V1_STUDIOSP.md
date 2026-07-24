@@ -50,6 +50,28 @@ Resultado esperado: dados persistidos, arquivos privados acessíveis somente por
 
 Resultado esperado: a conversa permanece natural; a IA faz no máximo uma pergunta por vez; respostas são normalizadas no lead; o áudio aparece transcrito; pergunta desativada não é cobrada; a IA não vende, não negocia e não cita empreendimento, preço, unidade, foto ou link específico.
 
+## 3A. Agente de documentos em Empreendimentos
+
+1. Registre contagens e hashes funcionais das tabelas `developers`,
+   `neighborhoods`, `developments`, `development_offers`,
+   `development_media` e `ai_knowledge_documents`.
+2. Como dono, crie um lote com os três arquivos de homologação.
+3. Feche a tela durante o processamento e retorne ao mesmo lote.
+4. Confirme progresso e resultado individual por fonte.
+5. Verifique preview, proveniência, confiança, conflitos e duplicidades.
+6. Confirme que o contrato bloqueia CPF, RG, e-mail, telefone, endereço
+   residencial e assinatura antes de qualquer chamada externa.
+7. Refine o rascunho pelo chat, desfaça a alteração e compare as versões.
+8. Pare antes da ação de aprovação; não aprove nem importe nenhum item.
+9. Repita as contagens e hashes funcionais do passo 1.
+10. Entre como corretor e tente abrir a rota e as APIs diretamente.
+
+Resultado esperado: o tabelão e a revista produzem propostas comerciais com
+origem rastreável; divergência de competência mensal aparece como conflito; o
+aditamento fica bloqueado por PII e não expõe valores pessoais; fechar a tela
+não interrompe o lote; corretor recebe 403; nenhuma tabela operacional ou base
+da IA muda.
+
 ## 4. Compatibilidade de imóveis
 
 1. Use respostas que combinem com mais de um empreendimento publicado.

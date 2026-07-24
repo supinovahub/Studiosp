@@ -159,6 +159,7 @@ export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {
   id: string;
+  whatsapp_connection_key?: string | null;
   user_id: string;
   contact_id: string;
   status: ConversationStatus;
@@ -221,6 +222,7 @@ export type MessageStatus =
 
 export interface Message {
   id: string;
+  whatsapp_connection_key?: string | null;
   conversation_id: string;
   sender_type: SenderType;
   sender_id?: string;

@@ -36,7 +36,7 @@ export const ROLE_META: Record<
   },
   agent: {
     icon: UserCog,
-    label: 'agente',
+    label: 'corretor',
     variant: 'muted',
     className: 'border-border bg-muted text-muted-foreground',
   },

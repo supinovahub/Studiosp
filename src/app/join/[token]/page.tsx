@@ -67,7 +67,7 @@ type PeekResult = PeekOk | PeekFail;
 
 const ROLE_LABEL: Record<PeekOk['role'], string> = {
   admin: 'Admin',
-  agent: 'Atendente',
+  agent: 'Corretor',
   viewer: 'Visualizador',
 };
 

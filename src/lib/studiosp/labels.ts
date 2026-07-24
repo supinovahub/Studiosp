@@ -86,6 +86,27 @@ export const eventLabels: Record<string, string> = {
   opportunity_reopened: 'Oportunidade reaberta',
 };
 
+export const auditActionLabels: Record<string, string> = {
+  ...eventLabels,
+  attention_resolved: 'Pendência resolvida',
+  broker_availability_changed: 'Disponibilidade do corretor alterada',
+  development_published: 'Empreendimento publicado',
+};
+
+export const auditEntityLabels: Record<string, string> = {
+  attention_item: 'Pendência',
+  broker_profile: 'Perfil do corretor',
+  development: 'Empreendimento',
+  opportunity: 'Oportunidade',
+};
+
+export const auditActorLabels: Record<string, string> = {
+  ai: 'IA',
+  integration: 'Integração',
+  system: 'Sistema',
+  user: 'Usuário',
+};
+
 export const stageOrder = Object.keys(stageLabels);
 
 export function labelFor(map: Record<string, string>, value?: string | null) {

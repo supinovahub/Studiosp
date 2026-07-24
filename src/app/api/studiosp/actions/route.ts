@@ -401,10 +401,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'save_broker') {
+      const rawWhatsapp = text(body.whatsappE164).replace(/[\s()-]/g, '');
+      const whatsappE164 = rawWhatsapp
+        ? rawWhatsapp.startsWith('+')
+          ? rawWhatsapp
+          : `+${rawWhatsapp}`
+        : null;
+      if (whatsappE164 && !/^\+[1-9][0-9]{7,14}$/.test(whatsappE164)) {
+        return NextResponse.json(
+          { error: 'Informe um WhatsApp válido com DDI.' },
+          { status: 400 }
+        );
+      }
       const result = await supabase
         .from('broker_profiles')
         .update({
-          whatsapp_e164: text(body.whatsappE164) || null,
+          whatsapp_e164: whatsappE164,
           whatsapp_verified_at: body.whatsappVerified
             ? new Date().toISOString()
             : null,

@@ -50,6 +50,7 @@ interface ConnectResult {
   phone?: string;
   qrcode?: string;
   paircode?: string;
+  already_connected?: boolean;
   error?: string;
 }
 
@@ -249,7 +250,9 @@ export function WhatsAppConfig() {
       setConnectResult(result);
       setConnectionStatus(result.connected ? 'connected' : 'connecting');
       toast.success(
-        result.connected
+        result.already_connected
+          ? 'O número atual continua conectado. O QR Code só é gerado para uma instância desconectada.'
+          : result.connected
           ? 'Número conectado.'
           : result.paircode
             ? 'Código de pareamento gerado.'
@@ -338,8 +341,8 @@ export function WhatsAppConfig() {
             <CardHeader>
               <CardTitle>Provedor do WhatsApp</CardTitle>
               <CardDescription>
-                A UAZAPI é a opçãA UAZAPI é uma opção principal do Studiosp. A
-                Meta permanece disponível como alternativa oficial.
+                A UAZAPI é uma opção principal do Studiosp. A Meta permanece
+                disponível como alternativa oficial.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -382,8 +385,8 @@ export function WhatsAppConfig() {
                     onChange={(event) => setUazapiBaseUrl(event.target.value)}
                   />
                   <p className="text-muted-foreground text-xs">
-                    Use a URL HTTPS inforUse uma URL HTTPS informada no painel
-                    da UAZAPI, sem caminho adicional.
+                    Use uma URL HTTPS informada no painel da UAZAPI, sem caminho
+                    adicional.
                   </p>
                 </div>
               ) : (
@@ -625,7 +628,7 @@ export function WhatsAppConfig() {
                     className="text-primary inline-flex items-center gap-1"
                   >
                     <ExternalLink className="size-3.5" />
-                    Abrir documentação daAbrir documentação da UAZAPI
+                    Abrir documentação da UAZAPI
                   </a>
                 </>
               ) : (
@@ -646,7 +649,7 @@ export function WhatsAppConfig() {
                     className="text-primary inline-flex items-center gap-1"
                   >
                     <ExternalLink className="size-3.5" />
-                    Abrir documentação daAbrir documentação do Meta
+                    Abrir documentação do Meta
                   </a>
                 </>
               )}

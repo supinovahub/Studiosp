@@ -64,6 +64,29 @@ const SECURITY_HEADERS = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  // PDF.js loads native canvas bindings dynamically. Keep these packages
+  // outside the Turbopack server bundle and explicitly trace their
+  // platform binaries into the document-analysis function.
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist', '@napi-rs/canvas'],
+  outputFileTracingIncludes: {
+    '/api/studiosp/document-analysis/process': [
+      'node_modules/@napi-rs/canvas/**/*',
+      'node_modules/@napi-rs/canvas-linux-x64-gnu/**/*',
+      'node_modules/@napi-rs/canvas-linux-x64-musl/**/*',
+      'node_modules/pdf-parse/node_modules/@napi-rs/canvas/**/*',
+      'node_modules/pdfjs-dist/node_modules/@napi-rs/canvas/**/*',
+      'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+    ],
+    '/api/studiosp/cron': [
+      'node_modules/@napi-rs/canvas/**/*',
+      'node_modules/@napi-rs/canvas-linux-x64-gnu/**/*',
+      'node_modules/@napi-rs/canvas-linux-x64-musl/**/*',
+      'node_modules/pdf-parse/node_modules/@napi-rs/canvas/**/*',
+      'node_modules/pdfjs-dist/node_modules/@napi-rs/canvas/**/*',
+      'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+    ],
+  },
+
   /**
    * Cross-origin dev access (Next.js 16).
    *

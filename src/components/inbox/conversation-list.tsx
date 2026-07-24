@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus, Tag } from "@/types";
 import { Search, ChevronDown, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +24,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ConversationListProps {
+  whatsappConnectionKey: string | null;
   activeConversationId: string | null;
   onSelect: (conversation: Conversation) => void;
   conversations: Conversation[];
@@ -47,6 +49,7 @@ const STATUS_COLORS: Record<ConversationStatus, string> = {
 type InboxFilter = ConversationStatus | "all" | "unread";
 
 export function ConversationList({
+  whatsappConnectionKey,
   activeConversationId,
   onSelect,
   conversations,
@@ -95,9 +98,16 @@ export function ConversationList({
     let cancelled = false;
 
     (async () => {
+      if (!whatsappConnectionKey) {
+        onConversationsLoadedRef.current([]);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
       const { data, error } = await supabase
         .from("conversations")
         .select(CONVERSATION_SELECT)
+        .eq("whatsapp_connection_key", whatsappConnectionKey)
         .order("last_message_at", { ascending: false });
 
       if (cancelled) return;
@@ -124,7 +134,7 @@ export function ConversationList({
     // `resyncToken` is included so the parent can force a refetch when
     // the realtime channel reconnects or the tab regains focus — catches
     // up on any events sent while the WS was disconnected or throttled.
-  }, [resyncToken]);
+  }, [resyncToken, whatsappConnectionKey]);
 
   // Tag definitions for the filter picker — loaded once so labels/colours
   // stay stable regardless of which conversations happen to be loaded.
@@ -447,6 +457,7 @@ function ConversationItem({
   const timeAgo = conversation.last_message_at
     ? formatDistanceToNow(new Date(conversation.last_message_at), {
         addSuffix: false,
+        locale: ptBR,
       })
     : "";
 

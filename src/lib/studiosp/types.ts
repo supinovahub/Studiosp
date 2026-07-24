@@ -86,5 +86,17 @@ export interface StudiospData {
   schedulingPolicy?: Record<string, unknown> | null;
   reasons?: Record<string, unknown>[];
   audit?: Record<string, unknown>[];
+  report?: {
+    metrics: {
+      leads_received: number;
+      active_opportunities: number;
+      meetings_completed: number;
+      confirmed_revenue: number;
+      won_count: number;
+    };
+    stages: { key: string; count: number }[];
+    sources: { key: string; count: number }[];
+    leads: StudiospLead[];
+  };
   error?: string;
 }
