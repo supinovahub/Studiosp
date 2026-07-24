@@ -75,6 +75,7 @@ const nextConfig: NextConfig = {
       'node_modules/@napi-rs/canvas-linux-x64-musl/**/*',
       'node_modules/pdf-parse/node_modules/@napi-rs/canvas/**/*',
       'node_modules/pdfjs-dist/node_modules/@napi-rs/canvas/**/*',
+      'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
     ],
     '/api/studiosp/cron': [
       'node_modules/@napi-rs/canvas/**/*',
@@ -82,6 +83,7 @@ const nextConfig: NextConfig = {
       'node_modules/@napi-rs/canvas-linux-x64-musl/**/*',
       'node_modules/pdf-parse/node_modules/@napi-rs/canvas/**/*',
       'node_modules/pdfjs-dist/node_modules/@napi-rs/canvas/**/*',
+      'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
     ],
   },
 
