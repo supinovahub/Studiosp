@@ -52,8 +52,17 @@
 - Suíte completa: 79 arquivos e 707 testes aprovados.
 - Build de produção Next.js: aprovado.
 
-## Homologação real
+## Homologação real em produção
 
-Após o deploy, o fluxo deve ser repetido com os PDFs controlados. A aprovação
-final deve ser feita somente depois de revisar o preview, pois ela grava
-rascunhos no catálogo operacional.
+- Deploy final de código: `37739b9`.
+- Lote anterior com falha retomado sem reenviar os arquivos.
+- `Revista ONE PARCERIAS.pdf`: preview pronto.
+- `TABELÃO MATRIZ JUNHO.pdf`: preview pronto.
+- `EnvelopePDF.aspx.pdf`: processamento concluído com bloqueio de PII; nenhum
+  conteúdo pessoal foi enviado ao provedor externo.
+- Preview exibiu 34 propostas documentais, além do empreendimento já existente
+  na página, com exemplos como `ATMOS MOEMA`, `Nattur`, `EDGE CAMBUI -
+  CAMPINAS` e diversos empreendimentos `NEX ONE`.
+- A ação `Aprovar e cadastrar` ficou habilitada.
+- A aprovação não foi acionada durante a homologação; nenhum novo
+  empreendimento foi gravado no catálogo operacional.
