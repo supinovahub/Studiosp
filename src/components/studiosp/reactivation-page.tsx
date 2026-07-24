@@ -139,8 +139,19 @@ export function ReactivationPage() {
           }
     );
     const payload = await response.json();
-    if (!response.ok)
-      setError(payload.error || 'Não foi possível alterar a campanha.');
+    if (!response.ok) {
+      const failureDetails = Array.isArray(payload.failures)
+        ? payload.failures.filter(Boolean).join(' ')
+        : '';
+      setError(
+        [
+          payload.error || 'Não foi possível alterar a campanha.',
+          failureDetails,
+        ]
+          .filter(Boolean)
+          .join(' ')
+      );
+    }
     await load();
     setSending(false);
   };
@@ -232,7 +243,7 @@ export function ReactivationPage() {
           </div>
         ) : null}
         {success ? (
-          <div className="border-emerald-500/40 bg-emerald-500/5 rounded-lg border p-4 text-sm text-emerald-700">
+          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm text-emerald-700">
             <p className="font-medium">Rascunho criado com sucesso.</p>
             <p>{success}</p>
           </div>

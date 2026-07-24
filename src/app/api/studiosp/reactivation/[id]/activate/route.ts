@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { supabaseAdmin } from '@/lib/automations/admin-client';
+import { normalizePhone } from '@/lib/whatsapp/phone-utils';
 
 type Row = Record<string, unknown>;
 
@@ -153,12 +154,14 @@ async function findOrCreateContact(
     lead: Row;
   }
 ) {
-  const { data: existing } = await db
+  const phoneNormalized = normalizePhone(String(args.lead.phone_e164 ?? ''));
+  const { data: existing, error: lookupError } = await db
     .from('contacts')
     .select('*')
     .eq('account_id', args.accountId)
-    .eq('phone', args.lead.phone_e164)
+    .eq('phone_normalized', phoneNormalized)
     .maybeSingle();
+  if (lookupError) throw lookupError;
   if (existing) return existing;
   const { data, error } = await db
     .from('contacts')
@@ -177,7 +180,21 @@ async function findOrCreateContact(
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    // Another request may have created the same normalized phone between the
+    // lookup and insert. Resolve the winner instead of failing activation.
+    if (error.code === '23505') {
+      const { data: raced, error: racedError } = await db
+        .from('contacts')
+        .select('*')
+        .eq('account_id', args.accountId)
+        .eq('phone_normalized', phoneNormalized)
+        .maybeSingle();
+      if (racedError) throw racedError;
+      if (raced) return raced;
+    }
+    throw error;
+  }
   return data;
 }
 

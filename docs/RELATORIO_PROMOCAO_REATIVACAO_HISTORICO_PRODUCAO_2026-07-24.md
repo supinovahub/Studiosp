@@ -57,3 +57,32 @@ avisos preexistentes sobre `pg_net` no schema público, funções
 - banco: manter as estruturas expansivas sem uso; não remover tabelas enquanto
   houver campanhas, importações ou eventos de auditoria;
 - operação: pausar campanhas de reativação interrompe novos claims.
+
+## Hotfix da ativação de campanha
+
+Após o primeiro teste operacional em produção, a importação criou corretamente
+a campanha e o lead, mas a ativação não conseguiu preparar o disparo.
+
+Causa identificada:
+
+- o telefone do lead e o telefone do contato existente tinham formatações
+  diferentes;
+- a API procurava o contato pelo texto exato do telefone;
+- ao não encontrá-lo, tentava criar um contato duplicado;
+- o índice único por telefone normalizado bloqueava corretamente a duplicação.
+
+Correções:
+
+- a ativação agora localiza o contato por `phone_normalized`;
+- uma criação concorrente do mesmo contato é resolvida reaproveitando o registro
+  vencedor;
+- a interface passou a exibir os detalhes devolvidos pela API quando um lead não
+  puder ser preparado.
+
+Validação do hotfix:
+
+- telefone da campanha conferido contra o contato existente sem expor o dado na
+  interface;
+- 82 arquivos de teste e 718 testes aprovados;
+- TypeScript aprovado;
+- build de produção aprovado.
