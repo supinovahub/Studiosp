@@ -224,8 +224,12 @@ export function WhatsAppConfig() {
           : 'Configuração da Meta salva com sucesso.'
       );
       if (accountId) await loadConfig(accountId);
-    } catch {
-      toast.error('Não foi possível salvar.');
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível salvar a configuração da UAZAPI.'
+      );
     } finally {
       setSaving(false);
     }

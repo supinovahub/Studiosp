@@ -51,6 +51,15 @@
 - erros de estrutura da planilha retornam validação HTTP 400 com mensagem
   orientativa, em vez de erro interno HTTP 500.
 
+## Diagnóstico de credenciais UAZAPI no preview
+
+- o banco staging mantém uma configuração UAZAPI conectada e o token
+  armazenado continua descriptografável;
+- as novas tentativas foram recusadas na validação das credenciais com HTTP
+  400, antes da escrita no banco;
+- a interface deixou de ocultar a mensagem devolvida pela API e agora informa
+  o motivo específico, como URL inválida, token rejeitado ou falha da UAZAPI.
+
 ## Pendência de homologação real
 
 A execução com WhatsApp deve usar exclusivamente o número controlado autorizado.
