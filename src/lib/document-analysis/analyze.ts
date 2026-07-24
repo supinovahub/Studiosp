@@ -1,5 +1,6 @@
 import type { AiConfig } from '@/lib/ai/types';
 import { generateReply } from '@/lib/ai/generate';
+import { jsonrepair } from 'jsonrepair';
 
 export type ProposedField = {
   name: string;
@@ -67,10 +68,15 @@ Retorne exclusivamente JSON válido, sem markdown, no formato:
 Unidades individuais podem aparecer na fonte, mas a V1 deve consolidá-las como
 faixas/opções comerciais. Se fontes ou datas divergirem, preserve o conflito.`;
 
-function extractJson(text: string) {
+export function extractJson(text: string) {
   const trimmed = text.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
-  return JSON.parse(fenced ?? trimmed) as Record<string, unknown>;
+  const candidate = fenced ?? trimmed;
+  try {
+    return JSON.parse(candidate) as Record<string, unknown>;
+  } catch {
+    return JSON.parse(jsonrepair(candidate)) as Record<string, unknown>;
+  }
 }
 
 function clampConfidence(value: unknown) {
@@ -83,18 +89,55 @@ export async function analyzeSanitizedDocument(args: {
   filename: string;
   text: string;
 }): Promise<AnalysisResult> {
-  const limitedText = args.text.slice(0, 140_000);
-  const generated = await generateReply({
-    config: args.config,
-    systemPrompt: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: `ARQUIVO: ${args.filename}\n\nTEXTO HIGIENIZADO:\n${limitedText}`,
-      },
-    ],
+  const chunks = splitDocument(args.text);
+  const results = [];
+  for (let index = 0; index < chunks.length; index++) {
+    const generated = await generateReply({
+      config: args.config,
+      systemPrompt: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content:
+            `ARQUIVO: ${args.filename}\n` +
+            `PARTE: ${index + 1} de ${chunks.length}\n\n` +
+            `TEXTO HIGIENIZADO:\n${chunks[index]}`,
+        },
+      ],
+      maxOutputTokens: 4096,
+      jsonMode: true,
+    });
+    results.push({
+      parsed: extractJson(generated.text),
+      usage: generated.usage,
+    });
+  }
+  let itemOffset = 0;
+  const parsedItems = results.flatMap((result) => {
+    const rawItems = Array.isArray(result.parsed.items)
+      ? result.parsed.items
+      : [];
+    const adjusted = rawItems.map((raw) => {
+      if (!raw || typeof raw !== 'object') return raw;
+      const item = raw as Record<string, unknown>;
+      const parentIndex = Number(item.parentIndex);
+      return {
+        ...item,
+        parentIndex:
+          Number.isInteger(parentIndex) && parentIndex >= 0
+            ? parentIndex + itemOffset
+            : null,
+      };
+    });
+    itemOffset += rawItems.length;
+    return adjusted;
   });
-  const parsed = extractJson(generated.text);
+  const parsed = {
+    items: parsedItems,
+    issues: results.flatMap((result) =>
+      Array.isArray(result.parsed.issues) ? result.parsed.issues : []
+    ),
+  };
   const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
   const rawIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
 
@@ -102,7 +145,11 @@ export async function analyzeSanitizedDocument(args: {
     if (!raw || typeof raw !== 'object') return [];
     const item = raw as Record<string, unknown>;
     if (!['development', 'offer'].includes(String(item.type))) return [];
-    if (!['create', 'update', 'deactivate', 'ignore'].includes(String(item.action)))
+    if (
+      !['create', 'update', 'deactivate', 'ignore'].includes(
+        String(item.action)
+      )
+    )
       return [];
     const fields = Array.isArray(item.fields)
       ? item.fields.flatMap((rawField) => {
@@ -172,5 +219,26 @@ export async function analyzeSanitizedDocument(args: {
     ];
   });
 
-  return { items, issues, usage: generated.usage };
+  return {
+    items,
+    issues,
+    usage: results.map((result) => result.usage),
+  };
+}
+
+function splitDocument(text: string, maxChars = 32_000) {
+  const normalized = text.trim().slice(0, 240_000);
+  if (normalized.length <= maxChars) return [normalized];
+  const chunks: string[] = [];
+  let cursor = 0;
+  while (cursor < normalized.length) {
+    let end = Math.min(cursor + maxChars, normalized.length);
+    if (end < normalized.length) {
+      const boundary = normalized.lastIndexOf('\n', end);
+      if (boundary > cursor + maxChars * 0.7) end = boundary;
+    }
+    chunks.push(normalized.slice(cursor, end));
+    cursor = end;
+  }
+  return chunks;
 }

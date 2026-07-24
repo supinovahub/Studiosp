@@ -26,5 +26,21 @@ describe('sanitizePersonalData', () => {
     expect(result.count).toBe(0);
     expect(result.blocked).toBe(false);
   });
-});
 
+  it('mantém somente trechos comerciais seguros de um documento misto', () => {
+    const result = sanitizePersonalData(
+      [
+        'Comprador CPF 123.456.789-00, RG 12.345.678-9.',
+        'Assinatura do comprador.',
+        'Empreendimento Aurora com apartamentos de 30 m².',
+        'Localizado em Pinheiros, São Paulo.',
+        'Preço a partir de R$ 350.000 e entrada facilitada.',
+      ].join('\n')
+    );
+
+    expect(result.analysisText).toContain('Empreendimento Aurora');
+    expect(result.analysisText).not.toContain('Comprador');
+    expect(result.analysisText).not.toContain('Assinatura');
+    expect(result.blocked).toBe(false);
+  });
+});

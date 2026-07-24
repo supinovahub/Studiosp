@@ -117,7 +117,7 @@ export function DevelopmentsPage() {
         actions={
           canManage ? (
             <div className="flex flex-wrap gap-2">
-              <DocumentAnalysisPanel />
+              <DocumentAnalysisPanel onApproved={reload} />
               <Button
                 onClick={() => {
                   setEditing(null);
@@ -745,7 +745,10 @@ function CatalogFoundation({
             </Button>
           </div>
           {uploadResults.length ? (
-            <ul className="space-y-1 text-xs" aria-label="Resultado dos uploads">
+            <ul
+              className="space-y-1 text-xs"
+              aria-label="Resultado dos uploads"
+            >
               {uploadResults.map((result) => (
                 <li
                   key={result.name}

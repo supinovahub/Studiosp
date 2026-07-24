@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/automations/admin-client';
 import { processNextDocumentAnalysis } from '@/lib/document-analysis/worker';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST() {
   try {

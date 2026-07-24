@@ -1016,7 +1016,7 @@ O preview permite aprovação individual por empreendimento, oferta e campo, al�
 de ações de seleção em lote. Aprovar um lote inteiro nunca será obrigatório. O
 dono pode editar, aprovar ou ignorar cada proposta antes da confirmação final.
 
-Quando uma aprovação futura for confirmada:
+Quando uma aprovação for confirmada:
 
 - somente itens e campos selecionados são gravados;
 - novos empreendimentos permanecem em `rascunho`;
@@ -1151,7 +1151,7 @@ Análise e preview usam estruturas próprias para:
 Somente o dono acessa essas estruturas. Corretores não visualizam fontes,
 rascunhos, conversas ou previews. Cada refinamento cria uma versão recuperável.
 
-A aprovação futura:
+A aprovação:
 
 - revalida no servidor a identidade, role, conta, estado e versão do preview;
 - executa em uma única transação;

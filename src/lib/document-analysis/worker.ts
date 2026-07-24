@@ -14,13 +14,12 @@ const LEASE_MS = 4 * 60_000;
 
 function cleanError(error: unknown) {
   const message =
-    error instanceof Error ? error.message : 'Falha desconhecida no processamento.';
+    error instanceof Error
+      ? error.message
+      : 'Falha desconhecida no processamento.';
   return message
     .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[DADO REMOVIDO]')
-    .replace(
-      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
-      '[DADO REMOVIDO]'
-    )
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[DADO REMOVIDO]')
     .slice(0, 700);
 }
 
@@ -185,7 +184,7 @@ export async function processNextDocumentAnalysis(
             : 'pii_removed_before_ai',
           message: privacy.blocked
             ? 'Documento bloqueado por conter múltiplos dados pessoais. Nenhum conteúdo foi enviado ao provedor de IA.'
-            : `${privacy.count} ocorrência(s) de dados pessoais foram removidas antes da análise externa.`,
+            : `${privacy.count} ocorrência(s) de dados pessoais e seus trechos foram removidos antes da análise externa.`,
           details: {
             categories: privacy.categories,
             count: privacy.count,
@@ -219,7 +218,7 @@ export async function processNextDocumentAnalysis(
       const analysis = await analyzeSanitizedDocument({
         config,
         filename: source.original_filename,
-        text: privacy.sanitizedText,
+        text: privacy.analysisText,
       });
 
       await setStep(db, batch, source, leaseToken, 'consolidating');
@@ -246,7 +245,9 @@ export async function processNextDocumentAnalysis(
         .from('document_analysis_batches')
         .update({
           status: finalFailure ? 'failed' : 'awaiting',
-          attempts: finalFailure ? Math.min(3, Number(batch.attempts ?? 0) + 1) : batch.attempts,
+          attempts: finalFailure
+            ? Math.min(3, Number(batch.attempts ?? 0) + 1)
+            : batch.attempts,
           error_code: finalFailure ? 'source_failed' : null,
           error_message: cleanError(error),
           lease_token: null,
@@ -254,11 +255,19 @@ export async function processNextDocumentAnalysis(
         })
         .eq('id', batch.id)
         .eq('lease_token', leaseToken);
-      await event(db, batch, source, 'processing_failed', source.status, 'failed', {
-        final: finalFailure,
-        attempts,
-        error: cleanError(error),
-      });
+      await event(
+        db,
+        batch,
+        source,
+        'processing_failed',
+        source.status,
+        'failed',
+        {
+          final: finalFailure,
+          attempts,
+          error: cleanError(error),
+        }
+      );
       return { processed: 1, batchId: batch.id, sourceId: source.id };
     }
   }
@@ -277,7 +286,10 @@ async function setStep(
   await Promise.all([
     db
       .from('document_analysis_batches')
-      .update({ status, lease_expires_at: new Date(Date.now() + LEASE_MS).toISOString() })
+      .update({
+        status,
+        lease_expires_at: new Date(Date.now() + LEASE_MS).toISOString(),
+      })
       .eq('id', batch.id)
       .eq('lease_token', leaseToken),
     db
@@ -399,36 +411,35 @@ async function finalizeBatch(
     { count: retryable },
     { count: completed },
     { count: failed },
-  ] =
-    await Promise.all([
-      db
-        .from('document_analysis_sources')
-        .select('id', { count: 'exact', head: true })
-        .eq('batch_id', batchId)
-        .in('status', [
-          'awaiting',
-          'extracting',
-          'privacy_check',
-          'analyzing',
-          'consolidating',
-        ]),
-      db
-        .from('document_analysis_sources')
-        .select('id', { count: 'exact', head: true })
-        .eq('batch_id', batchId)
-        .eq('status', 'failed')
-        .lt('attempts', 3),
-      db
-        .from('document_analysis_sources')
-        .select('id', { count: 'exact', head: true })
-        .eq('batch_id', batchId)
-        .eq('status', 'ready'),
-      db
-        .from('document_analysis_sources')
-        .select('id', { count: 'exact', head: true })
-        .eq('batch_id', batchId)
-        .eq('status', 'failed'),
-    ]);
+  ] = await Promise.all([
+    db
+      .from('document_analysis_sources')
+      .select('id', { count: 'exact', head: true })
+      .eq('batch_id', batchId)
+      .in('status', [
+        'awaiting',
+        'extracting',
+        'privacy_check',
+        'analyzing',
+        'consolidating',
+      ]),
+    db
+      .from('document_analysis_sources')
+      .select('id', { count: 'exact', head: true })
+      .eq('batch_id', batchId)
+      .eq('status', 'failed')
+      .lt('attempts', 3),
+    db
+      .from('document_analysis_sources')
+      .select('id', { count: 'exact', head: true })
+      .eq('batch_id', batchId)
+      .eq('status', 'ready'),
+    db
+      .from('document_analysis_sources')
+      .select('id', { count: 'exact', head: true })
+      .eq('batch_id', batchId)
+      .eq('status', 'failed'),
+  ]);
   const remaining = Number(active ?? 0) + Number(retryable ?? 0);
 
   if (!remaining) {

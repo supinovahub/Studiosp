@@ -43,6 +43,8 @@ type BatchDetail = {
     proposed_action: string;
     display_name: string;
     confidence: number;
+    decision: string;
+    target_id?: string | null;
     fields: Array<{
       id: string;
       field_name: string;
@@ -81,13 +83,18 @@ const STATUS_LABELS: Record<string, string> = {
   expired: 'Expirado',
 };
 
-export function DocumentAnalysisPanel() {
+export function DocumentAnalysisPanel({
+  onApproved,
+}: {
+  onApproved?: () => void | Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const [batches, setBatches] = useState<BatchSummary[]>([]);
   const [selected, setSelected] = useState<BatchDetail | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [linksText, setLinksText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -96,7 +103,8 @@ export function DocumentAnalysisPanel() {
       cache: 'no-store',
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? 'Falha ao carregar lotes.');
+    if (!response.ok)
+      throw new Error(payload.error ?? 'Falha ao carregar lotes.');
     setBatches(payload.batches ?? []);
   }, []);
 
@@ -106,7 +114,8 @@ export function DocumentAnalysisPanel() {
       { cache: 'no-store' }
     );
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? 'Falha ao carregar lote.');
+    if (!response.ok)
+      throw new Error(payload.error ?? 'Falha ao carregar lote.');
     setSelected(payload);
     return payload as BatchDetail;
   }, []);
@@ -183,7 +192,8 @@ export function DocumentAnalysisPanel() {
           .uploadToSignedUrl(target.path, target.token, files[index], {
             contentType: descriptors[index].mimeType,
           });
-        if (result.error) throw new Error(`Falha ao enviar ${files[index].name}.`);
+        if (result.error)
+          throw new Error(`Falha ao enviar ${files[index].name}.`);
       }
 
       setFiles([]);
@@ -205,6 +215,36 @@ export function DocumentAnalysisPanel() {
     }
   }
 
+  async function approveBatch() {
+    if (!selected || selected.batch.status !== 'ready') return;
+    setApproving(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/studiosp/document-analysis/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchId: selected.batch.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Não foi possível aprovar o preview.');
+      }
+      await Promise.all([
+        loadBatch(selected.batch.id),
+        loadBatches(),
+        onApproved?.(),
+      ]);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Não foi possível aprovar o preview.'
+      );
+    } finally {
+      setApproving(false);
+    }
+  }
+
   if (!open) {
     return (
       <Button variant="outline" onClick={() => setOpen(true)}>
@@ -222,8 +262,8 @@ export function DocumentAnalysisPanel() {
             Analisar documentos com IA
           </h3>
           <p className="text-muted-foreground mt-1 text-sm">
-            Fontes → processamento → preview. Nada é publicado ou enviado à
-            base da IA sem aprovação posterior.
+            Fontes → processamento → preview. Nada é publicado ou enviado à base
+            da IA sem aprovação posterior.
           </p>
         </div>
         <Button
@@ -245,7 +285,9 @@ export function DocumentAnalysisPanel() {
               type="file"
               multiple
               accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg"
-              onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+              onChange={(event) =>
+                setFiles(Array.from(event.target.files ?? []))
+              }
             />
             <p className="text-muted-foreground text-xs">
               Até 20 arquivos, 50 MB por arquivo e 250 MB por lote.
@@ -406,16 +448,23 @@ export function DocumentAnalysisPanel() {
                           {item.display_name}
                         </p>
                         <span className="text-muted-foreground text-xs">
-                          {Math.round(Number(item.confidence) * 100)}%
+                          {item.decision === 'approved'
+                            ? 'Cadastrado'
+                            : item.decision === 'rejected'
+                              ? 'Ignorado'
+                              : `${Math.round(Number(item.confidence) * 100)}%`}
                         </span>
                       </div>
                       <dl className="mt-2 grid gap-2 md:grid-cols-2">
                         {item.fields.map((field) => (
-                          <div key={field.id} className="bg-muted/40 rounded p-2">
+                          <div
+                            key={field.id}
+                            className="bg-muted/40 rounded p-2"
+                          >
                             <dt className="text-muted-foreground text-xs">
                               {field.field_name}
                             </dt>
-                            <dd className="text-foreground break-words text-sm">
+                            <dd className="text-foreground text-sm break-words">
                               {formatValue(field.proposed_value)}
                             </dd>
                             {field.provenance?.[0] ? (
@@ -442,9 +491,27 @@ export function DocumentAnalysisPanel() {
               <div className="border-border bg-muted/30 rounded-lg border p-3">
                 <p className="text-foreground font-medium">4. Aprovação</p>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  Bloqueada nesta homologação. Nenhuma proposta deste lote pode
-                  alterar o catálogo ou a base de conhecimento.
+                  Revise o preview. Ao aprovar, os empreendimentos e condições
+                  comerciais serão cadastrados como rascunho, ainda invisíveis
+                  para os corretores até a publicação.
                 </p>
+                <Button
+                  type="button"
+                  className="mt-3"
+                  disabled={
+                    approving ||
+                    selected.batch.status !== 'ready' ||
+                    !selected.items.some((item) => item.decision === 'pending')
+                  }
+                  onClick={() => void approveBatch()}
+                >
+                  {approving ? (
+                    <LoaderCircle className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 />
+                  )}
+                  {approving ? 'Cadastrando...' : 'Aprovar e cadastrar'}
+                </Button>
               </div>
             </>
           )}
@@ -455,7 +522,10 @@ export function DocumentAnalysisPanel() {
 }
 
 async function sha256(file: File) {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    await file.arrayBuffer()
+  );
   return Array.from(new Uint8Array(digest))
     .map((value) => value.toString(16).padStart(2, '0'))
     .join('');

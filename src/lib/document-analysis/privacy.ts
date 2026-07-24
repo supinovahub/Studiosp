@@ -1,5 +1,6 @@
 export type PrivacyResult = {
   sanitizedText: string;
+  analysisText: string;
   categories: string[];
   count: number;
   blocked: boolean;
@@ -57,13 +58,33 @@ export function sanitizePersonalData(text: string): PrivacyResult {
     });
   }
 
+  const highRisk = highRiskCount >= 2 || categories.size >= 4;
+  const analysisText = highRisk
+    ? commercialOnlyText(sanitizedText)
+    : sanitizedText;
   return {
     sanitizedText,
+    analysisText,
     categories: [...categories],
     count,
-    // Contratos e documentos com vários identificadores pessoais não seguem
-    // para um provedor externo. O preview registra apenas o bloqueio.
-    blocked: highRiskCount >= 2 || categories.size >= 4,
+    // Conteúdo de alto risco só segue quando ainda existe contexto comercial
+    // suficiente após a remoção integral dos trechos pessoais.
+    blocked: highRisk && analysisText.trim().length < 120,
   };
 }
 
+function commercialOnlyText(text: string) {
+  const sensitiveContext =
+    /\b(?:cpf|r\.?g\.?|comprador|adquirente|testemunha|assinatura|signat[aá]ri[oa]|nacionalidade|estado civil|residente|domiciliad[oa]|dados pessoais)\b/i;
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line &&
+        !line.includes('[DADO PESSOAL REMOVIDO:') &&
+        !sensitiveContext.test(line)
+    )
+    .join('\n')
+    .slice(0, 240_000);
+}

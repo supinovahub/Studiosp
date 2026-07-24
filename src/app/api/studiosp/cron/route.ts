@@ -6,7 +6,7 @@ import { sendProviderText } from '@/lib/whatsapp/provider';
 import { engineSendText } from '@/lib/flows/meta-send';
 import { processNextDocumentAnalysis } from '@/lib/document-analysis/worker';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // Consultas administrativas abrangem várias tabelas e projeções dinâmicas.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
