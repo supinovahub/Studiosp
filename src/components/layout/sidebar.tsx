@@ -16,6 +16,7 @@ import {
   LogOut,
   Settings,
   Sparkles,
+  RefreshCcw,
   UserRoundCheck,
   Users,
   X,
@@ -53,6 +54,7 @@ const ownerSections: { label: string; items: NavigationItem[] }[] = [
       { href: '/pipeline', label: 'Pipeline', icon: LayoutDashboard },
       { href: '/agenda', label: 'Agenda', icon: CalendarDays },
       { href: '/follow-ups', label: 'Follow-ups', icon: Clock3 },
+      { href: '/reativacao', label: 'Reativação de base', icon: RefreshCcw },
     ],
   },
   {

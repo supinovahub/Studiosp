@@ -20,6 +20,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
     '/visao-geral',
     '/pipeline',
     '/follow-ups',
+    '/reativacao',
     '/relatorios',
   ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
 
