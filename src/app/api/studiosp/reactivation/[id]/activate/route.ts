@@ -185,7 +185,11 @@ export async function POST(
         payload: { queued, failed: failures.length },
       }),
     ]);
-    const sent = await sendDueReactivationTouches(db);
+    const sent = await sendDueReactivationTouches(db, {
+      accountId,
+      campaignId: id,
+      limit: 1,
+    });
     const { data: deliveryFailures } = await db
       .from('reactivation_touches')
       .select('step_number,last_error')

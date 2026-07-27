@@ -4,17 +4,23 @@ import { buildReactivationMessageWithVariant } from './cadence';
 
 type Row = Record<string, unknown>;
 
-export async function sendDueReactivationTouches(db: SupabaseClient) {
-  const { data: touches, error } = await db.rpc(
-    'studiosp_claim_reactivation_touches',
-    { p_worker_id: `reactivation:${Date.now()}`, p_limit: 1 }
-  );
-  if (error) {
-    console.error('[Reativação] falha ao reivindicar fila:', error);
-    return 0;
-  }
+type ReactivationWorkerOptions = {
+  accountId?: string;
+  campaignId?: string;
+  limit?: number;
+};
+
+export async function sendDueReactivationTouches(
+  db: SupabaseClient,
+  options: ReactivationWorkerOptions = {}
+) {
+  const workerId = `reactivation:${Date.now()}`;
+  const touches =
+    options.accountId || options.campaignId
+      ? await claimScopedTouches(db, workerId, options)
+      : await claimGlobalTouches(db, workerId, options.limit ?? 1);
   let sent = 0;
-  for (const touch of (touches ?? []) as Row[]) {
+  for (const touch of touches) {
     const { data: lead } = await db
       .from('reactivation_leads')
       .select('*')
@@ -100,6 +106,72 @@ export async function sendDueReactivationTouches(db: SupabaseClient) {
     }
   }
   return sent;
+}
+
+async function claimGlobalTouches(
+  db: SupabaseClient,
+  workerId: string,
+  limit: number
+): Promise<Row[]> {
+  const { data, error } = await db.rpc('studiosp_claim_reactivation_touches', {
+    p_worker_id: workerId,
+    p_limit: Math.max(1, Math.min(20, limit)),
+  });
+  if (error) {
+    console.error('[Reativação] falha ao reivindicar fila:', error);
+    return [];
+  }
+  return (data ?? []) as Row[];
+}
+
+/**
+ * Claims due work for the authenticated account without allowing an admin
+ * heartbeat to advance another tenant's campaign. The conditional UPDATE is
+ * the concurrency guard: only one caller can move a row from scheduled to
+ * processing.
+ */
+async function claimScopedTouches(
+  db: SupabaseClient,
+  workerId: string,
+  options: ReactivationWorkerOptions
+): Promise<Row[]> {
+  let query = db
+    .from('reactivation_touches')
+    .select(
+      '*,reactivation_campaigns!inner(status),reactivation_leads!inner(status)'
+    )
+    .eq('status', 'scheduled')
+    .eq('reactivation_campaigns.status', 'active')
+    .in('reactivation_leads.status', ['queued', 'contacted'])
+    .lte('scheduled_for', new Date().toISOString())
+    .order('scheduled_for')
+    .order('id')
+    .limit(Math.max(1, Math.min(20, options.limit ?? 1)));
+  if (options.accountId) query = query.eq('account_id', options.accountId);
+  if (options.campaignId) query = query.eq('campaign_id', options.campaignId);
+  const { data: candidates, error } = await query;
+  if (error) {
+    console.error('[Reativação] falha ao consultar fila da conta:', error);
+    return [];
+  }
+
+  const claimed: Row[] = [];
+  for (const candidate of (candidates ?? []) as Row[]) {
+    const { data } = await db
+      .from('reactivation_touches')
+      .update({
+        status: 'processing',
+        claimed_at: new Date().toISOString(),
+        worker_id: workerId,
+        attempt_count: Number(candidate.attempt_count ?? 0) + 1,
+      })
+      .eq('id', candidate.id)
+      .eq('status', 'scheduled')
+      .select()
+      .maybeSingle();
+    if (data) claimed.push(data as Row);
+  }
+  return claimed;
 }
 
 async function ownerUserId(db: SupabaseClient, accountId: string) {

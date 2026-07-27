@@ -112,7 +112,13 @@ export async function PATCH(
       actor_profile_id: actor?.id ?? null,
     });
     const sent =
-      action === 'resume' ? await sendDueReactivationTouches(db) : undefined;
+      action === 'resume'
+        ? await sendDueReactivationTouches(db, {
+            accountId,
+            campaignId: id,
+            limit: 1,
+          })
+        : undefined;
     const { data: deliveryFailures } =
       action === 'resume'
         ? await db

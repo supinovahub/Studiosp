@@ -26,12 +26,35 @@ const key = (v: unknown) =>
 const field = (v: unknown) => {
   const k = key(v);
   if (['nome', 'name'].includes(k)) return 'name';
-  if (['numero', 'telefone', 'celular', 'phone', 'whatsapp'].includes(k))
+  if (
+    [
+      'numero',
+      'telefone',
+      'celular',
+      'phone',
+      'whatsapp',
+      'telefoneprincipal',
+      'numeroprincipal',
+      'celularprincipal',
+      'whatsappprincipal',
+    ].includes(k)
+  )
     return 'phone';
-  if (k === 'email' || k === 'emailopcional') return 'email';
-  if (['objetivoprincipal', 'objetivo', 'finalidade'].includes(k))
+  if (['email', 'emailopcional', 'emailprincipal'].includes(k)) return 'email';
+  if (
+    [
+      'objetivoprincipal',
+      'principalobjetivo',
+      'objetivo',
+      'finalidade',
+    ].includes(k) ||
+    k.includes('principalobjetivo')
+  )
     return 'objective';
-  if (['valorentrada', 'entrada', 'valordeentrada'].includes(k))
+  if (
+    ['valorentrada', 'entrada', 'valordeentrada'].includes(k) ||
+    (k.includes('valor') && k.includes('entrada'))
+  )
     return 'entryValue';
   return null;
 };
@@ -43,17 +66,36 @@ const phone = (v: string) => {
 };
 const objective = (v: string): ReactivationRow['objective'] => {
   const k = key(v);
-  if (k.includes('moradia') || k.includes('morar')) return 'live';
-  if (k.includes('invest')) return 'invest';
+  if (
+    k.includes('moradia') ||
+    k.includes('morar') ||
+    k.includes('utilizacaopropria') ||
+    k.includes('usoproprio')
+  )
+    return 'live';
+  if (
+    k.includes('invest') ||
+    k.includes('rentabilizar') ||
+    k.includes('aluguel') ||
+    k.includes('ganhodecapital') ||
+    k.includes('revenda')
+  )
+    return 'invest';
   if (k.includes('ambos')) return 'both';
   return 'unknown';
 };
 const money = (v: string) => {
-  const c = v.replace(/[^\d,.-]/g, '');
+  const normalized = v.trim().toLowerCase();
+  const multiplier = /(?:k|mil)\s*$/.test(normalized) ? 1000 : 1;
+  const c = normalized.replace(/(?:k|mil)\s*$/, '').replace(/[^\d,.-]/g, '');
   if (!c) return null;
-  const n = Number(
-    c.includes(',') ? c.replace(/\./g, '').replace(',', '.') : c
-  );
+  let numeric = c;
+  if (c.includes(',')) {
+    numeric = c.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d{1,3}(?:\.\d{3})+$/.test(c)) {
+    numeric = c.replace(/\./g, '');
+  }
+  const n = Number(numeric) * multiplier;
   return Number.isFinite(n) && n >= 0 ? n : null;
 };
 export async function parseReactivationFile(file: File) {
@@ -76,11 +118,12 @@ export async function parseReactivationFile(file: File) {
   } else await wb.xlsx.load(bytes as never);
   const sheet = wb.worksheets[0];
   if (!sheet)
-    throw new ReactivationImportError(
-      'A planilha não possui uma aba legível.'
-    );
+    throw new ReactivationImportError('A planilha não possui uma aba legível.');
   const headers = new Map<number, string>();
+  const originalHeaders = new Map<number, string>();
   sheet.getRow(1).eachCell((c, i) => {
+    const original = c.text.trim();
+    if (original) originalHeaders.set(i, original);
     const f = field(c.text);
     if (f) headers.set(i, f);
   });
@@ -92,6 +135,10 @@ export async function parseReactivationFile(file: File) {
   sheet.eachRow((r, rowNumber) => {
     if (rowNumber === 1) return;
     const v: Record<string, string> = {};
+    const rawData: Record<string, string> = {};
+    originalHeaders.forEach((header, i) => {
+      rawData[header] = r.getCell(i).text.trim();
+    });
     headers.forEach((f, i) => (v[f] = r.getCell(i).text.trim()));
     if (!Object.values(v).some(Boolean)) return;
     const p = phone(v.phone ?? '');
@@ -101,17 +148,22 @@ export async function parseReactivationFile(file: File) {
         'Número em notação científica. No Excel, formate a coluna como Texto e exporte novamente.'
       );
     else if (!p) notes.push('Número inválido.');
+    const corruptedName = /\?{3,}/.test(v.name ?? '');
     if (!v.name) notes.push('Nome ausente.');
+    else if (corruptedName)
+      notes.push(
+        'Nome com caracteres corrompidos; a abordagem usará uma saudação sem nome.'
+      );
     if (!v.objective) notes.push('Objetivo ausente.');
     if (!v.entryValue) notes.push('Valor de entrada ausente.');
     out.push({
       rowNumber,
-      name: v.name || null,
+      name: corruptedName ? null : v.name || null,
       phoneE164: p,
       email: v.email || null,
       objective: objective(v.objective ?? ''),
       entryValue: money(v.entryValue ?? ''),
-      rawData: v,
+      rawData,
       notes,
     });
   });

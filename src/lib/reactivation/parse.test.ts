@@ -100,4 +100,87 @@ describe('parseReactivationFile', () => {
     expect(row.phoneE164).toBeNull();
     expect(row.notes.join(' ')).toContain('notação científica');
   });
+
+  it('aceita o formato exportado pela base de leads e preserva as colunas originais', async () => {
+    const csv = [
+      [
+        'Lead ID',
+        'Nome',
+        'Telefone principal',
+        'Outros telefones',
+        'E-mail principal',
+        'Principal objetivo',
+        'STUDIOS | você_já_investiu_em_studios?',
+        'STUDIOS | qual_é_o_seu_principal_objetivo?',
+        'STUDIOS | qual_valor_de_entrada_é_seu_limite?',
+        'STUDIOS | qual_valor_de_parcela_é_o_seu_limite?',
+        'Corretor',
+      ].join(';'),
+      [
+        'LEAD-0013',
+        'Marcelo Arruda',
+        '+55 (81) 99797-1507',
+        '',
+        'marcelo@example.com',
+        'rentabilizar_com_aluguel_',
+        'não',
+        'rentabilizar_com_aluguel_',
+        '100k',
+        'até_4k',
+        'Pedro',
+      ].join(';'),
+    ].join('\n');
+    const file = new File([csv], 'Leads - 100.csv', { type: 'text/csv' });
+
+    const [row] = await parseReactivationFile(file);
+
+    expect(row).toMatchObject({
+      name: 'Marcelo Arruda',
+      phoneE164: '+5581997971507',
+      email: 'marcelo@example.com',
+      objective: 'invest',
+      entryValue: 100000,
+    });
+    expect(row.rawData).toMatchObject({
+      'Lead ID': 'LEAD-0013',
+      Corretor: 'Pedro',
+      'STUDIOS | qual_valor_de_parcela_é_o_seu_limite?': 'até_4k',
+    });
+  });
+
+  it.each([
+    ['utilização_própria_', 'live'],
+    ['rentabilizar_com_aluguel_', 'invest'],
+    ['vender_com_ganho_de_capital_', 'invest'],
+  ])('normaliza o objetivo %s como %s', async (source, expected) => {
+    const file = new File(
+      [
+        'Nome;Telefone principal;Principal objetivo;STUDIOS | qual_valor_de_entrada_é_seu_limite?\n' +
+          `Ana;+55 (27) 99999-0000;${source};100k\n`,
+      ],
+      'base.csv',
+      { type: 'text/csv' }
+    );
+
+    const [row] = await parseReactivationFile(file);
+
+    expect(row.objective).toBe(expected);
+    expect(row.entryValue).toBe(100000);
+  });
+
+  it('remove do envio um nome visivelmente corrompido', async () => {
+    const file = new File(
+      [
+        'Nome;Telefone principal;Principal objetivo;Valor entrada\n' +
+          '??????????????;+55 (27) 99999-0000;utilização_própria_;100k\n',
+      ],
+      'base.csv',
+      { type: 'text/csv' }
+    );
+
+    const [row] = await parseReactivationFile(file);
+
+    expect(row.name).toBeNull();
+    expect(row.notes.join(' ')).toContain('caracteres corrompidos');
+  });
 });
