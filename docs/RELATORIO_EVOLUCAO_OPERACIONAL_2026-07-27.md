@@ -33,12 +33,12 @@
 - Funções `SECURITY DEFINER` antigas expostas.
 - Proteção de senhas vazadas desativada.
 
-## Pendente
+## Pendências remanescentes de homologação real
 
-- Configurar a whitelist no Preview.
-- Homologar permitido versus bloqueado, cadência curta e resposta.
-- Homologar com corretor: aceite, chat, call finalizada, pipeline e chat fechado.
-- Receber exemplo real para melhorar a importação de empreendimentos.
+- Executar um disparo controlado para um número permitido e outro bloqueado,
+  validando a whitelist de ponta a ponta.
+- Convidar e ativar um segundo corretor na mesma conta para homologar rejeição,
+  expiração, transferência e redistribuição reais entre dois usuários.
 
 ## Correções após homologação
 
@@ -166,3 +166,38 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
 - O preview documental ganhou decisão por item e filtro para manter somente
   studios com metragem máxima confiável de até 40 m².
 - Nenhuma campanha real foi disparada durante esta alteração.
+
+### Fechamento da seleção documental no staging
+
+- O lote completo dos três PDFs resultou em 162 candidatos estruturados.
+- Foram aprovados 14 empreendimentos com identidade e localização confiáveis,
+  todos com metragem máxima de até 40 m²; 148 itens ambíguos, duplicados,
+  genéricos ou fora do recorte foram rejeitados.
+- Os 14 empreendimentos aprovados entraram no catálogo como `draft`. Nenhum
+  deles foi publicado para corretores ou indexado automaticamente na base da
+  IA.
+- O filtro da interface passou a exigir identidade confiável também para itens
+  do tipo empreendimento e exclui rótulos genéricos conhecidos, evitando que
+  títulos de seção sejam tratados como produtos.
+
+### Fechamento do fluxo operacional do corretor no staging
+
+- O perfil controlado do corretor Arthur foi mantido ativo e disponível para
+  receber ofertas.
+- Há evidência persistida de oferta aceita, confirmação do corretor, reunião
+  concluída, movimentação comercial para `proposal_sent` e fechamento da
+  conversa associada.
+- A ação `Call finalizada` atualizou reunião e oportunidade sem o erro anterior
+  de permissão em `audit_events`.
+- O teste de redistribuição real entre dois corretores continua dependendo do
+  convite e aceite de um segundo usuário distinto na mesma conta. Não foi
+  reutilizado nem transferido um usuário pertencente a outra conta.
+
+### Verificações finais desta rodada
+
+- Typecheck aprovado.
+- Testes da cadência dinâmica aprovados.
+- Suite completa anterior desta mesma implementação: 85 arquivos e 741 testes
+  aprovados; build Next.js aprovado.
+- Nenhuma campanha de reativação foi ativada e nenhuma mensagem de WhatsApp foi
+  enviada nesta rodada.

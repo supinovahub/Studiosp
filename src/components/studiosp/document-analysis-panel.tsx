@@ -819,7 +819,7 @@ function studioItemIds(items: BatchDetail['items'], limit: number) {
     const maximum = numericField(item, 'area_max_sqm');
     if (maximum == null || maximum <= 0 || maximum > limit) continue;
     if (item.item_type === 'development') {
-      eligible.add(item.id);
+      if (hasCatalogIdentity(item)) eligible.add(item.id);
       continue;
     }
     const parent = item.parent_item_id
@@ -836,7 +836,9 @@ function studioItemIds(items: BatchDetail['items'], limit: number) {
 function hasCatalogIdentity(item: BatchDetail['items'][number]) {
   const hasName =
     item.display_name.trim().length >= 6 &&
-    !/^(masp|nrs|hmp|trianon|faria lima)$/i.test(item.display_name.trim());
+    !/^(masp|nrs|hmp|trianon|faria lima|d e morais)$/i.test(
+      item.display_name.trim()
+    );
   const hasLocation = item.fields.some(
     (field) =>
       ['address', 'neighborhood'].includes(field.field_name) &&
