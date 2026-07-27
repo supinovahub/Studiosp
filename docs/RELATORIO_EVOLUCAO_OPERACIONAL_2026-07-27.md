@@ -135,3 +135,19 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
   `vgmmfzdifjhpqaopxfbj`; produção permaneceu inalterada.
 - Verificação local: typecheck aprovado, 85 arquivos de teste e 740 testes
   aprovados.
+
+#### Homologação real no staging
+
+- Deploy `5c6b18d` validado na branch `codex/v1-platform`.
+- Novo lote criado com os três PDFs reais, sem aprovação e sem cadastro no
+  catálogo.
+- A retomada processou o lote selecionado mesmo com lotes antigos pendentes.
+- `EnvelopePDF.aspx.pdf` foi dividido em 2 partes, concluiu as 2 sem falhas e
+  chegou a `Preview pronto`; as chamadas de IA dos blocos terminaram em cerca
+  de 6 segundos no banco.
+- `Revista ONE PARCERIAS.pdf` foi dividido em 10 partes. Durante a homologação,
+  a tela mostrou avanço persistente de `0 de 10` para `2 de 10` (`20%`) e o
+  banco já continha 3 partes prontas enquanto a próxima seguia em análise,
+  comprovando checkpoint e processamento incremental.
+- Nenhuma parte falhou nesse recorte da homologação e nenhuma alteração foi
+  feita no Supabase de produção.
