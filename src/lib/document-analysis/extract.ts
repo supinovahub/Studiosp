@@ -60,74 +60,83 @@ export async function extractDocument(
     // pdf-parse/pdf.js pode transferir e desanexar o ArrayBuffer recebido.
     // Cada consumidor precisa de uma cópia física criada antes da primeira
     // leitura; copiar depois já falha com "detached ArrayBuffer".
-    const textAndImageBytes = bytes.slice();
+    const textBytes = bytes.slice();
+    const imageBytes = bytes.slice();
     const layoutBytes = bytes.slice();
-    const parser = new PDFParse({ data: textAndImageBytes });
+    const textParser = new PDFParse({ data: textBytes });
+    let result: Awaited<ReturnType<PDFParse['getText']>>;
     try {
-      const result = await parser.getText();
-      if (result.total > 300) {
-        throw new Error('O documento ultrapassa o limite de 300 páginas.');
-      }
-      const images = await parser.getImage({
+      result = await textParser.getText();
+    } finally {
+      await textParser.destroy();
+    }
+    if (result.total > 300) {
+      throw new Error('O documento ultrapassa o limite de 300 páginas.');
+    }
+
+    // Não reutilize a instância que extraiu texto. Em alguns runtimes serverless
+    // o worker do pdf.js transfere o buffer na primeira operação; uma segunda
+    // chamada na mesma instância tenta fatiar memória já desanexada.
+    const imageParser = new PDFParse({ data: imageBytes });
+    let images: Awaited<ReturnType<PDFParse['getImage']>>;
+    try {
+      images = await imageParser.getImage({
         imageThreshold: 250,
         imageDataUrl: true,
         imageBuffer: true,
       });
-      const media = images.pages
-        .flatMap((page) =>
-          page.images.map((image, index) => {
-            const mimeType = image.dataUrl.startsWith('data:image/jpeg')
-              ? ('image/jpeg' as const)
-              : ('image/png' as const);
-            return {
-              data: image.data,
-              filename: `pagina-${page.pageNumber}-imagem-${index + 1}.${mimeType === 'image/jpeg' ? 'jpg' : 'png'}`,
-              mimeType,
-              page: page.pageNumber,
-              width: image.width,
-              height: image.height,
-            };
-          })
-        )
-        .sort(
-          (left, right) => right.width * right.height - left.width * left.height
-        )
-        .slice(0, 60);
-      const pageText = result.pages.map((page) => ({
-        page: page.num,
-        text: page.text,
-      }));
-      const layout = await extractPdfLayout(layoutBytes);
-      const positionedText = layoutPrompt(layout, 120_000);
-      const linearText = balancedPageText(pageText, 120_000);
-      return {
-        // Reservamos espaço para as duas representações. Em tabelões extensos,
-        // anexar o layout ao fim faria o limite da análise descartá-lo.
-        text: positionedText.concat('\n\n', linearText),
-        pageCount: result.total,
-        detectedMime,
-        metadata: {
-          extraction: 'pdf-parse',
-          pages: pageText.map((page) => ({
-            page: page.page,
-            textLength: page.text.length,
-          })),
-          extractedImageCount: media.length,
-          positionedRowCount: layout.reduce(
-            (total, page) => total + page.rows.length,
-            0
-          ),
-          linkCount: layout.reduce(
-            (total, page) => total + page.links.length,
-            0
-          ),
-        },
-        media,
-        layout,
-      };
     } finally {
-      await parser.destroy();
+      await imageParser.destroy();
     }
+    const media = images.pages
+      .flatMap((page) =>
+        page.images.map((image, index) => {
+          const mimeType = image.dataUrl.startsWith('data:image/jpeg')
+            ? ('image/jpeg' as const)
+            : ('image/png' as const);
+          return {
+            data: image.data,
+            filename: `pagina-${page.pageNumber}-imagem-${index + 1}.${mimeType === 'image/jpeg' ? 'jpg' : 'png'}`,
+            mimeType,
+            page: page.pageNumber,
+            width: image.width,
+            height: image.height,
+          };
+        })
+      )
+      .sort(
+        (left, right) => right.width * right.height - left.width * left.height
+      )
+      .slice(0, 60);
+    const pageText = result.pages.map((page) => ({
+      page: page.num,
+      text: page.text,
+    }));
+    const layout = await extractPdfLayout(layoutBytes);
+    const positionedText = layoutPrompt(layout, 120_000);
+    const linearText = balancedPageText(pageText, 120_000);
+    return {
+      // Reservamos espaço para as duas representações. Em tabelões extensos,
+      // anexar o layout ao fim faria o limite da análise descartá-lo.
+      text: positionedText.concat('\n\n', linearText),
+      pageCount: result.total,
+      detectedMime,
+      metadata: {
+        extraction: 'pdf-parse',
+        pages: pageText.map((page) => ({
+          page: page.page,
+          textLength: page.text.length,
+        })),
+        extractedImageCount: media.length,
+        positionedRowCount: layout.reduce(
+          (total, page) => total + page.rows.length,
+          0
+        ),
+        linkCount: layout.reduce((total, page) => total + page.links.length, 0),
+      },
+      media,
+      layout,
+    };
   }
 
   if (

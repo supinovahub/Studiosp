@@ -98,3 +98,10 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
 - Corrigida uma regressão em que o leitor de texto desanexava o `ArrayBuffer`
   antes da extração posicional. Texto/imagens e layout agora recebem cópias
   físicas independentes do PDF.
+- O isolamento foi ampliado para três leitores independentes: texto, imagens e
+  layout. Isso evita que operações sequenciais da mesma instância do `pdf.js`
+  reutilizem memória transferida em runtimes serverless.
+- A extração local foi executada com os três arquivos reais de homologação:
+  EnvelopePDF, Revista ONE Parcerias (aproximadamente 14 MB) e Tabelão Matriz
+  Junho. Os três concluíram texto, quantidade de páginas e layout sem erro de
+  buffer; nenhuma aprovação ou escrita no catálogo foi realizada.
