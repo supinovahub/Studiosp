@@ -67,4 +67,11 @@ audit_events` e revertia a conclusão da call.
   atalho de Configurações aponta para essa rota única.
 - Verificações locais: typecheck aprovado, 84 arquivos de teste e 725 testes
   aprovados, build Next.js aprovado.
-- Homologação visual e operacional no Preview permanece pendente.
+- Preview Vercel `74170d7` ficou `READY` e a rota unificada de Inteligência foi
+  confirmada com a conta do owner.
+- Nova análise controlada da Revista ONE no staging terminou em `Preview
+pronto` com 26 itens estruturados e 29 imagens editáveis.
+- A troca de categoria de uma imagem foi persistida e recarregada no preview.
+- O botão de aprovação ficou disponível, mas não foi acionado; o catálogo
+  permaneceu com um empreendimento já existente e nenhum item da revista foi
+  gravado.
