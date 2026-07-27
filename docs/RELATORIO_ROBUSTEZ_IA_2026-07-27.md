@@ -1,7 +1,7 @@
 # Relatório — robustez das respostas automáticas da IA
 
 Data: 27/07/2026  
-Ambiente: staging  
+Ambientes: staging e produção  
 Branch de implementação: `feature/ai-reply-robustness`
 
 ## Diagnóstico
@@ -67,7 +67,14 @@ O enfileiramento é idempotente por mensagem recebida. Quando o provedor pode te
 
 ## Operação e rollback
 
-Produção não foi alterada nesta etapa. Para interromper o novo processamento em staging, basta desativar o consumo da fila e restaurar os webhooks/cron para a versão anterior. As tabelas podem ser preservadas para auditoria; não é necessário apagar dados para reverter o código.
+Após a homologação no staging, o dono autorizou expressamente a promoção para
+produção em 27/07/2026. As quatro migrations aditivas foram aplicadas primeiro
+ao Supabase Studiosp de produção (`ixttqwjfaeybaisglxee`) e validadas antes do
+merge da versão homologada na `main`.
+
+Para interromper o novo processamento, basta restaurar a versão anterior dos
+webhooks e do cron. As tabelas podem ser preservadas para auditoria; não é
+necessário apagar dados para reverter o código.
 
 ## Próximos critérios de homologação
 

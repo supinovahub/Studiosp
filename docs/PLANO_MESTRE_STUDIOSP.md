@@ -39,7 +39,10 @@ Especificação da importação segura de conversas antigas:
   falha, o sistema prefere revisão humana a um retry que possa duplicar o
   envio.
 
-A V1 está implementada na branch de homologação `codex/v1-platform`. Produção e `main` permanecem preservadas. A promoção depende da conclusão do roteiro de homologação e de autorização expressa do dono.
+A robustez operacional foi homologada na branch `codex/v1-platform` e teve sua
+promoção para produção autorizada expressamente pelo dono em 27/07/2026. As
+migrations aditivas foram aplicadas e validadas primeiro no Supabase Studiosp
+de produção, antes do merge da versão homologada na `main`.
 
 ### Situação em 24 de julho de 2026
 
