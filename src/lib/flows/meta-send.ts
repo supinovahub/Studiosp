@@ -16,6 +16,7 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils';
+import { whatsappConnectionKey } from '@/lib/whatsapp/connection-key';
 import { supabaseAdmin } from './admin-client';
 
 // ------------------------------------------------------------
@@ -93,6 +94,7 @@ export async function engineSendText(
   }
 
   const accessToken = decrypt(config.access_token);
+  const connectionKey = whatsappConnectionKey(config);
   const providerConfig = {
     provider: config.provider,
     phone_number_id: config.phone_number_id,
@@ -137,6 +139,7 @@ export async function engineSendText(
   }
 
   const { error: msgErr } = await db.from('messages').insert({
+    account_id: args.accountId,
     conversation_id: args.conversationId,
     sender_type: 'bot',
     content_type: 'text',
@@ -144,6 +147,7 @@ export async function engineSendText(
     message_id: waMessageId,
     status: 'sent',
     ai_generated: args.aiGenerated ?? false,
+    whatsapp_connection_key: connectionKey,
   });
   if (msgErr) {
     throw new Error(
@@ -154,6 +158,7 @@ export async function engineSendText(
   await db
     .from('conversations')
     .update({
+      whatsapp_connection_key: connectionKey,
       last_message_text: args.text,
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

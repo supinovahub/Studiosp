@@ -4,6 +4,8 @@ import { ForbiddenError, UnauthorizedError } from '@/lib/auth/account';
 import { parseWhatsAppHistoryJsonl } from './parser';
 import type { HistoryImportBatch } from './types';
 
+export { whatsappConnectionKey } from '@/lib/whatsapp/connection-key';
+
 export const HISTORY_IMPORT_BUCKET = 'whatsapp-history-imports';
 export const MAX_HISTORY_FILE_BYTES = 50 * 1024 * 1024;
 export const HISTORY_IMPORT_CHUNK_SIZE = 750;
@@ -56,19 +58,6 @@ export function safeHistoryFilename(name: string) {
     .replace(/^-+|-+$/g, '')
     .slice(0, 100);
   return `${stem || 'historico-whatsapp'}.jsonl`;
-}
-
-export function whatsappConnectionKey(config: {
-  id: string;
-  provider: string;
-  phone_number_id?: string | null;
-  uazapi_instance_id?: string | null;
-}) {
-  const identity =
-    config.provider === 'uazapi'
-      ? config.uazapi_instance_id
-      : config.phone_number_id;
-  return `${config.provider}:${identity?.trim() || config.id}`;
 }
 
 export async function downloadAndParseHistorySource(
