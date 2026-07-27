@@ -16,6 +16,14 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { runStudiospAction, useStudiospData } from '@/hooks/use-studiosp-data';
 import {
   eventLabels,
@@ -48,6 +56,10 @@ export function LeadDetailPage({ id }: { id: string }) {
   const [notes, setNotes] = useState('');
   const [grossValue, setGrossValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const [callDialogOpen, setCallDialogOpen] = useState(false);
+  const [callOutcome, setCallOutcome] = useState('follow_up');
+  const [callNotes, setCallNotes] = useState('');
+  const [callReasonId, setCallReasonId] = useState('');
   const [actionMessage, setActionMessage] = useState<{
     type: 'error' | 'success';
     text: string;
@@ -117,6 +129,40 @@ export function LeadDetailPage({ id }: { id: string }) {
           actionError instanceof Error
             ? actionError.message
             : 'Não foi possível registrar.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function completeCall() {
+    setSaving(true);
+    setActionMessage(null);
+    try {
+      if (callOutcome === 'not_interested' && !callReasonId)
+        throw new Error('Selecione o motivo da perda.');
+      await runStudiospAction('complete_broker_call', {
+        opportunityId: lead!.id,
+        expectedStage: lead!.stage,
+        outcome: callOutcome,
+        notes: callNotes,
+        reasonId: callReasonId || null,
+      });
+      setCallDialogOpen(false);
+      setCallNotes('');
+      setCallReasonId('');
+      setActionMessage({
+        type: 'success',
+        text: 'Call finalizada, pipeline atualizado e conversa encerrada.',
+      });
+      await reload();
+    } catch (actionError) {
+      setActionMessage({
+        type: 'error',
+        text:
+          actionError instanceof Error
+            ? actionError.message
+            : 'Não foi possível finalizar a call.',
       });
     } finally {
       setSaving(false);
@@ -452,6 +498,15 @@ export function LeadDetailPage({ id }: { id: string }) {
                     Abrir reunião <ExternalLink className="size-3" />
                   </a>
                 ) : null}
+                {activeAppointment.status === 'broker_confirmed' &&
+                new Date(activeAppointment.starts_at).getTime() <= Date.now() ? (
+                  <Button
+                    className="mt-3 w-full"
+                    onClick={() => setCallDialogOpen(true)}
+                  >
+                    <CheckCircle2 /> Call finalizada
+                  </Button>
+                ) : null}
               </div>
             ) : (
               <p className="text-muted-foreground mt-2 text-xs leading-5">
@@ -477,6 +532,65 @@ export function LeadDetailPage({ id }: { id: string }) {
           </section>
         </aside>
       </div>
+
+      <Dialog open={callDialogOpen} onOpenChange={setCallDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Finalizar call</DialogTitle>
+            <DialogDescription>
+              Registre o resultado. O pipeline será atualizado e o chat será
+              fechado para novas interações manuais.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="space-y-1">
+            <span className="text-xs font-medium">Status do lead</span>
+            <select
+              value={callOutcome}
+              onChange={(event) => setCallOutcome(event.target.value)}
+              className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm"
+            >
+              <option value="follow_up">Continuar acompanhamento</option>
+              <option value="proposal_sent">Proposta enviada</option>
+              <option value="negotiating">Em negociação</option>
+              <option value="not_interested">Sem interesse</option>
+            </select>
+          </label>
+          {callOutcome === 'not_interested' ? (
+            <label className="space-y-1">
+              <span className="text-xs font-medium">Motivo da perda</span>
+              <select
+                value={callReasonId}
+                onChange={(event) => setCallReasonId(event.target.value)}
+                className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm"
+              >
+                <option value="">Selecione...</option>
+                {lossReasons.map((reason) => (
+                  <option key={String(reason.id)} value={String(reason.id)}>
+                    {String(reason.label)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label className="space-y-1">
+            <span className="text-xs font-medium">Resumo da call</span>
+            <Textarea
+              value={callNotes}
+              onChange={(event) => setCallNotes(event.target.value)}
+              rows={4}
+              placeholder="Interesse, objeções e próximo passo"
+            />
+          </label>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCallDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button disabled={saving} onClick={() => void completeCall()}>
+              {saving ? 'Finalizando...' : 'Confirmar resultado'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1552,3 +1552,18 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - a implementação foi integrada à branch `feature/reactivacao-leads` e
   permanece no Supabase Staging até homologação e autorização expressa para
   promoção.
+
+## 22. Próxima evolução operacional
+
+### Implementado, não homologado em 27/07/2026
+
+- `AI_AUTOREPLY_ALLOWED_NUMBERS` limita quais números podem acionar a resposta
+  automática da IA durante testes; mensagens bloqueadas continuam no inbox;
+- a abordagem especializada da reativação ocorre somente em D0;
+- os contatos seguintes são lembretes determinísticos e a cadência pode ser
+  configurada pelo dono entre D0 e D90, com no máximo quatro contatos;
+- a resposta cancela os lembretes e transfere a condução para a IA-SDR normal;
+- o corretor possui a ação `Call finalizada`, com resultado, resumo, atualização
+  transacional do pipeline e encerramento da conversa;
+- a migration foi aplicada somente no staging `vgmmfzdifjhpqaopxfbj`;
+- a importação padronizada aguarda um exemplo real de fonte e preview esperado.

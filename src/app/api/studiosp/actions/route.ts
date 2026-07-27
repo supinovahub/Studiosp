@@ -64,6 +64,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ opportunity: result.data });
     }
 
+    if (action === 'complete_broker_call') {
+      const result = await supabase.rpc('studiosp_complete_broker_call', {
+        p_opportunity_id: text(body.opportunityId),
+        p_expected_stage: text(body.expectedStage),
+        p_outcome: text(body.outcome),
+        p_notes: text(body.notes) || null,
+        p_reason_id: text(body.reasonId) || null,
+      });
+      actionError(result.error);
+      return NextResponse.json({ opportunity: result.data });
+    }
+
     if (action === 'resolve_attention') {
       const result = await supabase.rpc('studiosp_resolve_attention_item', {
         p_attention_item_id: text(body.attentionId),
