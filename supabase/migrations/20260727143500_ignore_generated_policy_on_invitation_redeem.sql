@@ -103,7 +103,12 @@ BEGIN
       account_role = v_inv.role
   WHERE id = v_profile_id;
 
-  IF v_inv.role = 'agent' THEN
+  IF v_inv.role = 'agent' AND NOT EXISTS (
+    SELECT 1
+    FROM broker_profiles
+    WHERE account_id = v_inv.account_id
+      AND profile_id = v_profile_id
+  ) THEN
     INSERT INTO broker_profiles (
       account_id,
       profile_id,

@@ -224,3 +224,11 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
   alteradas por usuários e todos os dados comerciais continuam protegidos.
 - Migration aplicada no staging:
   `20260727143500_ignore_generated_policy_on_invitation_redeem.sql`.
+- O teste seguinte revelou que o trigger de mudança para `agent` já cria o
+  `broker_profile` no destino. A função deixou de inserir uma segunda linha
+  quando esse perfil já existe.
+- Migration aplicada no staging:
+  `20260727144500_make_broker_invitation_redeem_idempotent.sql`.
+- A mesma função foi executada com o contexto autenticado do novo usuário e o
+  convite real: resgate concluído, conta pessoal removida, role `agent`,
+  corretor ativo/disponível e vínculo com a conta convidante confirmados.

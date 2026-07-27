@@ -1,10 +1,6 @@
--- Allow a freshly signed-up agent to redeem an account invitation.
---
--- Signup creates both a personal account and a broker_profiles row. The
--- composite FK broker_profiles(profile_id, account_id) prevents moving the
--- profile until that generated broker row is handled. Preserve its harmless
--- configuration, move the profile atomically, and recreate the broker inside
--- the destination account. Accounts with operational data remain protected.
+-- The profile role trigger may create the destination broker profile while
+-- redeem_invitation updates profiles.account_role. Insert a broker only when
+-- the trigger did not already create one.
 
 CREATE OR REPLACE FUNCTION public.redeem_invitation(
   p_token_hash TEXT
@@ -52,12 +48,10 @@ BEGIN
   IF v_old_account_id IS NULL THEN
     RAISE EXCEPTION 'Caller has no profile' USING ERRCODE = '42501';
   END IF;
-
   IF v_old_account_id = v_inv.account_id THEN
     RAISE EXCEPTION 'You are already a member of this account'
       USING ERRCODE = '23505';
   END IF;
-
   IF v_old_account_owner <> v_caller_id THEN
     RAISE EXCEPTION 'You are already in a shared account; sign up with a different email to join this one'
       USING ERRCODE = '23505';
@@ -98,8 +92,6 @@ BEGIN
   FOR UPDATE;
   v_had_broker := FOUND;
 
-  -- This row is generated at signup and contains no operational history due
-  -- to the guard above. Removing it releases the composite profile/account FK.
   IF v_had_broker THEN
     DELETE FROM broker_profiles WHERE id = v_broker.id;
   END IF;
