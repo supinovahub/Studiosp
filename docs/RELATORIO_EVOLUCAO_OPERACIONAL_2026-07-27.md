@@ -232,3 +232,40 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
 - A mesma função foi executada com o contexto autenticado do novo usuário e o
   convite real: resgate concluído, conta pessoal removida, role `agent`,
   corretor ativo/disponível e vínculo com a conta convidante confirmados.
+
+### Homologação da fila com dois corretores
+
+- Corretores usados: `joão silva` como primeira tentativa e `pedro` como
+  segunda tentativa, ambos ativos na mesma conta.
+- Nenhuma mensagem de WhatsApp foi enviada. Os contatos sintéticos ficaram
+  suprimidos e as ofertas foram marcadas como notificadas pelo dashboard.
+- Rejeição: a primeira oferta terminou como `rejected`; uma segunda oferta foi
+  criada imediatamente para Pedro pelo canal `dashboard` e aceita.
+- Transferência: a primeira oferta terminou como `transferred`; a segunda foi
+  criada para Pedro e aceita.
+- Expiração: o scheduler real do Supabase, ativo a cada cinco minutos, mudou a
+  primeira oferta para `expired`, criou a segunda oferta para Pedro e o aceite
+  confirmou a reunião.
+- Aceites tardios em ofertas rejeitadas ou expiradas não assumiram a reunião.
+- Fila esgotada: após os dois corretores rejeitarem, a oportunidade passou para
+  `owner_attention` e foi criado um item crítico
+  `broker_queue_exhausted`.
+- Reuniões aceitas terminaram como `broker_confirmed`, com Pedro atribuído,
+  `meeting_status = confirmed` e `attention_state = no_action`.
+
+#### Correções descobertas durante a homologação
+
+- Corretores sem WhatsApp verificado deixaram de ser excluídos da fila. A
+  oferta usa `dashboard`; quando existir WhatsApp verificado, usa `both`.
+- O worker de expiração passou a aplicar a mesma regra de elegibilidade.
+- Uma resposta recebida depois de `expires_at` agora persiste o estado
+  `expired`; antes, a exceção desfazia a atualização.
+- Migrations aplicadas somente no staging:
+  `20260727150500_allow_dashboard_only_broker_routing.sql` e
+  `20260727151000_persist_expired_assignment_response.sql`.
+- Typecheck aprovado e deploy `e83f813` confirmado como `READY` no staging.
+- Foram criados quatro cenários sintéticos, todos identificados por
+  `source_metadata.qa_suite = two_broker_20260727`, com contatos suprimidos e
+  números não roteáveis. A limpeza física foi recusada corretamente pela regra
+  de imutabilidade de eventos e auditoria; os registros foram preservados como
+  evidência no staging e não existem em produção.
