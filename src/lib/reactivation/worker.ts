@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { engineSendText } from '@/lib/flows/meta-send';
 import { buildReactivationMessageWithVariant } from './cadence';
+import { waitForReactivationDelay } from './pacing';
 
 type Row = Record<string, unknown>;
 
@@ -15,12 +16,18 @@ export async function sendDueReactivationTouches(
   options: ReactivationWorkerOptions = {}
 ) {
   const workerId = `reactivation:${Date.now()}`;
-  const touches =
-    options.accountId || options.campaignId
-      ? await claimScopedTouches(db, workerId, options)
-      : await claimGlobalTouches(db, workerId, options.limit ?? 1);
+  const limit = Math.max(1, Math.min(3, options.limit ?? 3));
   let sent = 0;
-  for (const touch of touches) {
+  let outboundAttempts = 0;
+  for (let index = 0; index < limit; index++) {
+    // Claim one item at a time. This prevents later messages from remaining
+    // stuck as "processing" while this worker waits for the randomized gap.
+    const touches =
+      options.accountId || options.campaignId
+        ? await claimScopedTouches(db, workerId, { ...options, limit: 1 })
+        : await claimGlobalTouches(db, workerId, 1);
+    const touch = touches[0];
+    if (!touch) break;
     const { data: lead } = await db
       .from('reactivation_leads')
       .select('*')
@@ -51,6 +58,10 @@ export async function sendDueReactivationTouches(
       continue;
     }
     try {
+      if (outboundAttempts > 0) {
+        await waitForReactivationDelay();
+      }
+      outboundAttempts++;
       const message = buildReactivationMessageWithVariant(
         lead,
         Number(touch.step_number)

@@ -1600,6 +1600,8 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - cada campanha oferece um diagnóstico operacional com totais de mensagens
   enviadas, agendadas, processando, canceladas, falhas registradas e
   reprocessamentos, além do detalhe por lead e ID retornado pelo provedor;
+- tentativas consecutivas de envio da reativação usam um intervalo aleatório
+  entre 30 e 50 segundos, sem alterar os demais fluxos de mensageria;
 - desenvolvimento e homologação acontecem na branch integrada
   `feature/reactivacao-leads` e no Supabase staging.
 
