@@ -218,3 +218,9 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
   `20260727141041_fix_broker_invitation_redeem.sql`.
 - A função continua restrita a usuários autenticados, valida `auth.uid()`, usa
   `search_path` fixo e não concede execução ao papel `anon`.
+- A jornada completa revelou ainda que o onboarding cria automaticamente uma
+  política padrão de agenda na conta pessoal. Essa política gerada pelo sistema
+  deixou de ser classificada como dado operacional no resgate; políticas
+  alteradas por usuários e todos os dados comerciais continuam protegidos.
+- Migration aplicada no staging:
+  `20260727143500_ignore_generated_policy_on_invitation_redeem.sql`.

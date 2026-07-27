@@ -1,10 +1,6 @@
--- Allow a freshly signed-up agent to redeem an account invitation.
---
--- Signup creates both a personal account and a broker_profiles row. The
--- composite FK broker_profiles(profile_id, account_id) prevents moving the
--- profile until that generated broker row is handled. Preserve its harmless
--- configuration, move the profile atomically, and recreate the broker inside
--- the destination account. Accounts with operational data remain protected.
+-- Fresh accounts receive a generated scheduling policy during signup. It is
+-- infrastructure created by onboarding, not user-owned operational data, and
+-- must not prevent the user from redeeming an invitation.
 
 CREATE OR REPLACE FUNCTION public.redeem_invitation(
   p_token_hash TEXT
@@ -98,8 +94,6 @@ BEGIN
   FOR UPDATE;
   v_had_broker := FOUND;
 
-  -- This row is generated at signup and contains no operational history due
-  -- to the guard above. Removing it releases the composite profile/account FK.
   IF v_had_broker THEN
     DELETE FROM broker_profiles WHERE id = v_broker.id;
   END IF;
