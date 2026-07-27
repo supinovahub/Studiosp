@@ -42,6 +42,26 @@ export async function sendDueReactivationTouches(
       await cancelTouch(db, String(touch.id), 'lead_not_eligible');
       continue;
     }
+    const { data: activeSession, error: sessionError } = await db
+      .from('reactivation_sessions')
+      .select('id,reactivation_lead_id,campaign_id')
+      .eq('account_id', touch.account_id)
+      .eq('contact_id', lead.contact_id)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (
+      sessionError ||
+      !activeSession ||
+      activeSession.reactivation_lead_id !== lead.id ||
+      activeSession.campaign_id !== touch.campaign_id
+    ) {
+      await cancelTouch(
+        db,
+        String(touch.id),
+        sessionError ? 'session_lookup_failed' : 'inactive_reactivation_session'
+      );
+      continue;
+    }
     const { data: contact } = await db
       .from('contacts')
       .select('opted_out_at')

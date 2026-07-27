@@ -67,6 +67,7 @@ export async function POST(
     let queued = 0;
     const failures: string[] = [];
     for (const lead of leads as Row[]) {
+      let createdSessionId: string | null = null;
       try {
         const contact = await findOrCreateContact(db, {
           accountId,
@@ -74,6 +75,32 @@ export async function POST(
           lead,
           campaignId: id,
         });
+        const { data: latestSession, error: activeSessionError } = await db
+          .from('reactivation_sessions')
+          .select('campaign_id,status,cooldown_until')
+          .eq('account_id', accountId)
+          .eq('contact_id', contact.id)
+          .order('started_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (activeSessionError) throw activeSessionError;
+        if (latestSession?.status === 'active') {
+          throw new Error(
+            latestSession.campaign_id === id
+              ? 'Contato já está ativo nesta campanha.'
+              : 'Contato já participa de outra campanha ativa.'
+          );
+        }
+        if (
+          latestSession?.cooldown_until &&
+          new Date(latestSession.cooldown_until).getTime() > Date.now()
+        ) {
+          throw new Error(
+            `Contato está em período de segurança até ${new Date(
+              latestSession.cooldown_until
+            ).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`
+          );
+        }
         const conversation = await findOrCreateConversation(
           db,
           accountId,
@@ -99,6 +126,33 @@ export async function POST(
         );
         if (opportunityError) throw opportunityError;
         const opportunityId = String((opportunity as Row).id);
+        const knownContext = {
+          campaign_id: id,
+          reactivation_lead_id: lead.id,
+          known_name: lead.name,
+          known_objective: lead.objective,
+          known_entry_value: lead.entry_value,
+        };
+        const { data: session, error: sessionError } = await db
+          .from('reactivation_sessions')
+          .insert({
+            account_id: accountId,
+            contact_id: contact.id,
+            conversation_id: conversation.id,
+            opportunity_id: opportunityId,
+            campaign_id: id,
+            reactivation_lead_id: lead.id,
+            known_context: knownContext,
+          })
+          .select('id')
+          .single();
+        if (sessionError) {
+          if (sessionError.code === '23505') {
+            throw new Error('Contato já participa de outra campanha ativa.');
+          }
+          throw sessionError;
+        }
+        createdSessionId = session.id;
         const now = Date.now();
         // Distribui os contatos para evitar rajadas. O primeiro lead pode sair
         // imediatamente; os seguintes ficam espaçados e o worker reivindica
@@ -166,6 +220,16 @@ export async function POST(
         }
         queued++;
       } catch (error) {
+        if (createdSessionId) {
+          await db
+            .from('reactivation_sessions')
+            .update({
+              status: 'cancelled',
+              ended_at: new Date().toISOString(),
+            })
+            .eq('id', createdSessionId)
+            .eq('status', 'active');
+        }
         failures.push(
           `${String(lead.row_number)}: ${
             error instanceof Error ? error.message : 'falha desconhecida'

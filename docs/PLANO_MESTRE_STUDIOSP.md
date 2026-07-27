@@ -1641,6 +1641,25 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - desenvolvimento e homologação acontecem na branch integrada
   `feature/reactivacao-leads` e no Supabase staging.
 
+### Robustez conversacional — decisão de 27 de julho de 2026
+
+#### Confirmado
+
+- um contato pode possuir somente uma sessão de reativação ativa, mesmo quando
+  aparece em campanhas diferentes;
+- a resposta do contato encerra a sessão ativa, cancela todos os contatos
+  futuros ligados a ele e inicia um período de segurança de 30 dias;
+- mensagens recebidas em sequência curta formam um único turno; os trabalhos
+  anteriores permanecem na auditoria como substituídos, mas não podem enviar;
+- antes do envio, o sistema deve invalidar respostas geradas com contexto antigo
+  e reivindicar atomicamente um fingerprint do conteúdo;
+- respostas equivalentes nos dez minutos seguintes são bloqueadas;
+- a IA envia uma única mensagem consolidada por turno, evitando fragmentação em
+  várias bolhas;
+- em falhas ambíguas, a preferência é não repetir o envio e encaminhar o caso
+  para diagnóstico;
+- essa evolução é aplicada e homologada primeiro no Supabase Staging.
+
 ## 21. Importação de histórico do WhatsApp
 
 ### Confirmado em 24/07/2026

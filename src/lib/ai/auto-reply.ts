@@ -11,7 +11,7 @@ import { engineSendText } from '@/lib/flows/meta-send';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { classifySdrTurn, emptySdrClassification } from './sdr-classify';
 import { persistSdrClassification } from './sdr-store';
-import { splitAiMessage, waitBetweenAiMessages } from './message-parser';
+import { createHash } from 'node:crypto';
 import {
   prepareStudiospTurn,
   scheduleStudiospFollowups,
@@ -241,6 +241,16 @@ export async function dispatchInboundToAiReply(
           .update({ status: 'opted_out' })
           .eq('account_id', accountId)
           .eq('contact_id', contactId),
+        db
+          .from('reactivation_sessions')
+          .update({
+            status: 'opted_out',
+            ended_at: now,
+            cooldown_until: now,
+          })
+          .eq('account_id', accountId)
+          .eq('contact_id', contactId)
+          .eq('status', 'active'),
       ]);
       if (ids.length) {
         await db
@@ -357,6 +367,32 @@ export async function dispatchInboundToAiReply(
       return { outcome: 'handoff', reason: 'model_or_policy_handoff' };
     }
 
+    // If another customer message arrived while the model was working, this
+    // answer is stale. The newest durable job will answer the entire burst.
+    const { data: newestInbound, error: newestInboundError } = await db
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .eq('sender_type', 'customer')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (newestInboundError) {
+      return {
+        outcome: 'failed',
+        reason: 'latest_inbound_lookup_failed',
+        retryable: true,
+      };
+    }
+    if (
+      triggerMessageId &&
+      newestInbound?.id &&
+      newestInbound.id !== triggerMessageId
+    ) {
+      return { outcome: 'skipped', reason: 'superseded_by_newer_inbound' };
+    }
+
     // Atomically claim a reply slot: the cap check + increment happen in
     // one UPDATE, so concurrent inbounds can never overshoot the cap. If
     // another inbound just took the last slot, `claimed` is false and we
@@ -391,18 +427,34 @@ export async function dispatchInboundToAiReply(
       return { outcome: 'handoff', reason: 'session_reply_limit_reached' };
     }
 
-    const messageParts = splitAiMessage(text);
-    for (const [index, messagePart] of messageParts.entries()) {
-      if (index > 0) await waitBetweenAiMessages();
-      await engineSendText({
-        accountId,
-        userId: configOwnerUserId,
-        conversationId,
-        contactId,
-        text: messagePart,
-        aiGenerated: true,
-      });
+    const outboundText = compactAiReply(text);
+    const { data: fingerprintClaimed, error: fingerprintError } = await db.rpc(
+      'claim_ai_response_fingerprint',
+      {
+        p_account_id: accountId,
+        p_conversation_id: conversationId,
+        p_fingerprint: responseFingerprint(outboundText),
+        p_window_seconds: 600,
+      }
+    );
+    if (fingerprintError) {
+      return {
+        outcome: 'failed',
+        reason: 'response_fingerprint_claim_failed',
+        retryable: true,
+      };
     }
+    if (fingerprintClaimed !== true) {
+      return { outcome: 'skipped', reason: 'duplicate_response_blocked' };
+    }
+    await engineSendText({
+      accountId,
+      userId: configOwnerUserId,
+      conversationId,
+      contactId,
+      text: outboundText,
+      aiGenerated: true,
+    });
 
     await persistSdrClassification({
       db,
@@ -435,6 +487,24 @@ export async function dispatchInboundToAiReply(
       ),
     };
   }
+}
+
+export function compactAiReply(text: string) {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export function responseFingerprint(text: string) {
+  const normalized = compactAiReply(text)
+    .normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+  return createHash('sha256').update(normalized).digest('hex');
 }
 
 async function handoffForReplyLimit({

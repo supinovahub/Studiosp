@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
     claim: true as boolean,
+    fingerprintClaim: true as boolean,
     updatePayload: null as Record<string, unknown> | null,
     rpcCalls: [] as { name: string; args: unknown }[],
   },
@@ -85,7 +86,13 @@ vi.mock('./admin-client', () => ({
     },
     rpc: (name: string, args: unknown) => {
       h.state.rpcCalls.push({ name, args });
-      return Promise.resolve({ data: h.state.claim, error: null });
+      return Promise.resolve({
+        data:
+          name === 'claim_ai_response_fingerprint'
+            ? h.state.fingerprintClaim
+            : h.state.claim,
+        error: null,
+      });
     },
   }),
 }));
@@ -126,6 +133,7 @@ beforeEach(() => {
   };
   h.state.autoResponders = [];
   h.state.claim = true;
+  h.state.fingerprintClaim = true;
   h.state.updatePayload = null;
   h.state.rpcCalls = [];
   h.loadAiConfig.mockResolvedValue(aiConfig());
@@ -184,19 +192,16 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 
   it('claims a slot and sends on the happy path', async () => {
     await dispatchInboundToAiReply(ARGS);
-    expect(h.state.rpcCalls).toEqual([
-      {
-        name: 'claim_ai_reply_slot',
-        args: { conversation_id: 'conv-1', max_replies: 3 },
-      },
+    expect(h.state.rpcCalls.map((call) => call.name)).toEqual([
+      'claim_ai_reply_slot',
+      'claim_ai_response_fingerprint',
     ]);
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({ conversationId: 'conv-1', text: 'Hello!' })
     );
   });
 
-  it('sends each parsed sentence as a separate WhatsApp message', async () => {
-    vi.stubEnv('AI_MESSAGE_DELAY_MS', '0');
+  it('sends one consolidated WhatsApp message per conversational turn', async () => {
     h.generateReply.mockResolvedValue({
       text: 'Olá! Encontrei uma opção. Qual bairro você prefere?',
       handoff: false,
@@ -204,12 +209,10 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 
     await dispatchInboundToAiReply(ARGS);
 
-    expect(h.engineSendText.mock.calls.map(([call]) => call.text)).toEqual([
-      'Olá!',
-      'Encontrei uma opção.',
-      'Qual bairro você prefere?',
-    ]);
-    vi.unstubAllEnvs();
+    expect(h.engineSendText).toHaveBeenCalledTimes(1);
+    expect(h.engineSendText.mock.calls[0][0].text).toBe(
+      'Olá! Encontrei uma opção. Qual bairro você prefere?'
+    );
   });
 
   it('grounds the reply in retrieved knowledge', async () => {
@@ -233,6 +236,12 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     await dispatchInboundToAiReply(ARGS);
     // It still attempts the claim, but the send is skipped.
     expect(h.state.rpcCalls).toHaveLength(1);
+    expect(h.engineSendText).not.toHaveBeenCalled();
+  });
+
+  it('blocks an equivalent response claimed by another job', async () => {
+    h.state.fingerprintClaim = false;
+    await dispatchInboundToAiReply(ARGS);
     expect(h.engineSendText).not.toHaveBeenCalled();
   });
 

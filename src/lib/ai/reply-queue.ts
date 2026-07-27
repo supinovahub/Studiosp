@@ -53,8 +53,15 @@ export async function enqueueInboundAiReply(
     throw error;
   }
 
+  // Give consecutive short messages time to form one conversational turn.
+  // Every newer enqueue supersedes the older audit job in the database.
+  await waitForInboundQuietPeriod();
   const processed = await processAiReplyQueue(db, 5);
   return { queued: Boolean(data), processed };
+}
+
+export async function waitForInboundQuietPeriod(ms = 8_250) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function processAiReplyQueue(

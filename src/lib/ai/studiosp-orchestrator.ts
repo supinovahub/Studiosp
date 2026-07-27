@@ -247,27 +247,50 @@ export async function prepareStudiospTurn(args: {
     .maybeSingle();
   if (!opportunity) return empty;
 
-  if (opportunity.source_type === 'reactivation') {
+  const { data: reactivationSession } = await args.db
+    .from('reactivation_sessions')
+    .select('*')
+    .eq('account_id', args.accountId)
+    .eq('contact_id', args.contactId)
+    .eq('status', 'active')
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (reactivationSession) {
     const { data: reactivationRows } = await args.db
       .from('reactivation_leads')
       .select('id')
       .eq('account_id', args.accountId)
-      .eq('opportunity_id', opportunity.id);
+      .eq('contact_id', args.contactId);
     const reactivationIds = (reactivationRows ?? []).map((item) => item.id);
     await args.db
       .from('reactivation_leads')
       .update({ status: 'replied' })
       .eq('account_id', args.accountId)
-      .eq('opportunity_id', opportunity.id)
+      .eq('contact_id', args.contactId)
       .in('status', ['queued', 'contacted']);
     if (reactivationIds.length) {
       await args.db
         .from('reactivation_touches')
         .update({ status: 'cancelled', last_error: 'lead_replied' })
         .eq('account_id', args.accountId)
-        .eq('status', 'scheduled')
+        .in('status', ['scheduled', 'processing'])
         .in('reactivation_lead_id', reactivationIds);
     }
+    const endedAt = new Date().toISOString();
+    await args.db
+      .from('reactivation_sessions')
+      .update({
+        status: 'replied',
+        replied_at: endedAt,
+        ended_at: endedAt,
+        cooldown_until: new Date(
+          Date.now() + 30 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+      })
+      .eq('id', reactivationSession.id)
+      .eq('status', 'active');
   }
 
   const [
@@ -495,8 +518,8 @@ export async function prepareStudiospTurn(args: {
     .maybeSingle();
 
   const grounding = [
-    opportunity.source_type === 'reactivation'
-      ? `Este lead veio de uma campanha de reativação. Reconheça que já houve contato anterior, confirme os dados conhecidos em source_metadata sem tratá-los como verdade atual e depois siga a qualificação normal. Dados conhecidos: ${JSON.stringify(opportunity.source_metadata ?? {}).slice(0, 1200)}.`
+    reactivationSession
+      ? `Este turno continua uma reativação de base. Não reinicie a apresentação nem repita perguntas já respondidas. Use os dados conhecidos apenas como contexto a confirmar; se o lead acabou de confirmar um dado, trate-o como confirmado e avance para a próxima lacuna. Contexto conhecido: ${JSON.stringify(reactivationSession.known_context ?? {}).slice(0, 1200)}.`
       : null,
     configVersion?.identity_name
       ? `Nome configurado da assistente: ${configVersion.identity_name}.`
