@@ -23,6 +23,7 @@ type Campaign = {
   objective_segment: string;
   entry_value_min: number | null;
   entry_value_max: number | null;
+  cadence: { day: number }[];
   activated_at: string | null;
   reactivation_leads: { id: string; status: string }[];
   reactivation_touches: { id: string; status: string; step_number: number }[];
@@ -59,6 +60,7 @@ export function ReactivationPage() {
   const [editObjective, setEditObjective] = useState('all');
   const [editMin, setEditMin] = useState('');
   const [editMax, setEditMax] = useState('');
+  const [editCadenceDays, setEditCadenceDays] = useState('0, 2, 5, 9');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,9 +172,11 @@ export function ReactivationPage() {
       setError(
         payload.deliveryFailures
           .map((failure: { step_number?: number; last_error?: string }) => {
-            const cadenceDay = [0, 2, 5, 9][
-              Math.max(0, Number(failure.step_number ?? 1) - 1)
-            ];
+            const campaign = campaigns.find((item) => item.id === id);
+            const cadenceDay =
+              campaign?.cadence?.[
+                Math.max(0, Number(failure.step_number ?? 1) - 1)
+              ]?.day ?? 0;
             return `D${cadenceDay}: ${failure.last_error || 'falha no envio'}`;
           })
           .join(' ')
@@ -198,6 +202,14 @@ export function ReactivationPage() {
     setEditMax(
       campaign.entry_value_max == null ? '' : String(campaign.entry_value_max)
     );
+    setEditCadenceDays(
+      (campaign.cadence?.length
+        ? campaign.cadence
+        : [{ day: 0 }, { day: 2 }, { day: 5 }, { day: 9 }]
+      )
+        .map((step) => step.day)
+        .join(', ')
+    );
   };
 
   const saveCampaign = async (id: string) => {
@@ -211,6 +223,7 @@ export function ReactivationPage() {
         objectiveSegment: editObjective,
         entryValueMin: editMin,
         entryValueMax: editMax,
+        cadence: editCadenceDays,
       }),
     });
     const payload = await response.json();
@@ -305,6 +318,19 @@ export function ReactivationPage() {
           placeholder="Entrada máxima (opcional)"
           onChange={() => setPreview(null)}
         />
+        <label className="space-y-1 text-sm lg:col-span-2">
+          <span className="font-medium">Cadência de contatos</span>
+          <Input
+            name="cadenceDays"
+            defaultValue="0, 2, 5, 9"
+            placeholder="Ex.: 0, 2, 5, 9"
+            onChange={() => setPreview(null)}
+          />
+          <span className="text-muted-foreground text-xs">
+            Informe de 1 a 4 dias, separados por vírgula. D0 é obrigatório e
+            envia a abordagem inicial; os demais são lembretes automáticos.
+          </span>
+        </label>
         <Input
           name="file"
           type="file"
@@ -457,6 +483,17 @@ export function ReactivationPage() {
                       placeholder="Entrada máxima"
                       onChange={(event) => setEditMax(event.target.value)}
                     />
+                    <label className="space-y-1 text-sm sm:col-span-2">
+                      <span className="font-medium">Dias da cadência</span>
+                      <Input
+                        value={editCadenceDays}
+                        aria-label="Dias da cadência"
+                        placeholder="0, 2, 5, 9"
+                        onChange={(event) =>
+                          setEditCadenceDays(event.target.value)
+                        }
+                      />
+                    </label>
                   </div>
                 ) : (
                   <p className="font-medium">{campaign.name}</p>
@@ -478,6 +515,15 @@ export function ReactivationPage() {
                     (lead) => lead.status === 'replied'
                   ).length ?? 0}{' '}
                   respostas
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Cadência:{' '}
+                  {(campaign.cadence?.length
+                    ? campaign.cadence
+                    : [{ day: 0 }, { day: 2 }, { day: 5 }, { day: 9 }]
+                  )
+                    .map((step) => `D${step.day}`)
+                    .join(' → ')}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">

@@ -3,6 +3,7 @@ import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { supabaseAdmin } from '@/lib/automations/admin-client';
 import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
+import { parseReactivationCadence } from '@/lib/reactivation/cadence';
 
 type Row = Record<string, unknown>;
 
@@ -92,15 +93,16 @@ export async function POST(
         if (opportunityError) throw opportunityError;
         const opportunityId = String((opportunity as Row).id);
         const now = Date.now();
+        const cadence = parseReactivationCadence(campaign.cadence);
         const { error: touchesError } = await db
           .from('reactivation_touches')
           .upsert(
-            [0, 2, 5, 9].map((days, index) => ({
+            cadence.map(({ day }, index) => ({
               account_id: accountId,
               campaign_id: id,
               reactivation_lead_id: lead.id,
               step_number: index + 1,
-              scheduled_for: new Date(now + days * 86_400_000).toISOString(),
+              scheduled_for: new Date(now + day * 86_400_000).toISOString(),
             })),
             {
               onConflict: 'reactivation_lead_id,step_number',

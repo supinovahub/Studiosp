@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { supabaseAdmin } from '@/lib/automations/admin-client';
 import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
+import {
+  parseReactivationCadence,
+  ReactivationCadenceError,
+} from '@/lib/reactivation/cadence';
 
 export const maxDuration = 60;
 
@@ -26,6 +30,7 @@ export async function PATCH(
       const objective = String(body?.objectiveSegment ?? 'all');
       const entryMin = optionalNumber(body?.entryValueMin);
       const entryMax = optionalNumber(body?.entryValueMax);
+      const cadence = parseReactivationCadence(body?.cadence);
       if (name.length < 3 || name.length > 120)
         return NextResponse.json(
           { error: 'O nome deve ter entre 3 e 120 caracteres.' },
@@ -53,6 +58,7 @@ export async function PATCH(
           objective_segment: objective,
           entry_value_min: entryMin,
           entry_value_max: entryMax,
+          cadence,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -121,6 +127,8 @@ export async function PATCH(
       deliveryFailures: deliveryFailures ?? [],
     });
   } catch (error) {
+    if (error instanceof ReactivationCadenceError)
+      return NextResponse.json({ error: error.message }, { status: 400 });
     return toErrorResponse(error);
   }
 }

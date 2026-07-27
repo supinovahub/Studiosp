@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { engineSendText } from '@/lib/flows/meta-send';
+import { buildReactivationMessage } from './cadence';
 
 type Row = Record<string, unknown>;
 
@@ -44,14 +45,14 @@ export async function sendDueReactivationTouches(db: SupabaseClient) {
       continue;
     }
     try {
-      const text = recoveryMessage(lead, Number(touch.step_number));
+      const text = buildReactivationMessage(lead, Number(touch.step_number));
       const result = await engineSendText({
         accountId: String(touch.account_id),
         userId: await ownerUserId(db, String(touch.account_id)),
         conversationId: lead.conversation_id,
         contactId: lead.contact_id,
         text,
-        aiGenerated: true,
+        aiGenerated: false,
       });
       const now = new Date().toISOString();
       await Promise.all([
@@ -93,30 +94,6 @@ export async function sendDueReactivationTouches(db: SupabaseClient) {
     }
   }
   return sent;
-}
-
-function recoveryMessage(lead: Row, step: number) {
-  const name = typeof lead.name === 'string' ? lead.name.split(' ')[0] : null;
-  const greeting = name ? `Oi, ${name}!` : 'Oi!';
-  const objective =
-    lead.objective === 'invest'
-      ? 'investir em um studio em São Paulo'
-      : lead.objective === 'live'
-        ? 'comprar um studio para morar em São Paulo'
-        : 'comprar um studio em São Paulo';
-  const entry =
-    typeof lead.entry_value === 'number'
-      ? ` Você tinha considerado uma entrada próxima de ${lead.entry_value.toLocaleString(
-          'pt-BR',
-          { style: 'currency', currency: 'BRL' }
-        )}.`
-      : '';
-  return [
-    `${greeting} Nós já conversamos em outro momento sobre ${objective}.${entry} Isso ainda faz sentido para você?`,
-    `${greeting} Passando para confirmar se você ainda está buscando um studio em São Paulo. Posso retomar de onde paramos?`,
-    `${greeting} Surgiram novas possibilidades para quem está avaliando studios em São Paulo. Quer que eu atualize seu perfil e veja o que combina com seu momento?`,
-    `${greeting} Vou encerrar esta retomada para não incomodar. Se ainda quiser conversar sobre studios em São Paulo, é só responder por aqui.`,
-  ][Math.max(0, Math.min(3, step - 1))];
 }
 
 async function ownerUserId(db: SupabaseClient, accountId: string) {

@@ -5,6 +5,10 @@ import {
   ReactivationImportError,
   type ReactivationRow,
 } from '@/lib/reactivation/parse';
+import {
+  parseReactivationCadence,
+  ReactivationCadenceError,
+} from '@/lib/reactivation/cadence';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -22,7 +26,10 @@ export async function GET() {
     if (error) throw error;
     return NextResponse.json({ campaigns: data ?? [] });
   } catch (error) {
-    if (error instanceof ReactivationImportError)
+    if (
+      error instanceof ReactivationImportError ||
+      error instanceof ReactivationCadenceError
+    )
       return NextResponse.json({ error: error.message }, { status: 400 });
     return toErrorResponse(error);
   }
@@ -79,6 +86,9 @@ export async function POST(request: Request) {
       );
 
     const segment = String(form.get('objective') || 'all');
+    const cadence = parseReactivationCadence(
+      String(form.get('cadenceDays') || '0,2,5,9')
+    );
     const { data: campaign, error: campaignError } = await supabase
       .from('reactivation_campaigns')
       .insert({
@@ -93,6 +103,7 @@ export async function POST(request: Request) {
           : 'all',
         entry_value_min: optionalNumber(form.get('entryMin')),
         entry_value_max: optionalNumber(form.get('entryMax')),
+        cadence,
         created_by: actor?.id ?? null,
       })
       .select()
