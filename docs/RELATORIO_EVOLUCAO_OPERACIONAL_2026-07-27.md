@@ -95,3 +95,6 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
   e validações comerciais.
 - Nenhum PDF de homologação foi aprovado e nenhuma escrita no catálogo foi
   autorizada durante esta evolução.
+- Corrigida uma regressão em que o leitor de texto desanexava o `ArrayBuffer`
+  antes da extração posicional. Texto/imagens e layout agora recebem cópias
+  físicas independentes do PDF.

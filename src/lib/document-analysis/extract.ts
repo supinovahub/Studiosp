@@ -57,7 +57,12 @@ export async function extractDocument(
     if (detectedMime !== 'application/pdf') {
       throw new Error('A assinatura do arquivo não corresponde a um PDF.');
     }
-    const parser = new PDFParse({ data: bytes });
+    // pdf-parse/pdf.js pode transferir e desanexar o ArrayBuffer recebido.
+    // Cada consumidor precisa de uma cópia física criada antes da primeira
+    // leitura; copiar depois já falha com "detached ArrayBuffer".
+    const textAndImageBytes = bytes.slice();
+    const layoutBytes = bytes.slice();
+    const parser = new PDFParse({ data: textAndImageBytes });
     try {
       const result = await parser.getText();
       if (result.total > 300) {
@@ -92,7 +97,7 @@ export async function extractDocument(
         page: page.num,
         text: page.text,
       }));
-      const layout = await extractPdfLayout(bytes);
+      const layout = await extractPdfLayout(layoutBytes);
       const positionedText = layoutPrompt(layout, 120_000);
       const linearText = balancedPageText(pageText, 120_000);
       return {
