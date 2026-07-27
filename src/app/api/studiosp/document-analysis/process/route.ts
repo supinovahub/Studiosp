@@ -67,7 +67,8 @@ export async function POST(request: Request) {
     }
     const result = await processNextDocumentAnalysis(
       supabaseAdmin(),
-      ctx.accountId
+      ctx.accountId,
+      batchId || undefined
     );
     return NextResponse.json(result);
   } catch (error) {

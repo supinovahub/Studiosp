@@ -32,7 +32,8 @@ function cleanError(error: unknown) {
 
 export async function processNextDocumentAnalysis(
   db: SupabaseClient,
-  accountId?: string
+  accountId?: string,
+  requestedBatchId?: string
 ): Promise<{ processed: number; batchId?: string; sourceId?: string }> {
   const now = new Date();
   let candidateQuery = db
@@ -50,6 +51,8 @@ export async function processNextDocumentAnalysis(
     .lt('attempts', 3)
     .order('created_at');
   if (accountId) candidateQuery = candidateQuery.eq('account_id', accountId);
+  if (requestedBatchId)
+    candidateQuery = candidateQuery.eq('id', requestedBatchId);
   const { data: candidates } = await candidateQuery.limit(5);
 
   for (const candidate of (candidates ?? []) as Row[]) {
@@ -424,8 +427,7 @@ async function processAnalysisChunk(
             status: 'failed',
             attempts,
             next_attempt_at: new Date(
-              Date.now() +
-                [30_000, 120_000, 300_000][Math.min(attempts - 1, 2)]
+              Date.now() + [30_000, 120_000, 300_000][Math.min(attempts - 1, 2)]
             ).toISOString(),
             error_code:
               attempts >= 3 ? 'chunk_failed' : 'chunk_retry_scheduled',

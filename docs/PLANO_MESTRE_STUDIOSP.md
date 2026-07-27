@@ -1242,6 +1242,8 @@ extração e da higienização, o conteúdo é dividido em partes persistentes:
 - fechar o navegador não perde os checkpoints; o cron continua o trabalho;
 - com a tela aberta, o cliente solicita novos ciclos sem criar execuções
   concorrentes para o mesmo lote;
+- a retomada manual informa o lote selecionado ao worker, evitando que lotes
+  antigos da mesma conta bloqueiem o acompanhamento atual;
 - após três falhas da mesma parte, a fonte é marcada para revisão e o erro fica
   visível, sem publicar ou cadastrar conteúdo parcial automaticamente.
 

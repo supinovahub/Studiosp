@@ -129,6 +129,8 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
   progresso por arquivo.
 - Enquanto a tela está aberta, os ciclos são solicitados sem sobreposição; com
   a tela fechada, o cron continua usando os checkpoints persistidos.
+- A retomada manual passou a respeitar o lote selecionado, sem ser desviada por
+  lotes antigos ainda presentes na fila da conta.
 - Migration aplicada somente no projeto Studiosp Staging
   `vgmmfzdifjhpqaopxfbj`; produção permaneceu inalterada.
 - Verificação local: typecheck aprovado, 85 arquivos de teste e 740 testes
