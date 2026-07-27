@@ -9,6 +9,7 @@ export type ExtractedDocument = {
   detectedMime: string;
   metadata: Record<string, unknown>;
   media: ExtractedMedia[];
+  layout: ExtractedPageLayout[];
 };
 
 export type ExtractedMedia = {
@@ -18,6 +19,17 @@ export type ExtractedMedia = {
   page: number;
   width: number;
   height: number;
+};
+
+export type ExtractedPageLayout = {
+  page: number;
+  width: number;
+  height: number;
+  rows: Array<{
+    y: number;
+    cells: Array<{ text: string; x: number; width: number }>;
+  }>;
+  links: Array<{ text: string; url: string }>;
 };
 
 const TEXT_MIMES = new Set(['text/plain', 'text/csv']);
@@ -37,6 +49,7 @@ export async function extractDocument(
       detectedMime: declaredMime,
       metadata: { extraction: 'text-decoder' },
       media: [],
+      layout: [],
     };
   }
 
@@ -79,10 +92,13 @@ export async function extractDocument(
         page: page.num,
         text: page.text,
       }));
+      const layout = await extractPdfLayout(bytes);
+      const positionedText = layoutPrompt(layout, 120_000);
+      const linearText = balancedPageText(pageText, 120_000);
       return {
-        text: pageText
-          .map((page) => `[PÁGINA ${page.page}]\n${page.text}`)
-          .join('\n\n'),
+        // Reservamos espaço para as duas representações. Em tabelões extensos,
+        // anexar o layout ao fim faria o limite da análise descartá-lo.
+        text: positionedText.concat('\n\n', linearText),
         pageCount: result.total,
         detectedMime,
         metadata: {
@@ -92,8 +108,17 @@ export async function extractDocument(
             textLength: page.text.length,
           })),
           extractedImageCount: media.length,
+          positionedRowCount: layout.reduce(
+            (total, page) => total + page.rows.length,
+            0
+          ),
+          linkCount: layout.reduce(
+            (total, page) => total + page.links.length,
+            0
+          ),
         },
         media,
+        layout,
       };
     } finally {
       await parser.destroy();
@@ -121,6 +146,7 @@ export async function extractDocument(
           .slice(0, 20),
       },
       media: [],
+      layout: [],
     };
   }
 
@@ -155,6 +181,7 @@ export async function extractDocument(
         sheets: workbook.worksheets.map((sheet) => sheet.name),
       },
       media: [],
+      layout: [],
     };
   }
 
@@ -165,6 +192,116 @@ export async function extractDocument(
   }
 
   throw new Error('Formato sem extrator seguro disponível.');
+}
+
+async function extractPdfLayout(
+  bytes: Uint8Array
+): Promise<ExtractedPageLayout[]> {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const document = await pdfjs.getDocument({
+    data: bytes.slice(),
+    useSystemFonts: true,
+  }).promise;
+  const pages: ExtractedPageLayout[] = [];
+  try {
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
+      const page = await document.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 1 });
+      const [content, annotations] = await Promise.all([
+        page.getTextContent(),
+        page.getAnnotations(),
+      ]);
+      const positioned = content.items.flatMap((raw) => {
+        if (!('str' in raw) || !raw.str.trim()) return [];
+        return [
+          {
+            text: raw.str.trim().slice(0, 500),
+            x: Number(raw.transform[4].toFixed(2)),
+            y: Number(raw.transform[5].toFixed(2)),
+            width: Number(raw.width.toFixed(2)),
+          },
+        ];
+      });
+      const rows: ExtractedPageLayout['rows'] = [];
+      for (const item of positioned
+        .sort((left, right) => right.y - left.y || left.x - right.x)
+        .slice(0, 10_000)) {
+        // Os itens já estão ordenados por Y; comparar com a última linha evita
+        // busca quadrática em tabelões com milhares de células por página.
+        const candidate = rows.at(-1);
+        const row =
+          candidate && Math.abs(candidate.y - item.y) <= 1.5 ? candidate : null;
+        if (row) {
+          row.cells.push({ text: item.text, x: item.x, width: item.width });
+        } else {
+          rows.push({
+            y: item.y,
+            cells: [{ text: item.text, x: item.x, width: item.width }],
+          });
+        }
+      }
+      for (const row of rows) row.cells.sort((left, right) => left.x - right.x);
+      pages.push({
+        page: pageNumber,
+        width: Number(viewport.width.toFixed(2)),
+        height: Number(viewport.height.toFixed(2)),
+        rows: rows.slice(0, 2_000),
+        links: annotations.flatMap((annotation) => {
+          const url =
+            typeof annotation.url === 'string' ? annotation.url.trim() : '';
+          if (!url || !/^https?:\/\//i.test(url)) return [];
+          return [
+            {
+              text:
+                typeof annotation.titleObj?.str === 'string'
+                  ? annotation.titleObj.str.slice(0, 300)
+                  : '',
+              url: url.slice(0, 2_000),
+            },
+          ];
+        }),
+      });
+      page.cleanup();
+    }
+  } finally {
+    await document.destroy();
+  }
+  return pages;
+}
+
+function layoutPrompt(layout: ExtractedPageLayout[], maxChars: number) {
+  const pages: string[] = [];
+  const pageBudget = Math.max(
+    400,
+    Math.floor(maxChars / Math.max(1, layout.length))
+  );
+  for (const page of layout) {
+    const lines: string[] = [];
+    lines.push(`[PÁGINA ${page.page} — LAYOUT POSICIONAL]`);
+    for (const row of page.rows) {
+      const cells = row.cells.map((cell) => cell.text).filter(Boolean);
+      if (cells.length > 1) lines.push(cells.join(' | '));
+    }
+    for (const link of page.links) {
+      lines.push(`LINK | ${link.text || 'sem rótulo'} | ${link.url}`);
+    }
+    pages.push(lines.join('\n').slice(0, pageBudget));
+  }
+  return pages.join('\n\n').slice(0, maxChars);
+}
+
+function balancedPageText(
+  pages: Array<{ page: number; text: string }>,
+  maxChars: number
+) {
+  const pageBudget = Math.max(
+    400,
+    Math.floor(maxChars / Math.max(1, pages.length))
+  );
+  return pages
+    .map((page) => `[PÁGINA ${page.page}]\n${page.text}`.slice(0, pageBudget))
+    .join('\n\n')
+    .slice(0, maxChars);
 }
 
 function csvCell(value: unknown) {

@@ -1,6 +1,7 @@
 import type { AiConfig } from '@/lib/ai/types';
 import { generateReply } from '@/lib/ai/generate';
 import { jsonrepair } from 'jsonrepair';
+import { canonicalizeAnalysis } from './canonicalize';
 
 export type ProposedField = {
   name: string;
@@ -51,7 +52,7 @@ Retorne exclusivamente JSON válido, sem markdown, no formato:
     "confidence": 0.0,
     "parentIndex": "índice do empreendimento pai ou null",
     "fields": [{
-      "name": "developer_name|name|address|neighborhood|city|property_timing|expected_delivery_date|highlights|knowledge_notes|label|area_min_sqm|area_max_sqm|price_from|entry_from|installment_from|terms_summary|valid_until|is_active",
+      "name": "developer_name|name|address|neighborhood|city|property_timing|expected_delivery_date|highlights|knowledge_notes|label|area_min_sqm|area_max_sqm|price_from|price_to|entry_from|entry_to|installment_from|installment_to|terms_summary|valid_until|is_active",
       "value": "valor JSON",
       "confidence": 0.0,
       "page": "número ou null",
@@ -66,7 +67,10 @@ Retorne exclusivamente JSON válido, sem markdown, no formato:
   }]
 }
 Unidades individuais podem aparecer na fonte, mas a V1 deve consolidá-las como
-faixas/opções comerciais. Se fontes ou datas divergirem, preserve o conflito.`;
+faixas/opções comerciais. Linhas separadas por " | " representam células
+posicionadas na mesma linha da página. Só associe preço, metragem e condição a um
+empreendimento quando houver evidência textual ou espacial. Se fontes ou datas
+divergirem, preserve o conflito.`;
 
 const COVERAGE_PROMPT = `Extraia TODOS os empreendimentos identificáveis na
 parte recebida, mesmo quando alguns campos estiverem ausentes. Não resuma um
@@ -225,9 +229,10 @@ export async function analyzeSanitizedDocument(args: {
     ];
   });
 
+  const canonical = canonicalizeAnalysis(items, issues);
   return {
-    items,
-    issues,
+    items: canonical.items,
+    issues: canonical.issues,
     usage: results.map((result) => result.usage),
   };
 }

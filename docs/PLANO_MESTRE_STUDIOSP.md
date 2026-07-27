@@ -1015,6 +1015,27 @@ instrução. Cada campo mantém referência à fonte e, quando aplicável, à p�
 trecho de origem. Importações repetidas devem detectar o mesmo arquivo e evitar
 duplicação.
 
+#### Contrato canônico e interpretação de layouts
+
+Antes de chegar ao preview, toda fonte passa por uma camada híbrida e
+independente do formato visual:
+
+1. extração determinística de texto, páginas, links e coordenadas;
+2. reconstrução de linhas e células pela posição no PDF;
+3. interpretação semântica pelo modelo somente sobre conteúdo higienizado;
+4. tradução de aliases para o contrato canônico do catálogo;
+5. normalização determinística de acentos, moeda, número, metragem, data,
+   endereço, listas e estado do empreendimento;
+6. consolidação por empreendimento, incorporadora e endereço, preservando a
+   relação entre o empreendimento e suas ofertas;
+7. validação de faixas, plausibilidade, conflitos e confiança antes da revisão.
+
+O sistema não pressupõe um template único de PDF. Cabeçalhos como
+`empreendimento`, `projeto` ou `nome`, por exemplo, convergem para o mesmo campo
+canônico. A posição visual pode ajudar a relacionar células, mas nunca basta
+sozinha para inventar uma associação. Ofertas parecidas de empreendimentos
+diferentes não podem ser mescladas.
+
 O preview permite aprovação individual por empreendimento, oferta e campo, além
 de ações de seleção em lote. Aprovar um lote inteiro nunca será obrigatório. O
 dono pode editar, aprovar ou ignorar cada proposta antes da confirmação final.

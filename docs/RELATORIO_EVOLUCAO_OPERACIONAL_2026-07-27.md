@@ -75,3 +75,23 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
 - O botão de aprovação ficou disponível, mas não foi acionado; o catálogo
   permaneceu com um empreendimento já existente e nenhum item da revista foi
   gravado.
+
+### Robustez adicional da importação
+
+- A extração de PDF passou a preservar coordenadas, reconstruir linhas e
+  células e coletar links por página, além do texto linear.
+- Foi criada uma camada canônica determinística depois da IA, com aliases em
+  português e inglês, normalização de acentos, moeda brasileira, metragem,
+  datas, endereço, listas e situação do imóvel.
+- Faixas invertidas e valores comercialmente implausíveis agora geram
+  inconsistências explícitas para revisão.
+- A consolidação entre partes do mesmo documento mantém os índices de pai e
+  inclui a identidade do empreendimento na chave das ofertas, impedindo que
+  opções semelhantes de imóveis diferentes sejam unificadas.
+- O prompt passou a compreender linhas posicionais e os limites `de/até` de
+  preço, entrada e parcela.
+- Foram adicionados testes unitários específicos para localização numérica,
+  datas, acentos, aliases, proveniência, vínculo entre oferta e empreendimento
+  e validações comerciais.
+- Nenhum PDF de homologação foi aprovado e nenhuma escrita no catálogo foi
+  autorizada durante esta evolução.
