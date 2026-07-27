@@ -8,6 +8,16 @@ export type ExtractedDocument = {
   pageCount: number | null;
   detectedMime: string;
   metadata: Record<string, unknown>;
+  media: ExtractedMedia[];
+};
+
+export type ExtractedMedia = {
+  data: Uint8Array;
+  filename: string;
+  mimeType: 'image/png' | 'image/jpeg';
+  page: number;
+  width: number;
+  height: number;
 };
 
 const TEXT_MIMES = new Set(['text/plain', 'text/csv']);
@@ -26,6 +36,7 @@ export async function extractDocument(
       pageCount: null,
       detectedMime: declaredMime,
       metadata: { extraction: 'text-decoder' },
+      media: [],
     };
   }
 
@@ -39,17 +50,50 @@ export async function extractDocument(
       if (result.total > 300) {
         throw new Error('O documento ultrapassa o limite de 300 páginas.');
       }
+      const images = await parser.getImage({
+        imageThreshold: 250,
+        imageDataUrl: true,
+        imageBuffer: true,
+      });
+      const media = images.pages
+        .flatMap((page) =>
+          page.images.map((image, index) => {
+            const mimeType = image.dataUrl.startsWith('data:image/jpeg')
+              ? ('image/jpeg' as const)
+              : ('image/png' as const);
+            return {
+              data: image.data,
+              filename: `pagina-${page.pageNumber}-imagem-${index + 1}.${mimeType === 'image/jpeg' ? 'jpg' : 'png'}`,
+              mimeType,
+              page: page.pageNumber,
+              width: image.width,
+              height: image.height,
+            };
+          })
+        )
+        .sort(
+          (left, right) => right.width * right.height - left.width * left.height
+        )
+        .slice(0, 60);
+      const pageText = result.pages.map((page) => ({
+        page: page.num,
+        text: page.text,
+      }));
       return {
-        text: result.text,
+        text: pageText
+          .map((page) => `[PÁGINA ${page.page}]\n${page.text}`)
+          .join('\n\n'),
         pageCount: result.total,
         detectedMime,
         metadata: {
           extraction: 'pdf-parse',
-          pages: result.pages.map((page) => ({
-            page: page.num,
+          pages: pageText.map((page) => ({
+            page: page.page,
             textLength: page.text.length,
           })),
+          extractedImageCount: media.length,
         },
+        media,
       };
     } finally {
       await parser.destroy();
@@ -72,8 +116,11 @@ export async function extractDocument(
       detectedMime,
       metadata: {
         extraction: 'mammoth',
-        warnings: result.messages.map((message) => message.message).slice(0, 20),
+        warnings: result.messages
+          .map((message) => message.message)
+          .slice(0, 20),
       },
+      media: [],
     };
   }
 
@@ -107,6 +154,7 @@ export async function extractDocument(
         extraction: 'exceljs',
         sheets: workbook.worksheets.map((sheet) => sheet.name),
       },
+      media: [],
     };
   }
 

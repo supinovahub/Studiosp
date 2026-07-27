@@ -99,11 +99,44 @@ export async function GET(request: Request) {
     if (sourcesResult.error) throw sourcesResult.error;
     if (itemsResult.error) throw itemsResult.error;
     if (issuesResult.error) throw issuesResult.error;
+    const itemsWithMediaPreviews = await Promise.all(
+      (itemsResult.data ?? []).map(async (item) => ({
+        ...item,
+        fields: await Promise.all(
+          (item.fields ?? []).map(async (field: Record<string, unknown>) => {
+            const mediaValue = Array.isArray(field.edited_value)
+              ? field.edited_value
+              : field.proposed_value;
+            if (
+              field.field_name !== 'media_candidates' ||
+              !Array.isArray(mediaValue)
+            )
+              return field;
+            const proposedValue = await Promise.all(
+              mediaValue.map(async (value: unknown) => {
+                if (!value || typeof value !== 'object') return value;
+                const candidate = value as Record<string, unknown>;
+                const objectPath = String(candidate.object_path ?? '');
+                if (!objectPath) return candidate;
+                const signed = await ctx.supabase.storage
+                  .from('document-analysis-quarantine')
+                  .createSignedUrl(objectPath, 15 * 60);
+                return {
+                  ...candidate,
+                  preview_url: signed.data?.signedUrl ?? null,
+                };
+              })
+            );
+            return { ...field, proposed_value: proposedValue };
+          })
+        ),
+      }))
+    );
 
     return NextResponse.json({
       batch: batchResult.data,
       sources: sourcesResult.data ?? [],
-      items: itemsResult.data ?? [],
+      items: itemsWithMediaPreviews,
       issues: issuesResult.data ?? [],
     });
   } catch (error) {
@@ -172,7 +205,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (new Set(normalized.map((item) => item.checksumSha256)).size !== normalized.length) {
+    if (
+      new Set(normalized.map((item) => item.checksumSha256)).size !==
+      normalized.length
+    ) {
       return NextResponse.json(
         { error: 'O mesmo arquivo aparece mais de uma vez no lote.' },
         { status: 400 }
@@ -290,6 +326,113 @@ export async function POST(request: Request) {
   } catch (error) {
     return toErrorResponse(error);
   }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const ctx = await requireRole('admin');
+    const body = (await request.json().catch(() => null)) as {
+      batchId?: unknown;
+      fieldId?: unknown;
+      value?: unknown;
+    } | null;
+    const batchId = String(body?.batchId ?? '');
+    const fieldId = String(body?.fieldId ?? '');
+    if (!batchId || !fieldId) {
+      return NextResponse.json(
+        { error: 'Lote ou campo não informado.' },
+        { status: 400 }
+      );
+    }
+    const { data: batch, error: batchError } = await ctx.supabase
+      .from('document_analysis_batches')
+      .select('id, status')
+      .eq('account_id', ctx.accountId)
+      .eq('id', batchId)
+      .maybeSingle();
+    if (batchError) throw batchError;
+    if (!batch || batch.status !== 'ready') {
+      return NextResponse.json(
+        { error: 'O preview não está disponível para edição.' },
+        { status: 409 }
+      );
+    }
+    const { data: field, error: fieldError } = await ctx.supabase
+      .from('document_analysis_fields')
+      .select('id, field_name, item:document_analysis_items(decision)')
+      .eq('account_id', ctx.accountId)
+      .eq('batch_id', batchId)
+      .eq('id', fieldId)
+      .maybeSingle();
+    if (fieldError) throw fieldError;
+    const item = Array.isArray(field?.item) ? field.item[0] : field?.item;
+    if (!field || item?.decision !== 'pending') {
+      return NextResponse.json(
+        { error: 'Este campo já foi processado.' },
+        { status: 409 }
+      );
+    }
+    if (
+      field.field_name !== 'media_candidates' ||
+      !Array.isArray(body?.value)
+    ) {
+      return NextResponse.json(
+        { error: 'Edição não permitida para este campo.' },
+        { status: 400 }
+      );
+    }
+    const normalizedMedia = mediaPreviewValue(body.value);
+    const { error: updateError } = await ctx.supabase
+      .from('document_analysis_fields')
+      .update({ edited_value: normalizedMedia })
+      .eq('account_id', ctx.accountId)
+      .eq('batch_id', batchId)
+      .eq('id', fieldId);
+    if (updateError) throw updateError;
+    return NextResponse.json({ updated: true });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
+
+function mediaPreviewValue(value: unknown[]) {
+  const normalized = value.slice(0, 60).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const candidate = entry as Record<string, unknown>;
+    const objectPath = String(candidate.object_path ?? '').trim();
+    const mimeType = String(candidate.mime_type ?? '');
+    const category = String(candidate.category ?? '');
+    if (
+      !objectPath ||
+      !['image/png', 'image/jpeg'].includes(mimeType) ||
+      !['fachada', 'areas_comuns', 'interiores', 'apresentacao'].includes(
+        category
+      )
+    )
+      return [];
+    return [
+      {
+        object_path: objectPath,
+        source_id: String(candidate.source_id ?? ''),
+        source_page: Number(candidate.source_page) || 1,
+        filename: String(candidate.filename ?? 'imagem'),
+        mime_type: mimeType,
+        width: Number(candidate.width) || 1,
+        height: Number(candidate.height) || 1,
+        category,
+        is_cover: candidate.is_cover === true,
+        confidence: Math.max(0, Math.min(1, Number(candidate.confidence) || 0)),
+      },
+    ];
+  });
+  const requestedCover = normalized.findIndex(
+    (candidate) => candidate.is_cover
+  );
+  const coverIndex = requestedCover >= 0 ? requestedCover : 0;
+  return normalized.map((candidate, index) => ({
+    ...candidate,
+    is_cover: index === coverIndex,
+  }));
 }
 
 export async function DELETE(request: Request) {

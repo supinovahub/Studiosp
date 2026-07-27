@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
 import { loadAiConfig } from '@/lib/ai/config';
 import { analyzeSanitizedDocument } from './analyze';
-import { extractDocument } from './extract';
+import { extractDocument, type ExtractedMedia } from './extract';
 import { downloadGoogleDriveFile } from './google-drive';
 import { sanitizePersonalData } from './privacy';
 
@@ -222,6 +222,14 @@ export async function processNextDocumentAnalysis(
         filename: source.original_filename,
         text: privacy.analysisText,
       });
+      const mediaCandidates = await prepareMediaCandidates(
+        db,
+        source,
+        extracted.media,
+        privacy.sanitizedText,
+        analysis.items
+      );
+      attachMediaCandidates(analysis.items, mediaCandidates);
 
       await setStep(db, batch, source, leaseToken, 'consolidating');
       await persistAnalysis(db, batch, source, analysis);
@@ -277,6 +285,159 @@ export async function processNextDocumentAnalysis(
   return { processed: 0 };
 }
 
+type MediaCandidate = {
+  object_path: string;
+  source_id: string;
+  source_page: number;
+  filename: string;
+  mime_type: 'image/png' | 'image/jpeg';
+  width: number;
+  height: number;
+  category: 'fachada' | 'areas_comuns' | 'interiores' | 'apresentacao';
+  is_cover: boolean;
+  confidence: number;
+};
+
+const MAX_MEDIA_BYTES_PER_SOURCE = 20 * 1024 * 1024;
+const MAX_SINGLE_MEDIA_BYTES = 5 * 1024 * 1024;
+
+async function prepareMediaCandidates(
+  db: SupabaseClient,
+  source: Row,
+  media: ExtractedMedia[],
+  sanitizedText: string,
+  items: Awaited<ReturnType<typeof analyzeSanitizedDocument>>['items']
+) {
+  const developments = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.type === 'development');
+  if (!media.length || !developments.length)
+    return new Map<number, MediaCandidate[]>();
+
+  const eligible: ExtractedMedia[] = [];
+  let totalBytes = 0;
+  for (const image of media) {
+    if (image.data.byteLength > MAX_SINGLE_MEDIA_BYTES) continue;
+    if (totalBytes + image.data.byteLength > MAX_MEDIA_BYTES_PER_SOURCE) break;
+    eligible.push(image);
+    totalBytes += image.data.byteLength;
+  }
+
+  const pageText = pageTextMap(sanitizedText);
+  const byDevelopment = new Map<number, MediaCandidate[]>();
+  const sourceDirectory = String(source.object_path).replace(/\/[^/]+$/, '');
+
+  for (let index = 0; index < eligible.length; index++) {
+    const image = eligible[index];
+    const owner = nearestDevelopment(developments, image.page);
+    if (!owner) continue;
+    const objectPath = `${sourceDirectory}/media/${crypto.randomUUID()}-${image.filename}`;
+    const upload = await db.storage
+      .from('document-analysis-quarantine')
+      .upload(objectPath, image.data, {
+        contentType: image.mimeType,
+        upsert: false,
+      });
+    if (upload.error) throw upload.error;
+    const current = byDevelopment.get(owner.index) ?? [];
+    current.push({
+      object_path: objectPath,
+      source_id: String(source.id),
+      source_page: image.page,
+      filename: image.filename,
+      mime_type: image.mimeType,
+      width: image.width,
+      height: image.height,
+      category: classifyMedia(pageText.get(image.page) ?? ''),
+      is_cover: false,
+      confidence: 0.65,
+    });
+    byDevelopment.set(owner.index, current);
+  }
+
+  for (const candidates of byDevelopment.values()) {
+    const cover = candidates.reduce<MediaCandidate | null>(
+      (best, candidate) =>
+        !best || candidate.width * candidate.height > best.width * best.height
+          ? candidate
+          : best,
+      null
+    );
+    if (cover) {
+      cover.is_cover = true;
+      cover.category = 'fachada';
+      cover.confidence = 0.72;
+    }
+  }
+  return byDevelopment;
+}
+
+function attachMediaCandidates(
+  items: Awaited<ReturnType<typeof analyzeSanitizedDocument>>['items'],
+  candidates: Map<number, MediaCandidate[]>
+) {
+  for (const [itemIndex, media] of candidates) {
+    if (!media.length || !items[itemIndex]) continue;
+    items[itemIndex].fields.push({
+      name: 'media_candidates',
+      value: media,
+      confidence: Math.min(...media.map((candidate) => candidate.confidence)),
+      page: media[0].source_page,
+      excerpt:
+        'Mídias extraídas do PDF e classificadas pelo contexto textual da página. Revise capa e categoria antes de publicar.',
+    });
+  }
+}
+
+function nearestDevelopment(
+  developments: Array<{
+    item: Awaited<ReturnType<typeof analyzeSanitizedDocument>>['items'][number];
+    index: number;
+  }>,
+  page: number
+) {
+  return developments
+    .map((development) => {
+      const pages = development.item.fields
+        .map((field) => field.page)
+        .filter((value): value is number => typeof value === 'number');
+      const distance = pages.length
+        ? Math.min(...pages.map((value) => Math.abs(value - page)))
+        : Number.MAX_SAFE_INTEGER;
+      return { ...development, distance };
+    })
+    .filter((development) => development.distance <= 1)
+    .sort((left, right) => left.distance - right.distance)[0];
+}
+
+function pageTextMap(text: string) {
+  const pages = new Map<number, string>();
+  for (const part of text.split(/\[PÁGINA\s+/i).slice(1)) {
+    const match = part.match(/^(\d+)\]\s*([\s\S]*)$/);
+    if (match) pages.set(Number(match[1]), match[2].split(/\[PÁGINA\s+/i)[0]);
+  }
+  return pages;
+}
+
+function classifyMedia(text: string): MediaCandidate['category'] {
+  const normalized = text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  if (
+    /\b(decorado|interior|living|dormitorio|cozinha|banheiro)\b/.test(
+      normalized
+    )
+  )
+    return 'interiores';
+  if (
+    /\b(piscina|lazer|academia|coworking|salao|area comum)\b/.test(normalized)
+  )
+    return 'areas_comuns';
+  if (/\b(fachada|edificio|torre)\b/.test(normalized)) return 'fachada';
+  return 'apresentacao';
+}
+
 async function setStep(
   db: SupabaseClient,
   batch: Row,
@@ -322,10 +483,7 @@ async function persistAnalysis(
   if (existingItemsError) throw existingItemsError;
   const existingByKey = new Map(
     (existingItems ?? []).map((item) => [
-      itemKey(
-        item.item_type,
-        item.normalized_key || item.display_name
-      ),
+      itemKey(item.item_type, item.normalized_key || item.display_name),
       item,
     ])
   );

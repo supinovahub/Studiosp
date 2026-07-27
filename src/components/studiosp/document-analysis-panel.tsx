@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
@@ -103,6 +104,7 @@ const FIELD_LABELS: Record<string, string> = {
   terms_summary: 'Condições comerciais',
   valid_until: 'Válido até',
   is_active: 'Ativo',
+  media_candidates: 'Imagens encontradas',
 };
 
 export function DocumentAnalysisPanel({
@@ -117,6 +119,7 @@ export function DocumentAnalysisPanel({
   const [linksText, setLinksText] = useState('');
   const [busy, setBusy] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [confirmingApproval, setConfirmingApproval] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -291,6 +294,35 @@ export function DocumentAnalysisPanel({
       );
     } finally {
       setApproving(false);
+    }
+  }
+
+  async function updateMediaField(fieldId: string, value: unknown[]) {
+    if (!selected) return;
+    setEditingFieldId(fieldId);
+    setError(null);
+    try {
+      const response = await fetch('/api/studiosp/document-analysis', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchId: selected.batch.id,
+          fieldId,
+          value,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok)
+        throw new Error(payload.error ?? 'Não foi possível editar as imagens.');
+      await loadBatch(selected.batch.id);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Não foi possível editar as imagens.'
+      );
+    } finally {
+      setEditingFieldId(null);
     }
   }
 
@@ -536,9 +568,19 @@ export function DocumentAnalysisPanel({
                                 {FIELD_LABELS[field.field_name] ??
                                   field.field_name}
                               </dt>
-                              <dd className="text-foreground text-sm [overflow-wrap:anywhere]">
-                                {formatValue(field.proposed_value)}
-                              </dd>
+                              {field.field_name === 'media_candidates' ? (
+                                <MediaCandidates
+                                  value={field.proposed_value}
+                                  disabled={editingFieldId === field.id}
+                                  onChange={(value) =>
+                                    void updateMediaField(field.id, value)
+                                  }
+                                />
+                              ) : (
+                                <dd className="text-foreground text-sm [overflow-wrap:anywhere]">
+                                  {formatValue(field.proposed_value)}
+                                </dd>
+                              )}
                               {field.provenance?.[0] ? (
                                 <p className="text-muted-foreground mt-1 text-[11px] [overflow-wrap:anywhere]">
                                   {field.provenance[0].page_number
@@ -626,6 +668,117 @@ export function DocumentAnalysisPanel({
     </div>,
     document.body
   );
+}
+
+function MediaCandidates({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: unknown;
+  disabled: boolean;
+  onChange: (value: unknown[]) => void;
+}) {
+  if (!Array.isArray(value) || !value.length) {
+    return <dd className="text-muted-foreground text-sm">Nenhuma imagem.</dd>;
+  }
+  return (
+    <dd className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {value.map((entry, index) => {
+        const media =
+          entry && typeof entry === 'object'
+            ? (entry as Record<string, unknown>)
+            : {};
+        const previewUrl =
+          typeof media.preview_url === 'string' ? media.preview_url : '';
+        return (
+          <div
+            key={`${String(media.object_path ?? '')}-${index}`}
+            className="bg-background overflow-hidden rounded-md border"
+          >
+            {previewUrl ? (
+              <div className="relative aspect-[4/3]">
+                <Image
+                  src={previewUrl}
+                  alt={
+                    media.is_cover
+                      ? 'Imagem principal proposta'
+                      : 'Imagem proposta'
+                  }
+                  fill
+                  unoptimized
+                  className="object-cover"
+                />
+              </div>
+            ) : (
+              <div className="bg-muted text-muted-foreground flex aspect-[4/3] items-center justify-center text-xs">
+                Preview indisponível
+              </div>
+            )}
+            <div className="p-2 text-[11px]">
+              <p className="text-foreground font-medium">
+                {media.is_cover
+                  ? 'Imagem principal'
+                  : categoryLabel(media.category)}
+              </p>
+              <p className="text-muted-foreground">
+                Página {String(media.source_page ?? '—')} ·{' '}
+                {Math.round(Number(media.confidence ?? 0) * 100)}%
+              </p>
+              <select
+                aria-label={`Categoria da imagem ${index + 1}`}
+                className="border-input bg-background mt-2 w-full rounded border px-1 py-1 text-xs"
+                value={String(media.category ?? 'apresentacao')}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange(
+                    value.map((candidate, candidateIndex) =>
+                      candidateIndex === index &&
+                      candidate &&
+                      typeof candidate === 'object'
+                        ? { ...candidate, category: event.target.value }
+                        : candidate
+                    )
+                  )
+                }
+              >
+                <option value="fachada">Fachada</option>
+                <option value="areas_comuns">Áreas comuns</option>
+                <option value="interiores">Interiores</option>
+                <option value="apresentacao">Apresentação</option>
+              </select>
+              <button
+                type="button"
+                className="text-primary mt-2 text-left text-xs disabled:opacity-50"
+                disabled={disabled || media.is_cover === true}
+                onClick={() =>
+                  onChange(
+                    value.map((candidate, candidateIndex) =>
+                      candidate && typeof candidate === 'object'
+                        ? { ...candidate, is_cover: candidateIndex === index }
+                        : candidate
+                    )
+                  )
+                }
+              >
+                {media.is_cover ? 'Capa selecionada' : 'Usar como capa'}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </dd>
+  );
+}
+
+function categoryLabel(value: unknown) {
+  const labels: Record<string, string> = {
+    fachada: 'Fachada',
+    areas_comuns: 'Áreas comuns',
+    interiores: 'Interiores',
+    apresentacao: 'Apresentação',
+  };
+  return labels[String(value)] ?? 'Imagem';
 }
 
 async function sha256(file: File) {

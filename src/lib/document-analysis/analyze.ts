@@ -68,6 +68,11 @@ Retorne exclusivamente JSON válido, sem markdown, no formato:
 Unidades individuais podem aparecer na fonte, mas a V1 deve consolidá-las como
 faixas/opções comerciais. Se fontes ou datas divergirem, preserve o conflito.`;
 
+const COVERAGE_PROMPT = `Extraia TODOS os empreendimentos identificáveis na
+parte recebida, mesmo quando alguns campos estiverem ausentes. Não resuma um
+portfólio em poucos exemplos. Use o marcador [PÁGINA N] para registrar a
+página correta em cada campo.`;
+
 export function extractJson(text: string) {
   const trimmed = text.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
@@ -94,7 +99,7 @@ export async function analyzeSanitizedDocument(args: {
   for (let index = 0; index < chunks.length; index++) {
     const generated = await generateReply({
       config: args.config,
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: `${SYSTEM_PROMPT}\n${COVERAGE_PROMPT}`,
       messages: [
         {
           role: 'user',
@@ -227,7 +232,7 @@ export async function analyzeSanitizedDocument(args: {
   };
 }
 
-function splitDocument(text: string, maxChars = 32_000) {
+function splitDocument(text: string, maxChars = 16_000) {
   const normalized = text.trim().slice(0, 240_000);
   if (normalized.length <= maxChars) return [normalized];
   const chunks: string[] = [];

@@ -8,7 +8,8 @@ import {
   Save,
   ShieldCheck,
 } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { AiConfig } from '@/components/settings/ai-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -25,7 +26,8 @@ type Tab =
   | 'followups'
   | 'schedule'
   | 'testing'
-  | 'runs';
+  | 'runs'
+  | 'credentials';
 
 export function IntelligencePage() {
   const { data, loading, error, reload } = useStudiospData('intelligence');
@@ -35,6 +37,9 @@ export function IntelligencePage() {
     type: 'error' | 'success';
     text: string;
   } | null>(null);
+  useEffect(() => {
+    if (window.location.hash === '#credenciais') setTab('credentials');
+  }, []);
   if (loading)
     return <LoadingState label="Carregando inteligência da operação..." />;
   if (error || !data)
@@ -81,6 +86,7 @@ export function IntelligencePage() {
             ['schedule', 'Agendamento'],
             ['testing', 'Testes da IA'],
             ['runs', 'Execuções'],
+            ['credentials', 'Credenciais'],
           ] as [Tab, string][]
         ).map(([value, label]) => (
           <button
@@ -176,6 +182,7 @@ export function IntelligencePage() {
         />
       ) : null}
       {tab === 'runs' ? <RunsPanel runs={data.aiRuns ?? []} /> : null}
+      {tab === 'credentials' ? <AiConfig /> : null}
     </div>
   );
 }

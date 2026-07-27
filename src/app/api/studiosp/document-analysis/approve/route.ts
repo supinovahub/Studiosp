@@ -281,6 +281,24 @@ export async function POST(request: Request) {
       approved++;
     }
 
+    for (const item of pending.filter(
+      (entry) => entry.item_type === 'development'
+    )) {
+      const developmentId =
+        targetByItem.get(String(item.id)) ||
+        (await targetFromItem(ctx.supabase, ctx.accountId, String(item.id)));
+      if (!developmentId || item.decision === 'rejected') continue;
+      const media = mediaCandidates(fieldMap(item.fields).media_candidates);
+      if (!media.length) continue;
+      await persistApprovedMedia({
+        db: ctx.supabase,
+        accountId: ctx.accountId,
+        developmentId,
+        profileId: profile?.id ?? null,
+        media,
+      });
+    }
+
     await ctx.supabase.from('document_analysis_events').insert({
       account_id: ctx.accountId,
       batch_id: batchId,
@@ -297,6 +315,152 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return toErrorResponse(error);
+  }
+}
+
+type ApprovedMediaCandidate = {
+  object_path: string;
+  source_page: number;
+  filename: string;
+  mime_type: 'image/png' | 'image/jpeg';
+  width: number;
+  height: number;
+  category: string;
+  is_cover: boolean;
+  confidence: number;
+};
+
+function mediaCandidates(value: unknown): ApprovedMediaCandidate[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const candidate = entry as Row;
+    const objectPath = stringValue(candidate.object_path);
+    const filename = stringValue(candidate.filename);
+    const mimeType = stringValue(candidate.mime_type);
+    if (
+      !objectPath ||
+      !filename ||
+      !['image/png', 'image/jpeg'].includes(mimeType)
+    )
+      return [];
+    return [
+      {
+        object_path: objectPath,
+        source_page: positiveNumber(candidate.source_page) ?? 1,
+        filename,
+        mime_type: mimeType as ApprovedMediaCandidate['mime_type'],
+        width: positiveNumber(candidate.width) ?? 1,
+        height: positiveNumber(candidate.height) ?? 1,
+        category: stringValue(candidate.category) || 'apresentacao',
+        is_cover: candidate.is_cover === true,
+        confidence: Math.max(0, Math.min(1, Number(candidate.confidence) || 0)),
+      },
+    ];
+  });
+}
+
+async function persistApprovedMedia(args: {
+  db: Awaited<ReturnType<typeof requireRole>>['supabase'];
+  accountId: string;
+  developmentId: string;
+  profileId: string | null;
+  media: ApprovedMediaCandidate[];
+}) {
+  const { data: existingCover } = await args.db
+    .from('development_media')
+    .select('id')
+    .eq('account_id', args.accountId)
+    .eq('development_id', args.developmentId)
+    .eq('is_cover', true)
+    .neq('status', 'archived')
+    .maybeSingle();
+  let coverAvailable = !existingCover;
+
+  for (let index = 0; index < args.media.length; index++) {
+    const candidate = args.media[index];
+    const shouldBeCover = candidate.is_cover && coverAvailable;
+    const mediaId = crypto.randomUUID();
+    const extension = candidate.mime_type === 'image/jpeg' ? 'jpg' : 'png';
+    const objectPath = `${args.accountId}/${args.developmentId}/${mediaId}/original.${extension}`;
+    const downloaded = await args.db.storage
+      .from('document-analysis-quarantine')
+      .download(candidate.object_path);
+    if (downloaded.error || !downloaded.data) {
+      throw downloaded.error ?? new Error('Mídia do preview não encontrada.');
+    }
+    const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
+    const checksum = Array.from(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+    )
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join('');
+    const mediaInsert = await args.db.from('development_media').insert({
+      id: mediaId,
+      account_id: args.accountId,
+      development_id: args.developmentId,
+      media_type: 'image',
+      category: candidate.category,
+      title: shouldBeCover ? 'Imagem principal' : `Imagem ${index + 1}`,
+      description: `Extraída da página ${candidate.source_page}; classificação contextual com ${Math.round(candidate.confidence * 100)}% de confiança.`,
+      visibility: 'owner_only',
+      status: 'draft',
+      is_cover: shouldBeCover,
+      display_order: index,
+      created_by: args.profileId,
+    });
+    if (mediaInsert.error) throw mediaInsert.error;
+    const upload = await args.db.storage
+      .from('development-media')
+      .upload(objectPath, bytes, {
+        contentType: candidate.mime_type,
+        upsert: false,
+      });
+    if (upload.error) {
+      await args.db
+        .from('development_media')
+        .delete()
+        .eq('account_id', args.accountId)
+        .eq('id', mediaId);
+      throw upload.error;
+    }
+    const version = await args.db.from('development_media_versions').insert({
+      account_id: args.accountId,
+      media_id: mediaId,
+      version: 1,
+      bucket_id: 'development-media',
+      object_path: objectPath,
+      original_filename: candidate.filename,
+      mime_type: candidate.mime_type,
+      size_bytes: bytes.byteLength,
+      checksum_sha256: checksum,
+      width: candidate.width,
+      height: candidate.height,
+      processing_metadata: {
+        source: 'document_analysis',
+        source_page: candidate.source_page,
+        classification_confidence: candidate.confidence,
+      },
+      created_by: args.profileId,
+    });
+    if (version.error) {
+      await args.db.storage.from('development-media').remove([objectPath]);
+      await args.db
+        .from('development_media')
+        .delete()
+        .eq('account_id', args.accountId)
+        .eq('id', mediaId);
+      throw version.error;
+    }
+    if (shouldBeCover) {
+      coverAvailable = false;
+      const update = await args.db
+        .from('developments')
+        .update({ cover_media_id: mediaId })
+        .eq('account_id', args.accountId)
+        .eq('id', args.developmentId);
+      if (update.error) throw update.error;
+    }
   }
 }
 

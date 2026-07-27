@@ -70,7 +70,7 @@ const settings = [
     managerOnly: false,
   },
   {
-    href: '/agents',
+    href: '/inteligencia#credenciais',
     title: 'Credencial do modelo de IA',
     description: 'Chave criptografada e provedor de linguagem',
     icon: KeyRound,

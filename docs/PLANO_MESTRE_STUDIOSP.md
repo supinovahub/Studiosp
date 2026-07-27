@@ -1566,4 +1566,15 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - o corretor possui a ação `Call finalizada`, com resultado, resumo, atualização
   transacional do pipeline e encerramento da conversa;
 - a migration foi aplicada somente no staging `vgmmfzdifjhpqaopxfbj`;
-- a importação padronizada aguarda um exemplo real de fonte e preview esperado.
+- os três documentos reais foram inspecionados como fontes de homologação e
+  continuam sem autorização para gravação no catálogo;
+- a importação documental passou a preservar páginas, extrair imagens grandes
+  do PDF para a quarentena privada, propor capa e categoria por contexto e
+  permitir que o dono revise capa e categoria no preview;
+- a aprovação copia as imagens selecionadas para o catálogo como rascunho,
+  visíveis somente ao dono, sem publicar nem indexar para a IA;
+- credencial, comportamento, qualificação, follow-ups, agenda, testes e
+  execuções da IA passaram a estar acessíveis pela rota única
+  **Inteligência**, mantendo `/agents` apenas como compatibilidade temporária;
+- a nova extração e a unificação de IA estão implementadas localmente e ainda
+  aguardam homologação no Preview/Staging.
