@@ -642,8 +642,9 @@ sequenceDiagram
 
 - usuário;
 - nome;
-- WhatsApp em formato E.164;
-- verificação do número;
+- WhatsApp em formato E.164, obrigatório no aceite do convite de corretor;
+- confirmação autenticada de titularidade e consentimento operacional;
+- bloqueio do dashboard enquanto um corretor legado não concluir essa etapa;
 - status ativo;
 - disponibilidade semanal;
 - exceções;
@@ -1109,7 +1110,9 @@ Na V1, valor de venda pode ser registrado manualmente como valor bruto do imóve
 - RLS em tabelas expostas.
 - Políticas combinam autenticação e conta.
 - Dono administra configurações e catálogo.
-- Corretor lê catálogo ativo e opera apenas leads atribuídos ou filas permitidas.
+- Corretor lê catálogo ativo e opera contatos, conversas e mensagens somente
+  depois de aceitar a reunião e receber a atribuição persistida do lead.
+- Oferta pendente não libera o inbox nem dados sensíveis do lead.
 - IA e webhooks escrevem por rotas servidoras controladas.
 - Chave service role nunca chega ao cliente.
 - WhatsApp do corretor não autoriza ações financeiras.
@@ -1237,9 +1240,13 @@ O código não será removido até concluir migração e confirmar ausência de 
 
 ### Cenário 7 — Corretor pelo WhatsApp
 
+- Aceite do convite exige o WhatsApp operacional com DDI.
+- Corretor antigo sem número confirmado não acessa o dashboard até concluir o
+  cadastro.
 - Corretor verificado recebe oferta.
 - Resposta natural é interpretada.
 - Aceite atribui a reunião.
+- Somente depois do aceite a conversa do lead aparece no inbox do corretor.
 - Rejeição exige motivo.
 - Ausência de resposta redistribui.
 - Fila esgotada alerta o dono.
@@ -1255,6 +1262,8 @@ O código não será removido até concluir migração e confirmar ausência de 
 ### Cenário 9 — Permissões
 
 - Corretor não edita configurações nem catálogo.
+- Corretor não vê contatos, conversas nem mensagens de leads não atribuídos.
+- Oferta de reunião pendente não antecipa acesso ao histórico do lead.
 - Dono possui acesso total.
 - Dados de outra conta não são acessíveis.
 - Mídias privadas exigem autorização.

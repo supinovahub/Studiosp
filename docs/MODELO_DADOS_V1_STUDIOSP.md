@@ -96,20 +96,26 @@ A V1 apresenta apenas Dono e Corretor, sem destruir a compatibilidade dos outros
 
 Especializa um perfil como corretor operacional.
 
-| Campo                       | Tipo e regra                            |
-| --------------------------- | --------------------------------------- |
-| `id`                        | uuid, PK                                |
-| `account_id`                | uuid, FK, obrigatório                   |
-| `profile_id`                | uuid, FK, único por conta               |
-| `display_name`              | text, obrigatório                       |
-| `whatsapp_e164`             | text, único por conta quando preenchido |
-| `whatsapp_verified_at`      | timestamptz, opcional                   |
-| `max_parallel_assignments`  | integer positivo, padrão 1              |
-| `is_available`, `is_active` | boolean, padrão true                    |
-| `last_assignment_at`        | timestamptz, opcional                   |
-| `created_at`, `updated_at`  | timestamptz                             |
+| Campo                       | Tipo e regra                                                |
+| --------------------------- | ----------------------------------------------------------- |
+| `id`                        | uuid, PK                                                    |
+| `account_id`                | uuid, FK, obrigatório                                       |
+| `profile_id`                | uuid, FK, único por conta                                   |
+| `display_name`              | text, obrigatório                                           |
+| `whatsapp_e164`             | text E.164, único por conta; obrigatório antes do dashboard |
+| `whatsapp_verified_at`      | confirmação autenticada obrigatória para disponibilidade    |
+| `max_parallel_assignments`  | integer positivo, padrão 1                                  |
+| `is_available`, `is_active` | boolean, padrão true                                        |
+| `last_assignment_at`        | timestamptz, opcional                                       |
+| `created_at`, `updated_at`  | timestamptz                                                 |
 
 Tokens de Google ou UAZAPI não ficam em colunas expostas ao cliente. Credenciais ficam em secrets ou estrutura criptografada acessível apenas pelo servidor.
+
+O convite de um corretor e o registro do WhatsApp ocorrem na mesma transação.
+Perfis legados sem confirmação ficam indisponíveis para roteamento e veem
+somente o onboarding bloqueante. A confirmação registra consentimento e
+auditoria; a restrição do banco impede `is_available = true` sem número
+confirmado.
 
 ## 5. Contato, conversa e oportunidade
 
@@ -621,23 +627,23 @@ Regras:
 
 ## 17. Matriz de acesso por RLS
 
-| Domínio               | Dono           | Corretor              | Servidor IA/webhook      |
-| --------------------- | -------------- | --------------------- | ------------------------ |
-| Conta e configurações | administra     | mínimo necessário     | operação controlada      |
-| Usuários/corretores   | administra     | próprio perfil        | controlado               |
-| Contatos e conversas  | todos da conta | atribuídos            | controlado               |
-| Oportunidades         | administra     | atribuídas            | por função               |
-| Eventos               | lê             | lê atribuídos         | append-only              |
-| Central de atenção    | administra     | atribuída             | cria/resolve por regra   |
-| Perguntas e prompts   | administra     | lê efetivo            | lê versão ativa          |
-| Respostas             | administra     | lê atribuídas         | por função               |
-| Catálogo              | administra     | publicados            | publicados               |
-| Mídias                | administra     | conforme visibilidade | URL temporária           |
-| Agente documental     | administra     | sem acesso            | processamento controlado |
-| Matching              | administra     | atribuídos            | controlado               |
-| Agenda/ofertas        | administra     | próprias              | por função               |
-| Custos e logs de IA   | administra     | sem acesso            | controlado               |
-| Auditoria             | lê             | sem acesso            | append-only              |
+| Domínio               | Dono           | Corretor               | Servidor IA/webhook      |
+| --------------------- | -------------- | ---------------------- | ------------------------ |
+| Conta e configurações | administra     | mínimo necessário      | operação controlada      |
+| Usuários/corretores   | administra     | próprio perfil         | controlado               |
+| Contatos e conversas  | todos da conta | atribuídos após aceite | controlado               |
+| Oportunidades         | administra     | atribuídas             | por função               |
+| Eventos               | lê             | lê atribuídos          | append-only              |
+| Central de atenção    | administra     | atribuída              | cria/resolve por regra   |
+| Perguntas e prompts   | administra     | lê efetivo             | lê versão ativa          |
+| Respostas             | administra     | lê atribuídas          | por função               |
+| Catálogo              | administra     | publicados             | publicados               |
+| Mídias                | administra     | conforme visibilidade  | URL temporária           |
+| Agente documental     | administra     | sem acesso             | processamento controlado |
+| Matching              | administra     | atribuídos             | controlado               |
+| Agenda/ofertas        | administra     | próprias               | por função               |
+| Custos e logs de IA   | administra     | sem acesso             | controlado               |
+| Auditoria             | lê             | sem acesso             | append-only              |
 
 Padrão de política:
 
@@ -721,6 +727,9 @@ O modelo só está pronto quando:
 16. migração de mídia preserva checksum e vínculo;
 17. nenhuma credencial chega ao navegador;
 18. restore de backup é testado antes do corte.
+19. oferta pendente não libera contato, conversa nem mensagens ao corretor;
+20. aceite atribui o lead e libera somente seu inbox ao corretor responsável;
+21. corretor sem WhatsApp confirmado não fica disponível nem acessa o painel.
 
 ## 22. Ordem das migrations
 
