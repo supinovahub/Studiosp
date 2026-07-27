@@ -13,16 +13,20 @@ import {
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { accountId, supabase } = await requireRole('admin');
-    const { data, error } = await supabase
+    const includeArchived =
+      new URL(request.url).searchParams.get('includeArchived') === 'true';
+    let query = supabase
       .from('reactivation_campaigns')
       .select(
         '*,reactivation_imports(*),reactivation_leads(id,status,objective,entry_value),reactivation_touches(id,status,step_number),reactivation_events(id,event_type,created_at)'
       )
       .eq('account_id', accountId)
       .order('created_at', { ascending: false });
+    if (!includeArchived) query = query.neq('status', 'archived');
+    const { data, error } = await query;
     if (error) throw error;
     return NextResponse.json({ campaigns: data ?? [] });
   } catch (error) {

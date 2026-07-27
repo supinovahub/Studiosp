@@ -1595,6 +1595,11 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - após a resposta, qualificação, matching, agendamento e fila de corretores
   reutilizam o núcleo operacional da IA-SDR;
 - somente o dono administra importações e campanhas;
+- campanhas encerradas ou ainda em rascunho podem ser arquivadas sem apagar
+  leads, mensagens, tentativas ou eventos de auditoria;
+- cada campanha oferece um diagnóstico operacional com totais de mensagens
+  enviadas, agendadas, processando, canceladas, falhas registradas e
+  reprocessamentos, além do detalhe por lead e ID retornado pelo provedor;
 - desenvolvimento e homologação acontecem na branch integrada
   `feature/reactivacao-leads` e no Supabase staging.
 

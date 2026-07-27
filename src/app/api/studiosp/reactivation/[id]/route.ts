@@ -2,12 +2,66 @@ import { NextResponse } from 'next/server';
 import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { supabaseAdmin } from '@/lib/automations/admin-client';
 import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
+import { summarizeReactivationTouches } from '@/lib/reactivation/logs';
 import {
   parseReactivationCadence,
   ReactivationCadenceError,
 } from '@/lib/reactivation/cadence';
 
 export const maxDuration = 60;
+
+export async function GET(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { accountId } = await requireRole('admin');
+    const { id } = await context.params;
+    const db = supabaseAdmin();
+    const { data: campaign, error: campaignError } = await db
+      .from('reactivation_campaigns')
+      .select('id,name,status,cadence,created_at,activated_at,archived_at')
+      .eq('id', id)
+      .eq('account_id', accountId)
+      .maybeSingle();
+    if (campaignError) throw campaignError;
+    if (!campaign)
+      return NextResponse.json(
+        { error: 'Campanha não encontrada.' },
+        { status: 404 }
+      );
+
+    const [{ data: touches, error: touchesError }, { data: leads }] =
+      await Promise.all([
+        db
+          .from('reactivation_touches')
+          .select(
+            'id,reactivation_lead_id,step_number,status,scheduled_for,sent_at,message_id,attempt_count,last_error,created_at'
+          )
+          .eq('campaign_id', id)
+          .eq('account_id', accountId)
+          .order('scheduled_for', { ascending: false })
+          .limit(500),
+        db
+          .from('reactivation_leads')
+          .select('id,name,phone_e164,status')
+          .eq('campaign_id', id)
+          .eq('account_id', accountId),
+      ]);
+    if (touchesError) throw touchesError;
+
+    const leadById = new Map((leads ?? []).map((lead) => [lead.id, lead]));
+    const entries = (touches ?? []).map((touch) => ({
+      ...touch,
+      lead: leadById.get(touch.reactivation_lead_id) ?? null,
+    }));
+    const summary = summarizeReactivationTouches(entries);
+
+    return NextResponse.json({ campaign, summary, entries });
+  } catch (error) {
+    return toErrorResponse(error);
+  }
+}
 
 export async function PATCH(
   request: Request,
@@ -81,23 +135,51 @@ export async function PATCH(
       });
       return NextResponse.json({ campaign: data });
     }
-    if (!['pause', 'resume', 'cancel'].includes(action))
+    if (!['pause', 'resume', 'cancel', 'archive'].includes(action))
       return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 });
+    if (action === 'archive') {
+      const { data: current, error: currentError } = await db
+        .from('reactivation_campaigns')
+        .select('status')
+        .eq('id', id)
+        .eq('account_id', accountId)
+        .maybeSingle();
+      if (currentError) throw currentError;
+      if (!current)
+        return NextResponse.json(
+          { error: 'Campanha não encontrada.' },
+          { status: 404 }
+        );
+      if (!['draft', 'cancelled', 'completed'].includes(current.status))
+        return NextResponse.json(
+          {
+            error:
+              'Pause ou cancele a campanha antes de arquivá-la. Campanhas ativas não podem ser arquivadas.',
+          },
+          { status: 409 }
+        );
+    }
     const status =
       action === 'pause'
         ? 'paused'
         : action === 'resume'
           ? 'active'
-          : 'cancelled';
+          : action === 'archive'
+            ? 'archived'
+            : 'cancelled';
     const { data, error } = await db
       .from('reactivation_campaigns')
-      .update({ status })
+      .update({
+        status,
+        archived_at:
+          action === 'archive' ? new Date().toISOString() : undefined,
+      })
       .eq('id', id)
       .eq('account_id', accountId)
       .select()
       .single();
     if (error) throw error;
-    if (action === 'cancel') {
+    if (action === 'cancel' || action === 'archive') {
       await db
         .from('reactivation_touches')
         .update({ status: 'cancelled' })

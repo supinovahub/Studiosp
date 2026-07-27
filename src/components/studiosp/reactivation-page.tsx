@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  Archive,
+  BarChart3,
   CheckCircle2,
   FileSpreadsheet,
+  LoaderCircle,
   Pencil,
   RefreshCcw,
   Save,
@@ -12,6 +15,13 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from './page-header';
 import { ErrorState, LoadingState } from './operational-state';
@@ -37,6 +47,35 @@ type PreviewRow = {
   entryValue: number | null;
   notes: string[];
 };
+type CampaignLogEntry = {
+  id: string;
+  step_number: number;
+  status: string;
+  scheduled_for: string;
+  sent_at: string | null;
+  message_id: string | null;
+  attempt_count: number;
+  last_error: string | null;
+  lead: {
+    name: string | null;
+    phone_e164: string;
+    status: string;
+  } | null;
+};
+type CampaignLogs = {
+  campaign: Pick<Campaign, 'id' | 'name' | 'status'>;
+  summary: {
+    total: number;
+    sent: number;
+    scheduled: number;
+    processing: number;
+    failed: number;
+    errors: number;
+    cancelled: number;
+    retried: number;
+  };
+  entries: CampaignLogEntry[];
+};
 
 const objectiveLabel = {
   live: 'Moradia',
@@ -61,15 +100,21 @@ export function ReactivationPage() {
   const [editMin, setEditMin] = useState('');
   const [editMax, setEditMax] = useState('');
   const [editCadenceDays, setEditCadenceDays] = useState('0, 2, 5, 9');
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [logs, setLogs] = useState<CampaignLogs | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const response = await fetch('/api/studiosp/reactivation');
+    const response = await fetch(
+      `/api/studiosp/reactivation?includeArchived=${includeArchived}`
+    );
     const payload = await response.json();
     if (response.ok) setCampaigns(payload.campaigns);
     else setError(payload.error || 'Não foi possível carregar as campanhas.');
     setLoading(false);
-  }, []);
+  }, [includeArchived]);
 
   useEffect(() => {
     // Carregamento inicial sincroniza a tela com o backend.
@@ -138,7 +183,7 @@ export function ReactivationPage() {
 
   const campaignAction = async (
     id: string,
-    action: 'activate' | 'pause' | 'resume' | 'cancel'
+    action: 'activate' | 'pause' | 'resume' | 'cancel' | 'archive'
   ) => {
     setSending(true);
     setError(null);
@@ -190,6 +235,42 @@ export function ReactivationPage() {
     }
     await load();
     setSending(false);
+  };
+
+  const archiveCampaign = async (campaign: Campaign) => {
+    if (
+      !window.confirm(
+        `Arquivar “${campaign.name}”? O histórico e os logs serão preservados.`
+      )
+    )
+      return;
+    await campaignAction(campaign.id, 'archive');
+    setSuccess('Campanha arquivada. O histórico continua disponível.');
+  };
+
+  const openLogs = async (campaign: Campaign) => {
+    setLogsOpen(true);
+    setLogsLoading(true);
+    setLogs(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/studiosp/reactivation/${campaign.id}`);
+      const payload = await response.json();
+      if (!response.ok)
+        throw new Error(
+          payload.error || 'Não foi possível analisar os logs da campanha.'
+        );
+      setLogs(payload);
+    } catch (logError) {
+      setLogsOpen(false);
+      setError(
+        logError instanceof Error
+          ? logError.message
+          : 'Não foi possível analisar os logs da campanha.'
+      );
+    } finally {
+      setLogsLoading(false);
+    }
   };
 
   const startEditing = (campaign: Campaign) => {
@@ -434,11 +515,22 @@ export function ReactivationPage() {
       ) : null}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold">Campanhas</h3>
-          <Button variant="outline" size="sm" onClick={() => void load()}>
-            <RefreshCcw className="size-4" /> Atualizar
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-muted-foreground flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(event) => setIncludeArchived(event.target.checked)}
+                className="size-4"
+              />
+              Exibir arquivadas
+            </label>
+            <Button variant="outline" size="sm" onClick={() => void load()}>
+              <RefreshCcw className="size-4" /> Atualizar
+            </Button>
+          </div>
         </div>
         {campaigns.length ? (
           campaigns.map((campaign) => (
@@ -538,8 +630,18 @@ export function ReactivationPage() {
                           ? 'Cancelada'
                           : campaign.status === 'completed'
                             ? 'Concluída'
-                            : campaign.status}
+                            : campaign.status === 'archived'
+                              ? 'Arquivada'
+                              : campaign.status}
                 </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={sending}
+                  onClick={() => void openLogs(campaign)}
+                >
+                  <BarChart3 className="size-4" /> Analisar logs
+                </Button>
                 {editingId === campaign.id ? (
                   <>
                     <Button
@@ -623,6 +725,25 @@ export function ReactivationPage() {
                       Cancelar campanha
                     </Button>
                   </>
+                ) : ['cancelled', 'completed'].includes(campaign.status) ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={sending}
+                    onClick={() => void archiveCampaign(campaign)}
+                  >
+                    <Archive className="size-4" /> Arquivar
+                  </Button>
+                ) : null}
+                {campaign.status === 'draft' && editingId !== campaign.id ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={sending}
+                    onClick={() => void archiveCampaign(campaign)}
+                  >
+                    <Archive className="size-4" /> Arquivar
+                  </Button>
                 ) : null}
               </div>
             </article>
@@ -633,8 +754,102 @@ export function ReactivationPage() {
           </p>
         )}
       </section>
+
+      <Dialog open={logsOpen} onOpenChange={setLogsOpen}>
+        <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>
+              Logs da campanha{logs ? ` — ${logs.campaign.name}` : ''}
+            </DialogTitle>
+            <DialogDescription>
+              Diagnóstico das tentativas de envio. O ID identifica o aceite do
+              provedor; entrega e leitura dependem dos webhooks.
+            </DialogDescription>
+          </DialogHeader>
+          {logsLoading ? (
+            <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
+              <LoaderCircle className="size-4 animate-spin" />
+              Analisando mensagens...
+            </div>
+          ) : logs ? (
+            <div className="space-y-4 overflow-hidden">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Summary label="Enviadas" value={logs.summary.sent} success />
+                <Summary
+                  label="Com erro registrado"
+                  value={logs.summary.errors}
+                />
+                <Summary label="Agendadas" value={logs.summary.scheduled} />
+                <Summary label="Reprocessadas" value={logs.summary.retried} />
+                <Summary label="Processando" value={logs.summary.processing} />
+                <Summary label="Canceladas" value={logs.summary.cancelled} />
+                <Summary label="Total" value={logs.summary.total} />
+              </div>
+              <div className="border-border max-h-[48vh] overflow-auto rounded-lg border">
+                <table className="w-full min-w-[820px] text-left text-xs">
+                  <thead className="bg-muted sticky top-0">
+                    <tr>
+                      <th className="p-3">Lead</th>
+                      <th className="p-3">Etapa</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Tentativas</th>
+                      <th className="p-3">Horário</th>
+                      <th className="p-3">ID da mensagem/erro</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-border divide-y">
+                    {logs.entries.map((entry) => (
+                      <tr key={entry.id}>
+                        <td className="p-3">
+                          <p className="font-medium">
+                            {entry.lead?.name || 'Sem nome'}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {entry.lead?.phone_e164 || 'Sem número'}
+                          </p>
+                        </td>
+                        <td className="p-3">D{entry.step_number - 1}</td>
+                        <td className="p-3">
+                          {touchStatusLabel(entry.status)}
+                        </td>
+                        <td className="p-3">{entry.attempt_count}</td>
+                        <td className="p-3">
+                          {formatLogDate(entry.sent_at || entry.scheduled_for)}
+                        </td>
+                        <td className="max-w-xs p-3 break-words">
+                          {entry.message_id || entry.last_error || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function touchStatusLabel(status: string) {
+  return (
+    {
+      sent: 'Enviada',
+      scheduled: 'Agendada',
+      processing: 'Processando',
+      failed: 'Erro',
+      cancelled: 'Cancelada',
+    }[status] ?? status
+  );
+}
+
+function formatLogDate(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(value));
 }
 
 function Summary({

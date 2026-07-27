@@ -71,6 +71,7 @@ export async function sendDueReactivationTouches(
             status: 'sent',
             sent_at: now,
             message_id: result.whatsapp_message_id,
+            last_error: null,
           })
           .eq('id', touch.id),
         db
