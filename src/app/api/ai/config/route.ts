@@ -34,7 +34,7 @@ export async function GET() {
       // `api_key` is selected only to derive `has_key` — it is stripped
       // out below and never returned to the client.
       .select(
-        'provider, model, communication_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key'
+        'provider, model, communication_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_allowed_numbers, handoff_agent_id, api_key, embeddings_api_key'
       )
       .eq('account_id', accountId)
       .maybeSingle();
@@ -105,6 +105,16 @@ export async function POST(request: Request) {
     }
     const isActive = body.is_active === true;
     const autoReplyEnabled = body.auto_reply_enabled === true;
+    const allowedNumbers: string[] = Array.isArray(
+      body.auto_reply_allowed_numbers
+    )
+      ? [...new Set<string>(
+          body.auto_reply_allowed_numbers
+            .map((value: unknown) => String(value).replace(/\D/g, ''))
+            .filter((value: string) => value.length >= 8 && value.length <= 15)
+            .map((value: string) => `+${value}`)
+        )].slice(0, 50)
+      : [];
 
     let maxPer = Number(body.auto_reply_max_per_conversation);
     if (!Number.isFinite(maxPer)) maxPer = 3;
@@ -186,6 +196,7 @@ export async function POST(request: Request) {
           isActive,
           autoReplyEnabled,
           autoReplyMaxPerConversation: maxPer,
+          autoReplyAllowedNumbers: allowedNumbers,
           handoffAgentId: null,
           embeddingsApiKey: null,
         });
@@ -226,6 +237,7 @@ export async function POST(request: Request) {
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
       auto_reply_max_per_conversation: maxPer,
+      auto_reply_allowed_numbers: allowedNumbers,
     };
     // Only touch the handoff target when the form actually sent the field,
     // so a partial save (e.g. flipping a toggle) doesn't wipe it.

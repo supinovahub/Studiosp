@@ -7,9 +7,13 @@ import { normalizePhone } from '@/lib/whatsapp/phone-utils';
  * every inbound number not explicitly listed remains visible in the inbox but
  * is not sent to the AI provider and receives no automatic AI response.
  */
-export function isInboundAiReplyAllowed(phone: string): boolean {
-  const configuredNumbers = (process.env.AI_AUTOREPLY_ALLOWED_NUMBERS ?? '')
-    .split(',')
+export function isInboundAiReplyAllowed(
+  phone: string,
+  storedNumbers: string[] = []
+): boolean {
+  const environmentNumbers = (process.env.AI_AUTOREPLY_ALLOWED_NUMBERS ?? '')
+    .split(',');
+  const configuredNumbers = [...storedNumbers, ...environmentNumbers]
     .map(normalizePhone)
     .filter(Boolean);
 

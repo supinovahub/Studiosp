@@ -110,6 +110,7 @@ function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
     isActive: true,
     autoReplyEnabled: true,
     autoReplyMaxPerConversation: 3,
+    autoReplyAllowedNumbers: [],
     handoffAgentId: null,
     embeddingsApiKey: null,
     ...overrides,
@@ -176,7 +177,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 
     await dispatchInboundToAiReply(ARGS);
 
-    expect(h.loadAiConfig).not.toHaveBeenCalled();
+    expect(h.loadAiConfig).toHaveBeenCalled();
     expect(h.generateReply).not.toHaveBeenCalled();
     expect(h.engineSendText).not.toHaveBeenCalled();
   });

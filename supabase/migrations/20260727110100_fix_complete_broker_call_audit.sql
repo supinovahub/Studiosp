@@ -18,13 +18,9 @@ begin
   end if;
 
   v_opportunity := public.studiosp_apply_opportunity_event(
-    p_opportunity_id,
-    'meeting_completed',
-    p_expected_stage,
-    jsonb_build_object('call_outcome', p_outcome),
-    gen_random_uuid()::text,
-    'dashboard',
-    p_notes
+    p_opportunity_id, 'meeting_completed', p_expected_stage,
+    jsonb_build_object('call_outcome', p_outcome), gen_random_uuid()::text,
+    'dashboard', p_notes
   );
 
   if p_outcome = 'proposal_sent' then

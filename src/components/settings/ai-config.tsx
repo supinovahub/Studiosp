@@ -79,6 +79,7 @@ export function AiConfig() {
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
   const [maxPerConversation, setMaxPerConversation] = useState(3);
+  const [allowedNumbers, setAllowedNumbers] = useState('');
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
   const [members, setMembers] = useState<AccountMember[]>([]);
@@ -106,6 +107,9 @@ export function AiConfig() {
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
         setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
+        setAllowedNumbers(
+          (data.auto_reply_allowed_numbers ?? []).join('\n')
+        );
         setHandoffAgentId(data.handoff_agent_id ?? '');
         setHasStoredKey(Boolean(data.has_key));
         setApiKey(data.has_key ? MASKED_KEY : '');
@@ -157,6 +161,10 @@ export function AiConfig() {
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
     auto_reply_max_per_conversation: maxPerConversation,
+    auto_reply_allowed_numbers: allowedNumbers
+      .split(/[\n,;]+/)
+      .map((value) => value.trim())
+      .filter(Boolean),
     handoff_agent_id: handoffAgentId || null,
   });
 
@@ -458,6 +466,24 @@ export function AiConfig() {
                 disabled={disabled || !autoReplyEnabled}
                 className="w-20"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-allowed-numbers">
+                Números autorizados para testes
+              </Label>
+              <Textarea
+                id="ai-allowed-numbers"
+                value={allowedNumbers}
+                onChange={(event) => setAllowedNumbers(event.target.value)}
+                rows={4}
+                placeholder={'+5527981168321\n+5527998303052'}
+                disabled={disabled}
+              />
+              <p className="text-muted-foreground text-xs">
+                Um número por linha, com DDI. Se a lista ficar vazia, a IA
+                poderá responder a qualquer lead elegível.
+              </p>
             </div>
 
             <div className="space-y-2">

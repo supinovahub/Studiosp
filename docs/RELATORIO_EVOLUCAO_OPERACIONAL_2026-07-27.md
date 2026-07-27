@@ -39,3 +39,13 @@
 - Homologar permitido versus bloqueado, cadência curta e resposta.
 - Homologar com corretor: aceite, chat, call finalizada, pipeline e chat fechado.
 - Receber exemplo real para melhorar a importação de empreendimentos.
+
+## Correções após homologação
+
+- A whitelist passou de variável técnica para campo visível em
+  **Configurações → IA**, persistido por conta.
+- O staging foi inicializado com os dois números controlados já aprovados.
+- Removida a auditoria duplicada que causava `permission denied for table
+  audit_events` e revertia a conclusão da call.
+- Criada uma oferta de reunião somente no dashboard para o corretor Arthur
+  Alves Rocha aceitar manualmente, sem disparo de WhatsApp.

@@ -61,14 +61,15 @@ export async function dispatchInboundToAiReply(
   } = args;
 
   try {
-    // Apply this before loading account configuration, conversation context or
-    // calling the provider. Blocked messages remain available to humans.
-    if (!isInboundAiReplyAllowed(senderPhone)) return;
-
     const db = supabaseAdmin();
 
     const config = await loadAiConfig(db, accountId);
     if (!config || !config.autoReplyEnabled) return;
+    // Block before loading conversation context or calling the provider.
+    if (
+      !isInboundAiReplyAllowed(senderPhone, config.autoReplyAllowedNumbers)
+    )
+      return;
 
     // Deterministic, user-configured responders win over the LLM — the
     // caller already excludes messages a Flow consumed. Message-level

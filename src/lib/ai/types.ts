@@ -24,6 +24,8 @@ export interface AiConfig {
   isActive: boolean
   autoReplyEnabled: boolean
   autoReplyMaxPerConversation: number
+  /** Empty means unrestricted; otherwise only these E.164 numbers may reply. */
+  autoReplyAllowedNumbers: string[]
   /** Where auto-reply hands a conversation off when the model bails: an
    *  agent's `auth.users.id`, or null to leave it unassigned (drop into
    *  the shared queue). */
