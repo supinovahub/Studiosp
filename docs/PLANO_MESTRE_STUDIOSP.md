@@ -1606,6 +1606,9 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   conexão de WhatsApp ativa para permanecer visível no Inbox;
 - dados importados podem substituir nomes vazios ou nomes-placeholder iguais
   ao telefone, mas não sobrescrevem nomes humanos já cadastrados;
+- ao ativar uma campanha, a conversa inicia um novo ciclo de IA: atribuição
+  humana anterior é removida, a pausa e o contador são reiniciados e o
+  histórico anterior fica fora do novo contexto automático;
 - desenvolvimento e homologação acontecem na branch integrada
   `feature/reactivacao-leads` e no Supabase staging.
 

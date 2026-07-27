@@ -5,6 +5,7 @@ import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
 import { whatsappConnectionKey } from '@/lib/whatsapp/connection-key';
 import { contactUpdatesFromImportedLead } from '@/lib/reactivation/contact-merge';
+import { reactivationConversationUpdates } from '@/lib/reactivation/conversation-reset';
 import { parseReactivationCadence } from '@/lib/reactivation/cadence';
 
 type Row = Record<string, unknown>;
@@ -284,6 +285,7 @@ async function findOrCreateConversation(
   contactId: string,
   connectionKey: string
 ) {
+  const activationUpdates = reactivationConversationUpdates(connectionKey);
   const { data: existing } = await db
     .from('conversations')
     .select('*')
@@ -292,10 +294,9 @@ async function findOrCreateConversation(
     .limit(1)
     .maybeSingle();
   if (existing) {
-    if (existing.whatsapp_connection_key === connectionKey) return existing;
     const { data: updated, error: updateError } = await db
       .from('conversations')
-      .update({ whatsapp_connection_key: connectionKey })
+      .update(activationUpdates)
       .eq('id', existing.id)
       .eq('account_id', accountId)
       .select()
@@ -309,7 +310,7 @@ async function findOrCreateConversation(
       account_id: accountId,
       user_id: ownerUserId,
       contact_id: contactId,
-      whatsapp_connection_key: connectionKey,
+      ...activationUpdates,
     })
     .select()
     .single();
