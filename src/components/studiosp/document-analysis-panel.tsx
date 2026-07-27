@@ -813,7 +813,6 @@ export function DocumentAnalysisPanel({
 
 function studioItemIds(items: BatchDetail['items'], limit: number) {
   const eligible = new Set<string>();
-  const byId = new Map(items.map((item) => [item.id, item]));
   for (const item of items) {
     if (!['development', 'offer'].includes(item.item_type)) continue;
     const maximum = numericField(item, 'area_max_sqm');
@@ -821,13 +820,10 @@ function studioItemIds(items: BatchDetail['items'], limit: number) {
     const reference = maximum ?? minimum;
     if (reference == null || reference <= 0 || reference > limit) continue;
     eligible.add(item.id);
-    let parentId = item.parent_item_id;
-    const visited = new Set<string>();
-    while (parentId && !visited.has(parentId)) {
-      visited.add(parentId);
-      eligible.add(parentId);
-      parentId = byId.get(parentId)?.parent_item_id;
-    }
+    // A aprovação relaciona a opção ao pai direto. Não percorra cadeias
+    // profundas propostas pela IA, pois cabeçalhos de páginas podem aparecer
+    // como ancestrais intermediários e não são empreendimentos cadastráveis.
+    if (item.parent_item_id) eligible.add(item.parent_item_id);
   }
   return eligible;
 }
