@@ -167,6 +167,7 @@ beforeEach(() => {
     opportunityId: null,
     grounding: [],
     reservedAppointment: null,
+    outboundOverride: null,
   });
   h.scheduleStudiospFollowups.mockResolvedValue(undefined);
   h.buildSdrTurnContext.mockResolvedValue({
@@ -212,6 +213,28 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.engineSendText).toHaveBeenCalledTimes(1);
     expect(h.engineSendText.mock.calls[0][0].text).toBe(
       'Olá! Encontrei uma opção. Qual bairro você prefere?'
+    );
+  });
+
+  it('uses the database-backed appointment confirmation instead of model copy', async () => {
+    h.prepareStudiospTurn.mockResolvedValue({
+      opportunityId: 'opp-1',
+      grounding: [],
+      reservedAppointment: { id: 'appointment-1' },
+      outboundOverride:
+        'Sua conversa está confirmada para terça-feira, 28/07, 10:00.',
+    });
+    h.generateReply.mockResolvedValue({
+      text: 'Um corretor entrará em contato para confirmar.',
+      handoff: false,
+    });
+
+    await dispatchInboundToAiReply(ARGS);
+
+    expect(h.engineSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Sua conversa está confirmada para terça-feira, 28/07, 10:00.',
+      })
     );
   });
 

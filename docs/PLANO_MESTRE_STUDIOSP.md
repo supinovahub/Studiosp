@@ -378,6 +378,26 @@ O sistema não deve publicar como garantido um período sem cobertura ou capacid
 
 Políticas comerciais e operacionais serão configuráveis pelo dono. Regras de integridade, segurança, auditoria e prevenção de conflito permanecerão invariáveis.
 
+### Orquestração do agendamento — decisão de 27 de julho de 2026
+
+#### Confirmado
+
+- uma resposta da IA nunca constitui confirmação de reunião por si só;
+- a reunião só pode ser apresentada como marcada ou confirmada após a criação
+  atômica de um registro em `appointments`;
+- data e horário propostos espontaneamente pelo lead devem ser interpretados,
+  normalizados para `America/Sao_Paulo` e comparados com slots reais;
+- horário disponível é reservado imediatamente; horário indisponível resulta
+  na oferta de alternativas garantidas, sem promessa ou anotação fictícia;
+- orçamento total confirmado também satisfaz o requisito financeiro mínimo da
+  qualificação, sem obrigar entrada ou parcela quando esses dados não existem;
+- a reserva confirma a reunião para o lead e cria, na mesma transação, a
+  primeira oferta interna para um corretor;
+- o aceite do corretor define o responsável, mas não condiciona a confirmação
+  já enviada ao lead;
+- a mensagem de confirmação é determinística e derivada do `appointment`
+  persistido, não de texto livre do modelo.
+
 ## 6. Distribuição para corretores
 
 ### Confirmado

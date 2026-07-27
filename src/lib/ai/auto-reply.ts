@@ -289,6 +289,7 @@ export async function dispatchInboundToAiReply(
       systemPrompt,
       messages,
     });
+    const responseText = studiosp.outboundOverride ?? text;
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
     // never adds latency to the customer-facing send: `logAiUsage`
@@ -304,7 +305,10 @@ export async function dispatchInboundToAiReply(
       usage,
     });
 
-    if (handoff || classification.requiresHandoff || !text) {
+    if (
+      !studiosp.outboundOverride &&
+      (handoff || classification.requiresHandoff || !responseText)
+    ) {
       // The model can't (or shouldn't) answer — stop auto-replying on
       // this thread and hand it to a human. We (a) pause the bot here
       // (sticky until re-enabled), (b) route the conversation to the
@@ -427,7 +431,7 @@ export async function dispatchInboundToAiReply(
       return { outcome: 'handoff', reason: 'session_reply_limit_reached' };
     }
 
-    const outboundText = compactAiReply(text);
+    const outboundText = compactAiReply(responseText);
     const { data: fingerprintClaimed, error: fingerprintError } = await db.rpc(
       'claim_ai_response_fingerprint',
       {
@@ -463,7 +467,7 @@ export async function dispatchInboundToAiReply(
       contactId,
       classification,
       productIds: [],
-      responseText: text,
+      responseText,
       outcome: 'replied',
     });
     await scheduleStudiospFollowups({
