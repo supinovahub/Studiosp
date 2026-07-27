@@ -37,6 +37,11 @@ type BatchDetail = {
     pii_status: string;
     pii_count: number;
     pii_categories: string[];
+    checkpoint?: {
+      chunk_count?: number;
+      completed_chunks?: number;
+      failed_chunks?: number;
+    };
     error_message?: string | null;
   }>;
   items: Array<{
@@ -125,6 +130,7 @@ export function DocumentAnalysisPanel({
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const processingRef = useRef(false);
 
   useEffect(() => setMounted(true), []);
 
@@ -195,11 +201,22 @@ export function DocumentAnalysisPanel({
 
   useEffect(() => {
     if (!open || !selected || !ACTIVE_STATES.has(selected.batch.status)) return;
-    const timer = window.setInterval(() => {
-      void loadBatch(selected.batch.id)
-        .then(() => loadBatches())
-        .catch(() => undefined);
-    }, 4000);
+    const advance = async () => {
+      if (processingRef.current) return;
+      processingRef.current = true;
+      try {
+        await fetch('/api/studiosp/document-analysis/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batchId: selected.batch.id }),
+        });
+        await Promise.all([loadBatch(selected.batch.id), loadBatches()]);
+      } finally {
+        processingRef.current = false;
+      }
+    };
+    void advance();
+    const timer = window.setInterval(() => void advance(), 5000);
     return () => window.clearInterval(timer);
   }, [loadBatch, loadBatches, open, selected]);
 
@@ -486,6 +503,37 @@ export function DocumentAnalysisPanel({
                         <span className="text-muted-foreground ml-2 text-xs">
                           {STATUS_LABELS[source.status] ?? source.status}
                         </span>
+                        {source.checkpoint?.chunk_count ? (
+                          <div className="mt-2">
+                            <div className="text-muted-foreground mb-1 flex justify-between text-xs">
+                              <span>
+                                {source.checkpoint.completed_chunks ?? 0} de{' '}
+                                {source.checkpoint.chunk_count} partes
+                              </span>
+                              <span>
+                                {Math.round(
+                                  ((source.checkpoint.completed_chunks ?? 0) /
+                                    source.checkpoint.chunk_count) *
+                                    100
+                                )}
+                                %
+                              </span>
+                            </div>
+                            <div className="bg-muted h-1.5 overflow-hidden rounded-full">
+                              <div
+                                className="bg-primary h-full transition-all"
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    ((source.checkpoint.completed_chunks ?? 0) /
+                                      source.checkpoint.chunk_count) *
+                                      100
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
                         {source.pii_status === 'blocked' ? (
                           <p className="mt-1 flex items-center gap-1 text-xs text-amber-500">
                             <ShieldCheck className="size-3.5" />

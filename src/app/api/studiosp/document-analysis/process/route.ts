@@ -32,20 +32,37 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (retryError) throw retryError;
       if (retryBatch) {
-        const { error: sourcesError } = await ctx.supabase
-          .from('document_analysis_sources')
-          .update({
-            status: 'awaiting',
-            attempts: 0,
-            error_code: null,
-            error_message: null,
-            next_attempt_at: new Date().toISOString(),
-            completed_at: null,
-          })
-          .eq('account_id', ctx.accountId)
-          .eq('batch_id', batchId)
-          .eq('status', 'failed');
+        const [{ error: sourcesError }, { error: chunksError }] =
+          await Promise.all([
+            ctx.supabase
+              .from('document_analysis_sources')
+              .update({
+                status: 'awaiting',
+                attempts: 0,
+                error_code: null,
+                error_message: null,
+                next_attempt_at: new Date().toISOString(),
+                completed_at: null,
+              })
+              .eq('account_id', ctx.accountId)
+              .eq('batch_id', batchId)
+              .eq('status', 'failed'),
+            ctx.supabase
+              .from('document_analysis_chunks')
+              .update({
+                status: 'awaiting',
+                attempts: 0,
+                error_code: null,
+                error_message: null,
+                next_attempt_at: new Date().toISOString(),
+                completed_at: null,
+              })
+              .eq('account_id', ctx.accountId)
+              .eq('batch_id', batchId)
+              .eq('status', 'failed'),
+          ]);
         if (sourcesError) throw sourcesError;
+        if (chunksError) throw chunksError;
       }
     }
     const result = await processNextDocumentAnalysis(

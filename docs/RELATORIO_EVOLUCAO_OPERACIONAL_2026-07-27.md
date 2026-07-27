@@ -112,3 +112,24 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
 - A Revista ONE encontrou depois um timeout transitório do provedor de IA,
   posterior e independente da extração de PDF. O lote permaneceu sem aprovação
   e nenhuma escrita foi feita no catálogo.
+
+### Processamento incremental de documentos extensos
+
+- Criada no Supabase staging a tabela `document_analysis_chunks`, com RLS
+  owner-only, índices de fila e vínculos com conta, lote e fonte.
+- O conteúdo higienizado passa a ser dividido em partes de até 12 mil
+  caracteres, persistidas antes das chamadas ao provedor.
+- Cada ciclo do worker processa até duas partes em paralelo e salva
+  imediatamente o JSON estruturado e o uso retornado.
+- Timeout ou falha afeta somente a parte corrente, com até três tentativas e
+  espera progressiva; partes concluídas não são reenviadas.
+- A consolidação remapeia relações entre empreendimento e oferta, normaliza o
+  conjunto completo e só então monta o preview e associa as mídias.
+- A interface passou a mostrar `X de Y partes`, percentual e barra de
+  progresso por arquivo.
+- Enquanto a tela está aberta, os ciclos são solicitados sem sobreposição; com
+  a tela fechada, o cron continua usando os checkpoints persistidos.
+- Migration aplicada somente no projeto Studiosp Staging
+  `vgmmfzdifjhpqaopxfbj`; produção permaneceu inalterada.
+- Verificação local: typecheck aprovado, 85 arquivos de teste e 740 testes
+  aprovados.

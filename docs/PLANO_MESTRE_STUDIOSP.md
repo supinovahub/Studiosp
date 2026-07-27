@@ -1224,6 +1224,27 @@ ou texto extraído eliminado pela política de retenção.
 - retries, cancelamentos, retomadas, duração por etapa e falhas definitivas
   ficam registrados para observabilidade e auditoria.
 
+#### Processamento incremental por partes
+
+Documentos extensos não são analisados em uma única execução. Depois da
+extração e da higienização, o conteúdo é dividido em partes persistentes:
+
+- cada parte possui estado, índice, quantidade total, tentativas, próximo
+  horário de retry, erro, resultado estruturado e uso do provedor;
+- uma execução do worker analisa até duas partes em paralelo, mantendo as
+  demais disponíveis para outros ciclos;
+- falha ou timeout repete apenas a parte afetada, sem refazer extração,
+  privacidade ou partes já concluídas;
+- a consolidação ocorre somente depois que todas as partes elegíveis terminam;
+- chaves normalizadas e índices de empreendimento pai são recalculados na
+  consolidação;
+- a interface mostra partes concluídas, total e percentual por fonte;
+- fechar o navegador não perde os checkpoints; o cron continua o trabalho;
+- com a tela aberta, o cliente solicita novos ciclos sem criar execuções
+  concorrentes para o mesmo lote;
+- após três falhas da mesma parte, a fonte é marcada para revisão e o erro fica
+  visível, sem publicar ou cadastrar conteúdo parcial automaticamente.
+
 #### Fontes iniciais para validar somente a análise e o preview
 
 - um tabelão de junho com múltiplos empreendimentos, unidades e preços;

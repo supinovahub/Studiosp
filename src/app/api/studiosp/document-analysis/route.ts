@@ -66,7 +66,7 @@ export async function GET(request: Request) {
         ctx.supabase
           .from('document_analysis_sources')
           .select(
-            'id, status, original_filename, mime_type, size_bytes, page_count, pii_status, pii_categories, pii_count, error_code, error_message, completed_at'
+            'id, status, original_filename, mime_type, size_bytes, page_count, pii_status, pii_categories, pii_count, checkpoint, error_code, error_message, completed_at'
           )
           .eq('account_id', ctx.accountId)
           .eq('batch_id', batchId)

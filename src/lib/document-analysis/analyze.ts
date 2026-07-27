@@ -237,7 +237,140 @@ export async function analyzeSanitizedDocument(args: {
   };
 }
 
-function splitDocument(text: string, maxChars = 16_000) {
+export async function analyzeSanitizedChunk(args: {
+  config: AiConfig;
+  filename: string;
+  content: string;
+  chunkIndex: number;
+  chunkCount: number;
+}): Promise<AnalysisResult> {
+  const generated = await generateReply({
+    config: args.config,
+    systemPrompt: `${SYSTEM_PROMPT}\n${COVERAGE_PROMPT}`,
+    messages: [
+      {
+        role: 'user',
+        content:
+          `ARQUIVO: ${args.filename}\n` +
+          `PARTE: ${args.chunkIndex + 1} de ${args.chunkCount}\n\n` +
+          `TEXTO HIGIENIZADO:\n${args.content}`,
+      },
+    ],
+    maxOutputTokens: 4096,
+    jsonMode: true,
+    requestTimeoutMs: 90_000,
+  });
+  const parsed = extractJson(generated.text);
+  return normalizeParsedAnalysis(parsed, generated.usage);
+}
+
+export function consolidateChunkAnalyses(results: AnalysisResult[]) {
+  let offset = 0;
+  const items = results.flatMap((result) => {
+    const adjusted = result.items.map((item) => ({
+      ...item,
+      parentIndex: item.parentIndex == null ? null : item.parentIndex + offset,
+    }));
+    offset += result.items.length;
+    return adjusted;
+  });
+  const canonical = canonicalizeAnalysis(
+    items,
+    results.flatMap((result) => result.issues)
+  );
+  return {
+    items: canonical.items,
+    issues: canonical.issues,
+    usage: results.map((result) => result.usage),
+  } satisfies AnalysisResult;
+}
+
+function normalizeParsedAnalysis(
+  parsed: Record<string, unknown>,
+  usage: unknown
+): AnalysisResult {
+  const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
+  const rawIssues = Array.isArray(parsed.issues) ? parsed.issues : [];
+  const items: ProposedItem[] = rawItems.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const item = raw as Record<string, unknown>;
+    if (!['development', 'offer'].includes(String(item.type))) return [];
+    const action = ['create', 'update', 'deactivate', 'ignore'].includes(
+      String(item.action)
+    )
+      ? (String(item.action) as ProposedItem['action'])
+      : 'create';
+    const fields = Array.isArray(item.fields)
+      ? item.fields.flatMap((rawField) => {
+          if (!rawField || typeof rawField !== 'object') return [];
+          const field = rawField as Record<string, unknown>;
+          if (!String(field.name ?? '').trim()) return [];
+          return [
+            {
+              name: String(field.name),
+              value: field.value ?? null,
+              confidence: clampConfidence(field.confidence),
+              page:
+                Number.isInteger(Number(field.page)) && Number(field.page) > 0
+                  ? Number(field.page)
+                  : null,
+              excerpt:
+                typeof field.excerpt === 'string'
+                  ? field.excerpt.slice(0, 500)
+                  : null,
+            },
+          ];
+        })
+      : [];
+    return [
+      {
+        type: String(item.type) as ProposedItem['type'],
+        action,
+        displayName: String(item.displayName ?? 'Item sem nome').slice(0, 240),
+        normalizedKey:
+          typeof item.normalizedKey === 'string'
+            ? item.normalizedKey.slice(0, 300)
+            : null,
+        confidence: clampConfidence(item.confidence),
+        parentIndex:
+          Number.isInteger(Number(item.parentIndex)) &&
+          Number(item.parentIndex) >= 0
+            ? Number(item.parentIndex)
+            : null,
+        fields,
+      },
+    ];
+  });
+  const issues = rawIssues.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const issue = raw as Record<string, unknown>;
+    const type = String(issue.type);
+    const severity = String(issue.severity);
+    if (
+      ![
+        'conflict',
+        'possible_duplicate',
+        'stale',
+        'missing',
+        'low_confidence',
+      ].includes(type) ||
+      !['info', 'warning', 'blocking'].includes(severity)
+    )
+      return [];
+    return [
+      {
+        type: type as AnalysisResult['issues'][number]['type'],
+        severity: severity as AnalysisResult['issues'][number]['severity'],
+        code: String(issue.code ?? type).slice(0, 100),
+        message: String(issue.message ?? 'Revisão necessária.').slice(0, 500),
+      },
+    ];
+  });
+  const canonical = canonicalizeAnalysis(items, issues);
+  return { items: canonical.items, issues: canonical.issues, usage };
+}
+
+export function splitDocument(text: string, maxChars = 12_000) {
   const normalized = text.trim().slice(0, 240_000);
   if (normalized.length <= maxChars) return [normalized];
   const chunks: string[] = [];

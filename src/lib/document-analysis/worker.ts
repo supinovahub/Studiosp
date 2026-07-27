@@ -1,7 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
 import { loadAiConfig } from '@/lib/ai/config';
-import { analyzeSanitizedDocument } from './analyze';
+import {
+  analyzeSanitizedChunk,
+  consolidateChunkAnalyses,
+  splitDocument,
+  type AnalysisResult,
+} from './analyze';
 import { extractDocument, type ExtractedMedia } from './extract';
 import { downloadGoogleDriveFile } from './google-drive';
 import { sanitizePersonalData } from './privacy';
@@ -68,7 +73,7 @@ export async function processNextDocumentAnalysis(
       .from('document_analysis_sources')
       .select('*')
       .eq('batch_id', batch.id)
-      .in('status', ['awaiting', 'failed'])
+      .in('status', ['awaiting', 'failed', 'analyzing', 'consolidating'])
       .lt('attempts', 3)
       .lte('next_attempt_at', now.toISOString())
       .order('created_at')
@@ -96,6 +101,32 @@ export async function processNextDocumentAnalysis(
       }
       await finalizeBatch(db, batch.id, leaseToken);
       return { processed: 0, batchId: batch.id };
+    }
+
+    if (source.status === 'analyzing') {
+      return processAnalysisChunk(db, batch, source, leaseToken);
+    }
+    if (source.status === 'consolidating') {
+      try {
+        return await consolidateSource(db, batch, source, leaseToken);
+      } catch (error) {
+        const attempts = Number(source.attempts ?? 0) + 1;
+        await db
+          .from('document_analysis_sources')
+          .update({
+            status: 'failed',
+            attempts,
+            error_code:
+              attempts >= 3 ? 'consolidation_failed' : 'retry_scheduled',
+            error_message: cleanError(error),
+            next_attempt_at: new Date(
+              Date.now() + [30_000, 120_000, 300_000][Math.min(attempts - 1, 2)]
+            ).toISOString(),
+          })
+          .eq('id', source.id);
+        await releaseBatchLease(db, batch.id, leaseToken, 'awaiting');
+        return { processed: 1, batchId: batch.id, sourceId: source.id };
+      }
     }
 
     try {
@@ -217,23 +248,52 @@ export async function processNextDocumentAnalysis(
         await completeSource(db, batch, source, leaseToken, false);
         return { processed: 1, batchId: batch.id, sourceId: source.id };
       }
-      const analysis = await analyzeSanitizedDocument({
-        config,
-        filename: source.original_filename,
-        text: privacy.analysisText,
-      });
-      const mediaCandidates = await prepareMediaCandidates(
+      const chunks = splitDocument(privacy.analysisText);
+      const { error: chunkError } = await db
+        .from('document_analysis_chunks')
+        .upsert(
+          chunks.map((content, chunkIndex) => ({
+            account_id: batch.account_id,
+            batch_id: batch.id,
+            source_id: source.id,
+            chunk_index: chunkIndex,
+            chunk_count: chunks.length,
+            sanitized_content: content,
+            status: 'awaiting',
+          })),
+          { onConflict: 'source_id,chunk_index', ignoreDuplicates: true }
+        );
+      if (chunkError) throw chunkError;
+      await db
+        .from('document_analysis_sources')
+        .update({
+          status: 'analyzing',
+          checkpoint: {
+            chunk_count: chunks.length,
+            completed_chunks: 0,
+          },
+        })
+        .eq('id', source.id);
+      await db
+        .from('document_analysis_batches')
+        .update({
+          status: 'analyzing',
+          lease_token: null,
+          lease_expires_at: null,
+        })
+        .eq('id', batch.id)
+        .eq('lease_token', leaseToken);
+      await event(
         db,
+        batch,
         source,
-        extracted.media,
-        privacy.sanitizedText,
-        analysis.items
+        'chunks_created',
+        'privacy_check',
+        'analyzing',
+        {
+          chunk_count: chunks.length,
+        }
       );
-      attachMediaCandidates(analysis.items, mediaCandidates);
-
-      await setStep(db, batch, source, leaseToken, 'consolidating');
-      await persistAnalysis(db, batch, source, analysis);
-      await completeSource(db, batch, source, leaseToken, false);
       return { processed: 1, batchId: batch.id, sourceId: source.id };
     } catch (error) {
       const attempts = Number(source.attempts ?? 0) + 1;
@@ -285,6 +345,200 @@ export async function processNextDocumentAnalysis(
   return { processed: 0 };
 }
 
+async function processAnalysisChunk(
+  db: SupabaseClient,
+  batch: Row,
+  source: Row,
+  leaseToken: string
+) {
+  const now = new Date().toISOString();
+  const { data: chunks } = await db
+    .from('document_analysis_chunks')
+    .select('*')
+    .eq('source_id', source.id)
+    .in('status', ['awaiting', 'failed'])
+    .lt('attempts', 3)
+    .lte('next_attempt_at', now)
+    .order('chunk_index')
+    .limit(2);
+
+  if (!chunks?.length) {
+    const { count: remaining } = await db
+      .from('document_analysis_chunks')
+      .select('id', { count: 'exact', head: true })
+      .eq('source_id', source.id)
+      .neq('status', 'ready')
+      .lt('attempts', 3);
+    await db
+      .from('document_analysis_sources')
+      .update({
+        status: remaining ? 'analyzing' : 'consolidating',
+      })
+      .eq('id', source.id);
+    await releaseBatchLease(
+      db,
+      batch.id,
+      leaseToken,
+      remaining ? 'analyzing' : 'consolidating'
+    );
+    return { processed: 0, batchId: batch.id, sourceId: source.id };
+  }
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      await db
+        .from('document_analysis_chunks')
+        .update({
+          status: 'analyzing',
+          started_at: chunk.started_at ?? now,
+          error_code: null,
+          error_message: null,
+        })
+        .eq('id', chunk.id);
+      try {
+        const config = await loadAiConfig(db, batch.account_id, {
+          requireActive: false,
+        });
+        if (!config) throw new Error('Configure uma credencial de IA válida.');
+        const analysis = await analyzeSanitizedChunk({
+          config,
+          filename: source.original_filename,
+          content: chunk.sanitized_content,
+          chunkIndex: chunk.chunk_index,
+          chunkCount: chunk.chunk_count,
+        });
+        await db
+          .from('document_analysis_chunks')
+          .update({
+            status: 'ready',
+            result: analysis,
+            usage: analysis.usage ?? null,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', chunk.id);
+      } catch (error) {
+        const attempts = Number(chunk.attempts ?? 0) + 1;
+        await db
+          .from('document_analysis_chunks')
+          .update({
+            status: 'failed',
+            attempts,
+            next_attempt_at: new Date(
+              Date.now() +
+                [30_000, 120_000, 300_000][Math.min(attempts - 1, 2)]
+            ).toISOString(),
+            error_code:
+              attempts >= 3 ? 'chunk_failed' : 'chunk_retry_scheduled',
+            error_message: cleanError(error),
+          })
+          .eq('id', chunk.id);
+      }
+    })
+  );
+
+  const [{ count: completed }, { count: total }, { count: terminalFailures }] =
+    await Promise.all([
+      db
+        .from('document_analysis_chunks')
+        .select('id', { count: 'exact', head: true })
+        .eq('source_id', source.id)
+        .eq('status', 'ready'),
+      db
+        .from('document_analysis_chunks')
+        .select('id', { count: 'exact', head: true })
+        .eq('source_id', source.id),
+      db
+        .from('document_analysis_chunks')
+        .select('id', { count: 'exact', head: true })
+        .eq('source_id', source.id)
+        .eq('status', 'failed')
+        .gte('attempts', 3),
+    ]);
+  const finished = Number(completed ?? 0) + Number(terminalFailures ?? 0);
+  await db
+    .from('document_analysis_sources')
+    .update({
+      status: finished >= Number(total ?? 0) ? 'consolidating' : 'analyzing',
+      checkpoint: {
+        chunk_count: total ?? 0,
+        completed_chunks: completed ?? 0,
+        failed_chunks: terminalFailures ?? 0,
+      },
+    })
+    .eq('id', source.id);
+  await releaseBatchLease(
+    db,
+    batch.id,
+    leaseToken,
+    finished >= Number(total ?? 0) ? 'consolidating' : 'analyzing'
+  );
+  return {
+    processed: chunks.length,
+    batchId: batch.id,
+    sourceId: source.id,
+  };
+}
+
+async function consolidateSource(
+  db: SupabaseClient,
+  batch: Row,
+  source: Row,
+  leaseToken: string
+) {
+  const { data: chunks, error } = await db
+    .from('document_analysis_chunks')
+    .select('result, status, attempts')
+    .eq('source_id', source.id)
+    .order('chunk_index');
+  if (error) throw error;
+  const terminal = (chunks ?? []).filter(
+    (chunk) => chunk.status === 'failed' && Number(chunk.attempts) >= 3
+  );
+  if (terminal.length) {
+    throw new Error(
+      `${terminal.length} parte(s) do documento falharam após três tentativas.`
+    );
+  }
+  const results = (chunks ?? [])
+    .filter((chunk) => chunk.status === 'ready' && chunk.result)
+    .map((chunk) => chunk.result as AnalysisResult);
+  const analysis = consolidateChunkAnalyses(results);
+
+  const downloaded = await db.storage
+    .from('document-analysis-quarantine')
+    .download(source.object_path);
+  if (downloaded.error || !downloaded.data)
+    throw new Error('Fonte indisponível para consolidar mídias.');
+  const extracted = await extractDocument(
+    new Uint8Array(await downloaded.data.arrayBuffer()),
+    source.mime_type
+  );
+  const mediaCandidates = await prepareMediaCandidates(
+    db,
+    source,
+    extracted.media,
+    source.sanitized_text ?? '',
+    analysis.items
+  );
+  attachMediaCandidates(analysis.items, mediaCandidates);
+  await persistAnalysis(db, batch, source, analysis);
+  await completeSource(db, batch, source, leaseToken, false);
+  return { processed: 1, batchId: batch.id, sourceId: source.id };
+}
+
+async function releaseBatchLease(
+  db: SupabaseClient,
+  batchId: string,
+  leaseToken: string,
+  status: string
+) {
+  await db
+    .from('document_analysis_batches')
+    .update({ status, lease_token: null, lease_expires_at: null })
+    .eq('id', batchId)
+    .eq('lease_token', leaseToken);
+}
+
 type MediaCandidate = {
   object_path: string;
   source_id: string;
@@ -306,7 +560,7 @@ async function prepareMediaCandidates(
   source: Row,
   media: ExtractedMedia[],
   sanitizedText: string,
-  items: Awaited<ReturnType<typeof analyzeSanitizedDocument>>['items']
+  items: AnalysisResult['items']
 ) {
   const developments = items
     .map((item, index) => ({ item, index }))
@@ -373,7 +627,7 @@ async function prepareMediaCandidates(
 }
 
 function attachMediaCandidates(
-  items: Awaited<ReturnType<typeof analyzeSanitizedDocument>>['items'],
+  items: AnalysisResult['items'],
   candidates: Map<number, MediaCandidate[]>
 ) {
   for (const [itemIndex, media] of candidates) {
@@ -391,7 +645,7 @@ function attachMediaCandidates(
 
 function nearestDevelopment(
   developments: Array<{
-    item: Awaited<ReturnType<typeof analyzeSanitizedDocument>>['items'][number];
+    item: AnalysisResult['items'][number];
     index: number;
   }>,
   page: number
@@ -473,7 +727,7 @@ async function persistAnalysis(
   db: SupabaseClient,
   batch: Row,
   source: Row,
-  analysis: Awaited<ReturnType<typeof analyzeSanitizedDocument>>
+  analysis: AnalysisResult
 ) {
   const insertedItems: Row[] = [];
   const { data: existingItems, error: existingItemsError } = await db
