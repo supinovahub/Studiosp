@@ -201,3 +201,20 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
   aprovados; build Next.js aprovado.
 - Nenhuma campanha de reativação foi ativada e nenhuma mensagem de WhatsApp foi
   enviada nesta rodada.
+
+### Correção do ingresso de um segundo corretor
+
+- O cadastro direto do segundo usuário criou corretamente uma conta pessoal
+  vazia e um `broker_profile` inicial.
+- O primeiro resgate do convite falhou porque a chave estrangeira composta do
+  perfil operacional ainda apontava para a conta pessoal durante a mudança do
+  perfil.
+- A função `redeem_invitation` passou a tratar esse perfil dentro da mesma
+  transação: preserva a configuração básica, confirma que não existem dados
+  operacionais, remove o vínculo temporário, move o usuário e recria o corretor
+  na conta convidante.
+- A proteção contra abandono de contas com dados ou equipes foi mantida.
+- Migration aplicada somente no Supabase staging:
+  `20260727141041_fix_broker_invitation_redeem.sql`.
+- A função continua restrita a usuários autenticados, valida `auth.uid()`, usa
+  `search_path` fixo e não concede execução ao papel `anon`.
