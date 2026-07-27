@@ -1,6 +1,7 @@
 const DEFAULT_DELAY_MS = 650
 const MAX_DELAY_MS = 2_000
 const MAX_MESSAGE_PARTS = 8
+const TARGET_PART_LENGTH = 180
 
 const NON_TERMINAL_ABBREVIATIONS = new Set([
   'sr.',
@@ -46,6 +47,40 @@ function splitParagraph(paragraph: string): string[] {
   )
 }
 
+function splitLongPart(value: string): string[] {
+  if (value.length <= TARGET_PART_LENGTH) return [value]
+  const words = value.split(/\s+/)
+  const chunks: string[] = []
+  let current = ''
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (current && candidate.length > TARGET_PART_LENGTH) {
+      chunks.push(current)
+      current = word
+    } else {
+      current = candidate
+    }
+  }
+  if (current) chunks.push(current)
+  return chunks
+}
+
+function groupShortParts(parts: string[]): string[] {
+  const grouped: string[] = []
+  for (const part of parts.flatMap(splitLongPart)) {
+    const previous = grouped.at(-1)
+    if (
+      previous &&
+      `${previous} ${part}`.length <= TARGET_PART_LENGTH
+    ) {
+      grouped[grouped.length - 1] = `${previous} ${part}`
+    } else {
+      grouped.push(part)
+    }
+  }
+  return grouped
+}
+
 /**
  * Turns an AI answer into short WhatsApp-sized bubbles. Sentence boundaries,
  * paragraph breaks and semicolons become separate messages. Intl.Segmenter
@@ -55,10 +90,12 @@ export function splitAiMessage(text: string): string[] {
   const normalized = text.replace(/\r\n?/g, '\n').trim()
   if (!normalized) return []
 
-  const parts = normalized
-    .split(/\n+/)
-    .flatMap((paragraph) => splitParagraph(paragraph.trim()))
-    .filter(Boolean)
+  const parts = groupShortParts(
+    normalized
+      .split(/\n+/)
+      .flatMap((paragraph) => splitParagraph(paragraph.trim()))
+      .filter(Boolean),
+  )
 
   if (parts.length <= MAX_MESSAGE_PARTS) return parts
 

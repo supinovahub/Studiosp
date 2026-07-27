@@ -202,7 +202,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     );
   });
 
-  it('sends one consolidated WhatsApp message per conversational turn', async () => {
+  it('sends a long answer in short humanized WhatsApp blocks', async () => {
     h.generateReply.mockResolvedValue({
       text: 'Olá! Encontrei uma opção. Qual bairro você prefere?',
       handoff: false,
@@ -214,6 +214,24 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.engineSendText.mock.calls[0][0].text).toBe(
       'Olá! Encontrei uma opção. Qual bairro você prefere?'
     );
+  });
+
+  it('splits content that exceeds a natural WhatsApp block', async () => {
+    h.generateReply.mockResolvedValue({
+      text: `${'Encontrei oportunidades compatíveis para o seu perfil. '.repeat(
+        4
+      )}Qual período funciona melhor para você?`,
+      handoff: false,
+    });
+
+    await dispatchInboundToAiReply(ARGS);
+
+    expect(h.engineSendText.mock.calls.length).toBeGreaterThan(1);
+    expect(
+      h.engineSendText.mock.calls.every(
+        ([call]) => String(call.text).length <= 180
+      )
+    ).toBe(true);
   });
 
   it('uses the database-backed appointment confirmation instead of model copy', async () => {

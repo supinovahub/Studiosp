@@ -3,16 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { aiMessageDelayMs, splitAiMessage } from './message-parser'
 
 describe('splitAiMessage', () => {
-  it('splits sentences, questions and paragraphs into separate bubbles', () => {
+  it('keeps a naturally short answer in one bubble', () => {
     expect(
       splitAiMessage(
         'Olá! Encontrei duas opções.\nQual bairro você prefere? Posso ajudar.',
       ),
     ).toEqual([
-      'Olá!',
-      'Encontrei duas opções.',
-      'Qual bairro você prefere?',
-      'Posso ajudar.',
+      'Olá! Encontrei duas opções. Qual bairro você prefere? Posso ajudar.',
     ])
   })
 
@@ -22,18 +19,20 @@ describe('splitAiMessage', () => {
         'O studio custa R$ 450.000,00 e tem 32,5 m². Fica na Av. Paulista. Veja https://studiosp.vercel.app/imovel/1.',
       ),
     ).toEqual([
-      'O studio custa R$ 450.000,00 e tem 32,5 m².',
-      'Fica na Av. Paulista.',
-      'Veja https://studiosp.vercel.app/imovel/1.',
+      'O studio custa R$ 450.000,00 e tem 32,5 m². Fica na Av. Paulista. Veja https://studiosp.vercel.app/imovel/1.',
     ])
   })
 
   it('limits excessive fragmentation', () => {
     const parts = splitAiMessage(
-      Array.from({ length: 12 }, (_, index) => `Frase ${index + 1}.`).join(' '),
+      Array.from(
+        { length: 30 },
+        (_, index) => `Esta é a frase detalhada número ${index + 1}.`,
+      ).join(' '),
     )
-    expect(parts).toHaveLength(8)
-    expect(parts.at(-1)).toContain('Frase 12.')
+    expect(parts.length).toBeLessThanOrEqual(8)
+    expect(parts.every((part) => part.length <= 180)).toBe(true)
+    expect(parts.at(-1)).toContain('número 30.')
   })
 })
 

@@ -401,6 +401,12 @@ Políticas comerciais e operacionais serão configuráveis pelo dono. Regras de 
   fluxo operacional do corretor só pode consumir a mensagem se existir uma
   oferta de reunião pendente e válida; sem oferta, a mensagem segue para o
   Inbox e para a IA como interação do lead.
+- respostas da IA no WhatsApp podem ser divididas em blocos curtos, preservando
+  uma única execução idempotente por turno; falha depois de um bloco enviado
+  interrompe novas tentativas e exige revisão humana para evitar duplicidade;
+- na reativação, uma confirmação simples do cenário conhecido confirma também
+  o objetivo e a entrada importados, salvo quando o lead indicar alteração;
+  isso permite concluir a qualificação por fatos antes do agendamento.
 
 ## 6. Distribuição para corretores
 

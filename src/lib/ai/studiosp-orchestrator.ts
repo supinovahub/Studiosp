@@ -371,9 +371,20 @@ export async function prepareStudiospTurn(args: {
       messages: args.messages,
     });
     extraction = parseObject(generated.text);
-    const answerRows = Array.isArray(extraction.answers)
+    const extractedAnswerRows = Array.isArray(extraction.answers)
       ? extraction.answers
       : [];
+    const answerRows = [
+      ...extractedAnswerRows,
+      ...knownReactivationConfirmationCandidates({
+        questions: questions as Row[],
+        knownContext: (reactivationSession?.known_context ?? {}) as Row,
+        latestUserMessage:
+          args.messages.filter((message) => message.role === 'user').at(-1)
+            ?.content ?? '',
+        existingCandidates: extractedAnswerRows as Row[],
+      }),
+    ];
     const questionMap = new Map(
       (questions as Row[]).map((question) => [question.id, question])
     );
@@ -912,6 +923,69 @@ function normalize(value: unknown) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('pt-BR');
+}
+
+export function knownReactivationConfirmationCandidates(args: {
+  questions: Row[];
+  knownContext: Row;
+  latestUserMessage: string;
+  existingCandidates?: Row[];
+}): Row[] {
+  const message = normalize(args.latestUserMessage);
+  const isSimpleConfirmation =
+    /^(sim|s|isso|correto|confirmo|continua|ainda|perfeito|esta certo|ta certo)\b/.test(
+      message
+    ) &&
+    !/\b(nao|mudou|mudar|alterou|alterar|mas|porem)\b/.test(message) &&
+    !/(r\\$|\d)/.test(message);
+  if (!isSimpleConfirmation) return [];
+
+  const existingQuestionIds = new Set(
+    (args.existingCandidates ?? []).map((candidate) =>
+      String(candidate.question_id)
+    )
+  );
+  const candidates: Row[] = [];
+  const objectiveQuestion = args.questions.find(
+    (question) => question.key === 'purchase_objective'
+  );
+  const objective = args.knownContext.known_objective;
+  if (
+    objectiveQuestion?.id &&
+    typeof objective === 'string' &&
+    objective &&
+    !existingQuestionIds.has(String(objectiveQuestion.id))
+  ) {
+    candidates.push({
+      question_id: objectiveQuestion.id,
+      raw_text: args.latestUserMessage,
+      normalized_value: { value: objective },
+      confidence: 0.95,
+    });
+  }
+
+  const entryQuestion = args.questions.find(
+    (question) => question.key === 'entry_budget'
+  );
+  const entryValue = Number(args.knownContext.known_entry_value);
+  if (
+    entryQuestion?.id &&
+    Number.isFinite(entryValue) &&
+    entryValue > 0 &&
+    !existingQuestionIds.has(String(entryQuestion.id))
+  ) {
+    candidates.push({
+      question_id: entryQuestion.id,
+      raw_text: args.latestUserMessage,
+      normalized_value: {
+        min: entryValue,
+        max: entryValue,
+        currency: 'BRL',
+      },
+      confidence: 0.95,
+    });
+  }
+  return candidates;
 }
 
 function valueStrings(value: unknown): string[] {

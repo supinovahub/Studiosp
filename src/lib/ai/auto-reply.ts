@@ -17,6 +17,7 @@ import {
   scheduleStudiospFollowups,
 } from './studiosp-orchestrator';
 import { isInboundAiReplyAllowed } from './inbound-allowlist';
+import { splitAiMessage, waitBetweenAiMessages } from './message-parser';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -451,14 +452,62 @@ export async function dispatchInboundToAiReply(
     if (fingerprintClaimed !== true) {
       return { outcome: 'skipped', reason: 'duplicate_response_blocked' };
     }
-    await engineSendText({
-      accountId,
-      userId: configOwnerUserId,
-      conversationId,
-      contactId,
-      text: outboundText,
-      aiGenerated: true,
-    });
+    const outboundParts = splitAiMessage(outboundText);
+    for (const [index, part] of outboundParts.entries()) {
+      try {
+        await engineSendText({
+          accountId,
+          userId: configOwnerUserId,
+          conversationId,
+          contactId,
+          text: part,
+          aiGenerated: true,
+        });
+      } catch (error) {
+        if (index === 0) throw error;
+        const summary =
+          'Uma resposta da IA foi enviada parcialmente. Revise a conversa antes de continuar para evitar conteúdo duplicado.';
+        await db
+          .from('conversations')
+          .update({
+            ai_autoreply_disabled: true,
+            ai_handoff_summary: summary,
+            ai_processing_status: 'handoff',
+            ai_processing_reason: 'partial_reply_send_failed',
+          })
+          .eq('id', conversationId)
+          .eq('account_id', accountId);
+        await db.from('attention_items').upsert(
+          {
+            account_id: accountId,
+            opportunity_id: studiosp.opportunityId,
+            assigned_role: 'owner',
+            kind: 'ai_partial_reply',
+            severity: 'critical',
+            title: 'Resposta da IA enviada parcialmente',
+            context: {
+              conversation_id: conversationId,
+              sent_parts: index,
+              total_parts: outboundParts.length,
+            },
+            due_at: new Date().toISOString(),
+            deduplication_key: `ai-partial-reply:${conversationId}`,
+          },
+          {
+            onConflict: 'account_id,deduplication_key',
+            ignoreDuplicates: true,
+          }
+        );
+        return {
+          outcome: 'failed',
+          reason: 'partial_reply_send_failed',
+          retryable: false,
+        };
+      }
+      if (index < outboundParts.length - 1) {
+        await waitBetweenAiMessages();
+      }
+    }
 
     await persistSdrClassification({
       db,
