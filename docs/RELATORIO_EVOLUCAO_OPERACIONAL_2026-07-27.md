@@ -105,3 +105,10 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
   EnvelopePDF, Revista ONE Parcerias (aproximadamente 14 MB) e Tabelão Matriz
   Junho. Os três concluíram texto, quantidade de páginas e layout sem erro de
   buffer; nenhuma aprovação ou escrita no catálogo foi realizada.
+- Após o deploy `f719abf`, o lote que falhava no staging foi retomado. Tabelão
+  Matriz Junho e EnvelopePDF chegaram a `Preview pronto`; Revista ONE avançou
+  da extração para a análise pelo provedor. Isso comprovou no runtime da Vercel
+  que o erro de `detached ArrayBuffer` foi removido nos três arquivos.
+- A Revista ONE encontrou depois um timeout transitório do provedor de IA,
+  posterior e independente da extração de PDF. O lote permaneceu sem aprovação
+  e nenhuma escrita foi feita no catálogo.
