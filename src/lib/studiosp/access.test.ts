@@ -3,7 +3,6 @@ import { canAccessStudiospView } from './access';
 
 const ADMIN_VIEWS = [
   'overview',
-  'attention',
   'pipeline',
   'followups',
   'intelligence',
@@ -21,10 +20,17 @@ describe('StudioSP view authorization', () => {
     expect(canAccessStudiospView('agent', view)).toBe(false);
   });
 
-  it.each(['my-day', 'leads', 'lead', 'agenda', 'team', 'developments'])(
-    'allows a broker to access %s',
-    (view) => expect(canAccessStudiospView('agent', view)).toBe(true)
-  );
+  it.each([
+    'my-day',
+    'attention',
+    'leads',
+    'lead',
+    'agenda',
+    'team',
+    'developments',
+  ])('allows a broker to access %s', (view) => {
+    expect(canAccessStudiospView('agent', view)).toBe(true);
+  });
 
   it('rejects viewers and unknown views', () => {
     expect(canAccessStudiospView('viewer', 'leads')).toBe(false);

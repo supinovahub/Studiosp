@@ -85,6 +85,7 @@ const brokerSections: typeof ownerSections = [
       { href: '/agenda', label: 'Agenda', icon: CalendarDays },
       { href: '/imoveis', label: 'Empreendimentos', icon: Building2 },
       { href: '/equipe', label: 'Disponibilidade', icon: UserRoundCheck },
+      { href: '/configuracoes', label: 'Configurações', icon: Settings },
     ],
   },
 ];

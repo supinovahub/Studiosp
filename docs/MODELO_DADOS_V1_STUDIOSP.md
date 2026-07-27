@@ -104,6 +104,7 @@ Especializa um perfil como corretor operacional.
 | `display_name`              | text, obrigatório                                           |
 | `whatsapp_e164`             | text E.164, único por conta; obrigatório antes do dashboard |
 | `whatsapp_verified_at`      | confirmação autenticada obrigatória para disponibilidade    |
+| `preferred_call_duration_minutes` | integer em 10, 15, 20, 30 ou 45; padrão 10           |
 | `max_parallel_assignments`  | integer positivo, padrão 1                                  |
 | `is_available`, `is_active` | boolean, padrão true                                        |
 | `last_assignment_at`        | timestamptz, opcional                                       |
@@ -490,8 +491,7 @@ O lead recebe apenas a contagem de oportunidades compatíveis. O corretor atribu
 
 Versões publicáveis com:
 
-- duração padrão de 10 minutos;
-- intervalo de 5 minutos;
+- intervalo global mínimo de 15 minutos;
 - antecedência mínima de 120 minutos;
 - horizonte de 7 dias;
 - SLA inicial do corretor de 15 minutos;
@@ -499,17 +499,40 @@ Versões publicáveis com:
 - antecedência de cancelamento ao lead de 180 minutos;
 - fuso e round-robin.
 
-Todos são configuráveis pelo dono, com limites seguros.
+Todos são configuráveis pelo dono, com limites seguros. A duração da call é
+uma preferência do corretor; o intervalo é uma regra global da operação e não
+pode ser reduzido abaixo de 15 minutos.
 
 ### 12.2 `guaranteed_windows`
 
-Guarda corretor, dia da semana, início, fim, intervalo de slots, capacidade, vigência e status. Janelas ativas do mesmo corretor não se sobrepõem.
+Guarda os períodos em que a empresa garante capacidade de atendimento. Essas
+janelas limitam os horários publicáveis, mas não substituem a agenda pessoal do
+corretor.
 
-### 12.3 `availability_exceptions`
+### 12.3 `broker_availability_rules`
 
-Bloqueios ou capacidade extra por corretor, com início, fim, motivo, autor e timestamps.
+Guarda a disponibilidade semanal recorrente do corretor:
 
-### 12.4 `appointments`
+| Campo | Tipo e regra |
+| ----- | ------------- |
+| `account_id`, `broker_profile_id` | uuid, obrigatórios |
+| `day_of_week` | integer de 0 a 6 |
+| `starts_at`, `ends_at` | time, com início anterior ao fim |
+| `timezone` | text, padrão da conta |
+| `is_active` | boolean |
+| timestamps | criação e atualização |
+
+O banco impede intervalos sobrepostos do mesmo corretor no mesmo dia. O
+corretor administra apenas a própria grade; Dono/Gestor administra toda a
+conta.
+
+### 12.4 `availability_exceptions`
+
+Bloqueios pontuais por corretor, com início, fim, motivo, autor e timestamps.
+Na área pessoal da V1, o corretor cria e remove apenas exceções próprias do tipo
+`blocked`.
+
+### 12.5 `appointments`
 
 | Campo                                           | Tipo e regra                  |
 | ----------------------------------------------- | ----------------------------- |
@@ -532,17 +555,17 @@ reschedule_requested, rescheduled
 
 A V1 considera uma reunião principal ativa por oportunidade. Reagendamento preserva registros anteriores.
 
-### 12.5 `appointment_events`
+### 12.6 `appointment_events`
 
 Histórico append-only com ator, origem, chave idempotente, payload, correlação e horários.
 
-### 12.6 `assignment_offers`
+### 12.7 `assignment_offers`
 
 Registra reunião, corretor, ordem da tentativa, canal (`dashboard`, `whatsapp`, `both`), status, oferta, expiração, resposta, motivo e mensagem relacionada. Rejeição ou transferência exige motivo.
 
 Somente uma oferta pendente por reunião/corretor. Aceite encerra ofertas concorrentes.
 
-### 12.7 `broker_operational_conversations`
+### 12.8 `broker_operational_conversations`
 
 Liga o WhatsApp cadastrado do corretor à conexão da empresa e ao chat remoto. Mensagens naturais são convertidas em ações estruturadas e validadas contra ofertas pendentes; texto livre nunca altera diretamente o banco.
 
@@ -642,6 +665,7 @@ Regras:
 | Agente documental     | administra     | sem acesso             | processamento controlado |
 | Matching              | administra     | atribuídos             | controlado               |
 | Agenda/ofertas        | administra     | próprias               | por função               |
+| Disponibilidade       | administra     | própria                 | por função               |
 | Custos e logs de IA   | administra     | sem acesso             | controlado               |
 | Auditoria             | lê             | sem acesso             | append-only              |
 
@@ -730,6 +754,10 @@ O modelo só está pronto quando:
 19. oferta pendente não libera contato, conversa nem mensagens ao corretor;
 20. aceite atribui o lead e libera somente seu inbox ao corretor responsável;
 21. corretor sem WhatsApp confirmado não fica disponível nem acessa o painel.
+22. disponibilidade semanal do mesmo corretor não possui intervalos sobrepostos;
+23. slot exige cobertura da empresa e da agenda pessoal do corretor;
+24. duração individual e intervalo global mínimo de 15 minutos são respeitados;
+25. alteração conflitante não cancela reunião confirmada e cria atenção atribuída.
 
 ## 22. Ordem das migrations
 

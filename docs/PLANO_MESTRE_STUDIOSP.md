@@ -163,7 +163,10 @@ Perfil opcional para delegação futura. Não precisa existir como usuário no l
 
 - leads atribuídos a ele;
 - resumo do lead e oportunidades compatíveis;
-- própria agenda e disponibilidade;
+- própria agenda, disponibilidade semanal e exceções pontuais;
+- duração preferida das próprias calls, dentro das opções seguras da operação;
+- pendências pessoais: ofertas, reuniões, resultados e atenções atribuídas;
+- configurações pessoais e notificações, sem acesso às configurações de gestão;
 - registro de reunião realizada, proposta enviada, negociação, contrato, venda e perda;
 - rejeição ou transferência com motivo obrigatório;
 - histórico dos próprios atendimentos;
@@ -336,7 +339,7 @@ O painel do dono deverá permitir configurar:
 - dias e horários de atendimento;
 - períodos garantidos;
 - capacidade de reuniões por intervalo;
-- duração da call e intervalo de segurança entre reuniões;
+- intervalo de segurança entre reuniões, nunca inferior a 15 minutos;
 - antecedência mínima e horizonte máximo para agendamento;
 - corretores elegíveis e responsáveis por cada período;
 - corretores de contingência;
@@ -348,6 +351,23 @@ O painel do dono deverá permitir configurar:
 O sistema não deve publicar como garantido um período sem cobertura ou capacidade válida. Reservas precisam consumir capacidade de forma atômica no banco para impedir que dois leads ocupem a mesma vaga.
 
 Políticas comerciais e operacionais serão configuráveis pelo dono. Regras de integridade, segurança, auditoria e prevenção de conflito permanecerão invariáveis.
+
+Cada corretor define sua própria disponibilidade recorrente, com múltiplos
+intervalos por dia, e pode registrar bloqueios pontuais para compromissos,
+férias ou imprevistos. O sistema só considera um corretor elegível na
+interseção entre:
+
+- período garantido pela empresa;
+- disponibilidade semanal do corretor;
+- ausência de bloqueio ou pausa temporária;
+- duração escolhida pelo corretor;
+- intervalo global de segurança de pelo menos 15 minutos;
+- ausência de conflito com reuniões já confirmadas.
+
+A duração individual pode ser de 10, 15, 20, 30 ou 45 minutos. Alterações de
+agenda não cancelam silenciosamente compromissos já confirmados: qualquer
+conflito posterior gera uma pendência atribuída ao corretor e visível para a
+gestão.
 
 ## 6. Distribuição para corretores
 
@@ -1657,3 +1677,27 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   **Inteligência**, mantendo `/agents` apenas como compatibilidade temporária;
 - a nova extração e a unificação de IA estão implementadas localmente e ainda
   aguardam homologação no Preview/Staging.
+
+## 23. Área pessoal e disponibilidade do corretor
+
+### Implementado em staging em 27/07/2026
+
+- o corretor configura uma agenda semanal recorrente com múltiplos intervalos
+  por dia e pode copiar a segunda-feira para os demais dias úteis;
+- o corretor escolhe a duração ideal da call entre 10, 15, 20, 30 e 45 minutos;
+- o intervalo entre calls é uma política global da operação e permanece em no
+  mínimo 15 minutos;
+- pausas temporárias podem valer por hoje, amanhã ou por tempo indeterminado;
+- exceções futuras bloqueiam períodos específicos sem alterar a grade semanal;
+- a materialização, reserva, aceite e redistribuição de slots revalidam a
+  interseção entre cobertura da empresa, agenda pessoal, exceções, pausa,
+  WhatsApp verificado, duração e conflitos;
+- mudanças que conflitem com reunião confirmada geram atenção humana, sem
+  cancelar o compromisso;
+- **Minhas pendências** apresenta apenas ofertas, reuniões e itens de atenção do
+  próprio corretor;
+- a área **Configurações** do corretor contém somente WhatsApp operacional,
+  disponibilidade, notificações, perfil, segurança e aparência;
+- configurações de gestão continuam exclusivas de Dono/Gestor;
+- as migrations desta evolução foram aplicadas somente ao Supabase Staging
+  `vgmmfzdifjhpqaopxfbj`.

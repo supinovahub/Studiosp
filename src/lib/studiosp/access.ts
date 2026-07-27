@@ -2,6 +2,7 @@ import type { AccountRole } from '@/lib/auth/roles';
 
 const BROKER_VIEWS = new Set([
   'my-day',
+  'attention',
   'leads',
   'lead',
   'agenda',
@@ -14,4 +15,3 @@ export function canAccessStudiospView(role: AccountRole, view: string) {
   if (role === 'agent') return BROKER_VIEWS.has(view);
   return false;
 }
-

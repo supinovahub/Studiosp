@@ -38,7 +38,9 @@ export function IntelligencePage() {
     text: string;
   } | null>(null);
   useEffect(() => {
-    if (window.location.hash === '#credenciais') setTab('credentials');
+    if (window.location.hash !== '#credenciais') return;
+    const timer = window.setTimeout(() => setTab('credentials'), 0);
+    return () => window.clearTimeout(timer);
   }, []);
   if (loading)
     return <LoadingState label="Carregando inteligência da operação..." />;
@@ -595,18 +597,11 @@ function ScheduleForm({ policy, saving, disabled, onSave }: ConfigFormProps) {
       </div>
       <div className="grid gap-4 p-4 md:grid-cols-3">
         <NumberField
-          label="Duração da call (min)"
-          name="meetingDuration"
-          value={policy.meeting_duration_minutes ?? 10}
-          disabled={disabled}
-          min={5}
-        />
-        <NumberField
-          label="Intervalo entre calls (min)"
+          label="Intervalo mínimo entre calls (min)"
           name="bufferMinutes"
-          value={policy.buffer_minutes ?? 5}
+          value={policy.buffer_minutes ?? 15}
           disabled={disabled}
-          min={0}
+          min={15}
         />
         <NumberField
           label="Antecedência mínima (min)"

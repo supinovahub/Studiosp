@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
       }));
     }
 
-    if (['overview', 'my-day', 'agenda', 'lead'].includes(view)) {
+    if (['overview', 'my-day', 'agenda', 'lead', 'attention'].includes(view)) {
       let appointmentsQuery = supabase
         .from('appointments')
         .select('*')
@@ -173,10 +173,40 @@ export async function GET(request: NextRequest) {
           brokerProfileId
         );
       }
-      const appointments = assertQuery<Row[]>(
-        await appointmentsQuery,
-        'agenda'
-      );
+      let appointments = assertQuery<Row[]>(await appointmentsQuery, 'agenda');
+      if (view === 'attention' && role === 'agent' && brokerProfileId) {
+        const pendingOffers = assertQuery<Row[]>(
+          await supabase
+            .from('assignment_offers')
+            .select('*')
+            .eq('account_id', accountId)
+            .eq('broker_profile_id', brokerProfileId)
+            .eq('status', 'pending')
+            .order('expires_at'),
+          'convites pendentes'
+        );
+        const offeredAppointmentIds = pendingOffers
+          .map((offer) => offer.appointment_id)
+          .filter(Boolean);
+        const offeredAppointments = offeredAppointmentIds.length
+          ? assertQuery<Row[]>(
+              await supabase
+                .from('appointments')
+                .select('*')
+                .eq('account_id', accountId)
+                .in('id', offeredAppointmentIds),
+              'reuniões oferecidas'
+            )
+          : [];
+        const appointmentMap = new Map(
+          [...appointments, ...offeredAppointments].map((appointment) => [
+            appointment.id,
+            appointment,
+          ])
+        );
+        appointments = [...appointmentMap.values()];
+        response.assignmentOffers = pendingOffers;
+      }
       const leadMap = new Map(leads.map((lead) => [lead.id, lead]));
       const brokerMap = new Map(brokers.map((broker) => [broker.id, broker]));
       response.appointments = appointments.map((appointment) => ({
@@ -418,6 +448,20 @@ export async function GET(request: NextRequest) {
         .eq('account_id', accountId)
         .eq('is_active', true)
         .order('weekday');
+      let personalAvailabilityQuery = supabase
+        .from('broker_availability_rules')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('is_active', true)
+        .order('weekday')
+        .order('start_time');
+      let availabilityExceptionsQuery = supabase
+        .from('availability_exceptions')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('exception_type', 'blocked')
+        .gte('ends_at', new Date().toISOString())
+        .order('starts_at');
       let offersQuery = supabase
         .from('assignment_offers')
         .select('*')
@@ -434,6 +478,14 @@ export async function GET(request: NextRequest) {
         brokerQuery = brokerQuery.eq('id', brokerProfileId);
         profilesQuery = profilesQuery.eq('id', profileId);
         windowsQuery = windowsQuery.eq('broker_profile_id', brokerProfileId);
+        personalAvailabilityQuery = personalAvailabilityQuery.eq(
+          'broker_profile_id',
+          brokerProfileId
+        );
+        availabilityExceptionsQuery = availabilityExceptionsQuery.eq(
+          'broker_profile_id',
+          brokerProfileId
+        );
         offersQuery = offersQuery.eq('broker_profile_id', brokerProfileId);
         teamAppointmentsQuery = teamAppointmentsQuery.eq(
           'broker_profile_id',
@@ -444,13 +496,18 @@ export async function GET(request: NextRequest) {
         brokerResult,
         profilesResult,
         windowsResult,
+        personalAvailabilityResult,
+        availabilityExceptionsResult,
         offersResult,
         reasonsResult,
         appointmentsResult,
+        schedulingPolicyResult,
       ] = await Promise.all([
         brokerQuery,
         profilesQuery,
         windowsQuery,
+        personalAvailabilityQuery,
+        availabilityExceptionsQuery,
         offersQuery,
         supabase
           .from('reason_definitions')
@@ -460,10 +517,26 @@ export async function GET(request: NextRequest) {
           .eq('is_active', true)
           .order('display_order'),
         teamAppointmentsQuery,
+        supabase
+          .from('scheduling_policies')
+          .select(
+            'id, timezone, buffer_minutes, minimum_notice_minutes, scheduling_horizon_days'
+          )
+          .eq('account_id', accountId)
+          .eq('status', 'active')
+          .maybeSingle(),
       ]);
       response.brokers = assertQuery<Row[]>(brokerResult, 'corretores');
       response.profiles = assertQuery<Row[]>(profilesResult, 'equipe');
       response.windows = assertQuery<Row[]>(windowsResult, 'disponibilidade');
+      response.personalAvailability = assertQuery<Row[]>(
+        personalAvailabilityResult,
+        'agenda pessoal'
+      );
+      response.availabilityExceptions = assertQuery<Row[]>(
+        availabilityExceptionsResult,
+        'bloqueios de agenda'
+      );
       response.assignmentOffers = assertQuery<Row[]>(
         offersResult,
         'distribuições'
@@ -476,6 +549,8 @@ export async function GET(request: NextRequest) {
         appointmentsResult,
         'reuniões da equipe'
       );
+      if (schedulingPolicyResult.error) throw schedulingPolicyResult.error;
+      response.schedulingPolicy = schedulingPolicyResult.data;
     }
 
     if (view === 'intelligence' || view === 'settings') {

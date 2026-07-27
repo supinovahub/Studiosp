@@ -17,6 +17,7 @@ import { formatDateTime } from '@/lib/studiosp/labels';
 import { PageHeader } from './page-header';
 import { EmptyState, ErrorState, LoadingState } from './operational-state';
 import { StatusBadge } from './status-badge';
+import { BrokerAvailabilityPanel } from './broker-availability-panel';
 
 const weekdays = [
   'Domingo',
@@ -106,38 +107,7 @@ export function TeamPage() {
       ) : null}
 
       {!isManager && currentBroker ? (
-        <section className="border-primary/25 bg-primary/5 flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-foreground text-sm font-semibold">
-              Disponibilidade para novos agendamentos
-            </h3>
-            <p className="text-muted-foreground mt-1 text-xs">
-              Quando indisponível, você sai temporariamente da distribuição
-              automática.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <StatusBadge
-              label={currentBroker.is_available ? 'Disponível' : 'Indisponível'}
-              tone={currentBroker.is_available ? 'success' : 'warning'}
-            />
-            <Button
-              onClick={() =>
-                run(
-                  'set_availability',
-                  { isAvailable: !currentBroker.is_available },
-                  currentBroker.is_available
-                    ? 'Você está indisponível.'
-                    : 'Você está disponível.'
-                )
-              }
-              disabled={saving}
-              variant="outline"
-            >
-              Alterar
-            </Button>
-          </div>
-        </section>
+        <BrokerAvailabilityPanel data={data} onReload={reload} />
       ) : null}
 
       {!isManager ? (
@@ -154,6 +124,9 @@ export function TeamPage() {
               const brokerWindows = windows.filter(
                 (item) => item.broker_profile_id === broker.id
               );
+              const brokerPersonalAvailability = (
+                data.personalAvailability ?? []
+              ).filter((item) => item.broker_profile_id === broker.id);
               return (
                 <article
                   key={String(broker.id)}
@@ -275,6 +248,51 @@ export function TeamPage() {
                         )
                       }
                     />
+                  </div>
+                  <div className="border-border bg-muted/15 border-t p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-foreground text-xs font-semibold">
+                          Agenda informada pelo corretor
+                        </h4>
+                        <p className="text-muted-foreground mt-0.5 text-[11px]">
+                          Duração esperada:{' '}
+                          {String(broker.preferred_call_duration_minutes ?? 10)}{' '}
+                          min
+                        </p>
+                      </div>
+                      <StatusBadge
+                        compact
+                        label={
+                          brokerPersonalAvailability.length
+                            ? `${brokerPersonalAvailability.length} faixa(s)`
+                            : 'Não configurada'
+                        }
+                        tone={
+                          brokerPersonalAvailability.length
+                            ? 'success'
+                            : 'warning'
+                        }
+                      />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {brokerPersonalAvailability.length ? (
+                        brokerPersonalAvailability.map((item) => (
+                          <span
+                            key={String(item.id)}
+                            className="border-border bg-background text-muted-foreground rounded-lg border px-2 py-1 text-[11px]"
+                          >
+                            {weekdays[Number(item.weekday)]} ·{' '}
+                            {String(item.start_time).slice(0, 5)}–
+                            {String(item.end_time).slice(0, 5)}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground text-xs">
+                          O corretor ainda não definiu sua agenda semanal.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </article>
               );

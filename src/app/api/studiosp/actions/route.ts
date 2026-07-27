@@ -101,6 +101,72 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ broker: result.data });
     }
 
+    if (action === 'save_my_availability') {
+      if (role !== 'agent') {
+        throw new ForbiddenError(
+          'Somente corretores podem alterar a própria agenda.'
+        );
+      }
+      const rules = Array.isArray(body.rules) ? body.rules : [];
+      const result = await supabase.rpc('studiosp_replace_my_availability', {
+        p_rules: rules,
+      });
+      actionError(result.error);
+      return NextResponse.json({ availabilityRules: result.data ?? [] });
+    }
+
+    if (action === 'add_my_availability_exception') {
+      if (role !== 'agent') {
+        throw new ForbiddenError(
+          'Somente corretores podem criar bloqueios pessoais.'
+        );
+      }
+      const result = await supabase.rpc(
+        'studiosp_add_my_availability_exception',
+        {
+          p_starts_at: text(body.startsAt),
+          p_ends_at: text(body.endsAt),
+          p_reason: text(body.reason) || 'Bloqueio pessoal',
+        }
+      );
+      actionError(result.error);
+      return NextResponse.json({ availabilityException: result.data });
+    }
+
+    if (action === 'delete_my_availability_exception') {
+      if (role !== 'agent') {
+        throw new ForbiddenError(
+          'Somente corretores podem remover bloqueios pessoais.'
+        );
+      }
+      const result = await supabase.rpc(
+        'studiosp_delete_my_availability_exception',
+        {
+          p_exception_id: text(body.exceptionId),
+        }
+      );
+      actionError(result.error);
+      return NextResponse.json({ deleted: result.data === true });
+    }
+
+    if (action === 'save_my_broker_preferences') {
+      if (role !== 'agent') {
+        throw new ForbiddenError(
+          'Somente corretores podem alterar estas preferências.'
+        );
+      }
+      const result = await supabase.rpc(
+        'studiosp_update_my_broker_preferences',
+        {
+          p_call_duration_minutes: Number(body.callDurationMinutes ?? 10),
+          p_dashboard_notifications: body.dashboardNotifications !== false,
+          p_whatsapp_notifications: body.whatsappNotifications !== false,
+        }
+      );
+      actionError(result.error);
+      return NextResponse.json({ broker: result.data });
+    }
+
     if (action === 'respond_assignment') {
       const result = await supabase.rpc('studiosp_respond_assignment_offer', {
         p_offer_id: text(body.offerId),
@@ -448,8 +514,7 @@ export async function POST(request: NextRequest) {
       const result = await supabase
         .from('scheduling_policies')
         .update({
-          meeting_duration_minutes: Number(body.meetingDuration ?? 10),
-          buffer_minutes: Number(body.bufferMinutes ?? 5),
+          buffer_minutes: Math.max(15, Number(body.bufferMinutes ?? 15)),
           minimum_notice_minutes: Number(body.minimumNotice ?? 120),
           scheduling_horizon_days: Number(body.horizonDays ?? 7),
           broker_offer_sla_minutes: Number(body.brokerSla ?? 15),

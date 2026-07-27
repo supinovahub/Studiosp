@@ -13,10 +13,11 @@ import {
   UserRound,
   Users,
 } from 'lucide-react';
-import { useStudiospData } from '@/hooks/use-studiosp-data';
+import { useAuth } from '@/hooks/use-auth';
 import { PageHeader } from './page-header';
-import { ErrorState, LoadingState } from './operational-state';
+import { LoadingState } from './operational-state';
 import { StatusBadge } from './status-badge';
+import { BrokerSettingsPage } from './broker-settings-page';
 
 const settings = [
   {
@@ -79,11 +80,11 @@ const settings = [
 ];
 
 export function SettingsHubPage() {
-  const { data, loading, error, reload } = useStudiospData('settings');
-  if (loading) return <LoadingState label="Carregando configurações..." />;
-  if (error || !data)
-    return <ErrorState error={error ?? 'Resposta vazia.'} onRetry={reload} />;
-  const manager = data.role === 'owner' || data.role === 'admin';
+  const { accountRole, profileLoading } = useAuth();
+  if (profileLoading)
+    return <LoadingState label="Carregando configurações..." />;
+  if (accountRole === 'agent') return <BrokerSettingsPage />;
+  const manager = accountRole === 'owner' || accountRole === 'admin';
   return (
     <div className="space-y-5">
       <PageHeader
@@ -121,7 +122,7 @@ export function SettingsHubPage() {
               (manager || !item.managerOnly) &&
               (!('ownerOnly' in item) ||
                 !item.ownerOnly ||
-                data.role === 'owner')
+                accountRole === 'owner')
           )
           .map((item) => (
             <Link

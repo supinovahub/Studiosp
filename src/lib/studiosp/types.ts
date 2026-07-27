@@ -78,6 +78,8 @@ export interface StudiospData {
   brokers?: Record<string, unknown>[];
   profiles?: Record<string, unknown>[];
   windows?: Record<string, unknown>[];
+  personalAvailability?: Record<string, unknown>[];
+  availabilityExceptions?: Record<string, unknown>[];
   assignmentOffers?: Record<string, unknown>[];
   followupPolicies?: Record<string, unknown>[];
   followups?: Record<string, unknown>[];

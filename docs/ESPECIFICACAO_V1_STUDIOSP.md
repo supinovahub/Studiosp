@@ -646,12 +646,19 @@ sequenceDiagram
 - confirmação autenticada de titularidade e consentimento operacional;
 - bloqueio do dashboard enquanto um corretor legado não concluir essa etapa;
 - status ativo;
-- disponibilidade semanal;
-- exceções;
+- disponibilidade semanal recorrente, com múltiplos intervalos por dia;
+- exceções pontuais futuras;
 - capacidade;
 - prioridade de roteamento;
 - indisponibilidade temporária;
+- duração preferida da call: 10, 15, 20, 30 ou 45 minutos;
 - preferências de notificação.
+
+A disponibilidade efetiva é a interseção da cobertura garantida pela empresa
+com a agenda recorrente do corretor. Pausas, exceções, compromissos existentes
+e o intervalo global de segurança removem períodos dessa interseção. A
+alteração da grade não cancela uma reunião já confirmada; ela cria uma
+pendência de conflito.
 
 ### 12.2 Oferta de reunião
 
@@ -726,7 +733,9 @@ Mensagem contém:
 - Meus leads
 - Agenda
 - Empreendimentos
-- Perfil e disponibilidade
+- Minhas pendências
+- Equipe e disponibilidade
+- Configurações pessoais
 
 ### 13.3 Elemento global
 
@@ -779,6 +788,41 @@ Filtros:
 - propostas e negociações pendentes;
 - alertas de transferência;
 - botão para indisponibilidade temporária.
+
+### 14.2.1 Minhas pendências
+
+A fila pessoal substitui a tentativa de exibir a central da gestão ao corretor.
+Ela agrupa tarefas em **Agora**, **Hoje** e **Próximas**:
+
+- ofertas aguardando aceite;
+- reuniões já encerradas que aguardam resultado;
+- próximas reuniões que exigem preparação;
+- conflitos de agenda e outras atenções atribuídas.
+
+Uma oferta ainda pendente mostra apenas os dados operacionais necessários. O
+contato, a conversa e as mensagens do lead só são liberados após o aceite.
+
+### 14.2.2 Disponibilidade e configurações pessoais
+
+Na área de disponibilidade o corretor pode:
+
+- ativar ou pausar o recebimento de novas ofertas;
+- definir múltiplos intervalos para cada dia da semana;
+- copiar a grade de segunda-feira para os demais dias úteis;
+- escolher a duração ideal da própria call;
+- consultar o intervalo global de pelo menos 15 minutos;
+- cadastrar e remover exceções futuras;
+- entender quando a cobertura da empresa limita sua agenda.
+
+Na área de configurações, o corretor administra somente:
+
+- WhatsApp operacional;
+- disponibilidade e duração;
+- notificações de painel e WhatsApp;
+- perfil, segurança e aparência.
+
+Configurações de IA, integrações, operação, catálogo, importações e gestão não
+são exibidas para esse perfil.
 
 ### 14.3 Caixa de entrada
 
@@ -1251,6 +1295,15 @@ O código não será removido até concluir migração e confirmar ausência de 
 - Ausência de resposta redistribui.
 - Fila esgotada alerta o dono.
 
+### Cenário 7.1 — Disponibilidade do corretor
+
+- O corretor salva múltiplos intervalos sem sobreposição por dia.
+- Um slot só é elegível dentro da cobertura garantida e da agenda pessoal.
+- A duração individual e o intervalo global de 15 minutos são respeitados.
+- Pausa ou exceção futura impede novas ofertas no período.
+- Alteração conflitante com reunião confirmada cria pendência e não cancela a
+  reunião.
+
 ### Cenário 8 — Fatos comerciais
 
 - Corretor não registra reunião antes do horário.
@@ -1348,6 +1401,8 @@ O código não será removido até concluir migração e confirmar ausência de 
 ### Bloco 6 — Agenda e corretores
 
 - grade garantida;
+- disponibilidade semanal e exceções por corretor;
+- duração individual e intervalo global mínimo;
 - reserva;
 - roteamento;
 - WhatsApp operacional;

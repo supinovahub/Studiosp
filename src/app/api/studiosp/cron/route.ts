@@ -25,6 +25,7 @@ export async function GET(request: Request) {
   }
 
   const db = supabaseAdmin();
+  const resumedBrokers = await resumeExpiredBrokerPauses(db);
   const reassigned = await reassignExpiredOffers(db);
   const brokerNotifications = await notifyPendingBrokers(db);
   const followups = await sendDueFollowups(db);
@@ -32,6 +33,7 @@ export async function GET(request: Request) {
   const documentAnalysis = await processNextDocumentAnalysis(db);
   const reactivation = await sendDueReactivationTouches(db);
   return NextResponse.json({
+    resumedBrokers,
     reassigned,
     brokerNotifications,
     followups,
@@ -45,6 +47,19 @@ function safeMatch(received: string, expected: string) {
   const a = Buffer.from(received);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+async function resumeExpiredBrokerPauses(db: ReturnType<typeof supabaseAdmin>) {
+  const { data } = await db
+    .from('broker_profiles')
+    .update({ is_available: true, unavailable_until: null })
+    .eq('is_active', true)
+    .eq('is_available', false)
+    .not('whatsapp_verified_at', 'is', null)
+    .not('unavailable_until', 'is', null)
+    .lte('unavailable_until', new Date().toISOString())
+    .select('id');
+  return data?.length ?? 0;
 }
 
 async function reassignExpiredOffers(db: ReturnType<typeof supabaseAdmin>) {
@@ -82,36 +97,89 @@ async function reassignExpiredOffers(db: ReturnType<typeof supabaseAdmin>) {
     const previousIds = new Set(
       (previousOffers ?? []).map((item) => item.broker_profile_id)
     );
+    const { data: policy } = await db
+      .from('scheduling_policies')
+      .select('broker_offer_sla_minutes, buffer_minutes, timezone')
+      .eq('id', appointment.scheduling_policy_id)
+      .maybeSingle();
+    const appointmentWindow = zonedAppointmentWindow(
+      appointment.starts_at,
+      appointment.ends_at,
+      policy?.timezone ?? appointment.timezone ?? 'America/Sao_Paulo'
+    );
+    const bufferMinutes = Number(policy?.buffer_minutes ?? 15);
     const { data: candidates } = await db
       .from('broker_profiles')
       .select('*')
       .eq('account_id', offer.account_id)
       .eq('is_active', true)
-      .eq('is_available', true)
+      .not('whatsapp_verified_at', 'is', null)
       .order('routing_priority')
       .order('last_assignment_at', { ascending: true, nullsFirst: true })
       .limit(25);
     let next: Row | null = null;
     for (const candidate of (candidates ?? []) as Row[]) {
       if (previousIds.has(candidate.id)) continue;
+      if (
+        !candidate.is_available &&
+        (!candidate.unavailable_until ||
+          new Date(candidate.unavailable_until) >
+            new Date(appointment.starts_at))
+      ) {
+        continue;
+      }
+      const [
+        { count: companyCoverage },
+        { count: personalCoverage },
+        { count: blocked },
+      ] = await Promise.all([
+        db
+          .from('guaranteed_windows')
+          .select('id', { count: 'exact', head: true })
+          .eq('account_id', offer.account_id)
+          .eq('broker_profile_id', candidate.id)
+          .eq('weekday', appointmentWindow.weekday)
+          .eq('is_active', true)
+          .lte('start_time', appointmentWindow.startTime)
+          .gte('end_time', appointmentWindow.endTime),
+        db
+          .from('broker_availability_rules')
+          .select('id', { count: 'exact', head: true })
+          .eq('account_id', offer.account_id)
+          .eq('broker_profile_id', candidate.id)
+          .eq('weekday', appointmentWindow.weekday)
+          .eq('is_active', true)
+          .lte('start_time', appointmentWindow.startTime)
+          .gte('end_time', appointmentWindow.endTime),
+        db
+          .from('availability_exceptions')
+          .select('id', { count: 'exact', head: true })
+          .eq('account_id', offer.account_id)
+          .eq('broker_profile_id', candidate.id)
+          .eq('exception_type', 'blocked')
+          .lt('starts_at', appointment.ends_at)
+          .gt('ends_at', appointment.starts_at),
+      ]);
+      if (!companyCoverage || !personalCoverage || blocked) continue;
+      const conflictStart = new Date(
+        new Date(appointment.starts_at).getTime() - bufferMinutes * 60_000
+      ).toISOString();
+      const conflictEnd = new Date(
+        new Date(appointment.ends_at).getTime() + bufferMinutes * 60_000
+      ).toISOString();
       const { count } = await db
         .from('appointments')
         .select('id', { count: 'exact', head: true })
         .eq('broker_profile_id', candidate.id)
         .in('status', ['reserved', 'broker_confirmed'])
-        .lt('starts_at', appointment.ends_at)
-        .gt('ends_at', appointment.starts_at);
+        .lt('starts_at', conflictEnd)
+        .gt('ends_at', conflictStart);
       if (!count) {
         next = candidate;
         break;
       }
     }
     if (next) {
-      const { data: policy } = await db
-        .from('scheduling_policies')
-        .select('broker_offer_sla_minutes')
-        .eq('id', appointment.scheduling_policy_id)
-        .maybeSingle();
       const expiresAt = new Date(
         Math.min(
           new Date(appointment.starts_at).getTime(),
@@ -142,6 +210,43 @@ async function reassignExpiredOffers(db: ReturnType<typeof supabaseAdmin>) {
     processed++;
   }
   return processed;
+}
+
+function zonedAppointmentWindow(
+  startsAt: string,
+  endsAt: string,
+  timezone: string
+) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  const parts = formatter.formatToParts(new Date(startsAt));
+  const weekdayName = parts.find((part) => part.type === 'weekday')?.value;
+  const weekdayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  const timeFor = (value: string) => {
+    const timeParts = formatter.formatToParts(new Date(value));
+    const hour = timeParts.find((part) => part.type === 'hour')?.value ?? '00';
+    const minute =
+      timeParts.find((part) => part.type === 'minute')?.value ?? '00';
+    return `${hour}:${minute}:00`;
+  };
+  return {
+    weekday: weekdayMap[weekdayName ?? 'Sun'] ?? 0,
+    startTime: timeFor(startsAt),
+    endTime: timeFor(endsAt),
+  };
 }
 
 async function notifyPendingBrokers(db: ReturnType<typeof supabaseAdmin>) {

@@ -17,14 +17,15 @@ function query(data: unknown = []) {
     order: () => builder,
     limit: () => builder,
     maybeSingle: async () => ({ data, error: null }),
-    then: (
-      resolve: (value: { data: unknown; error: null }) => unknown
-    ) => resolve({ data, error: null }),
+    then: (resolve: (value: { data: unknown; error: null }) => unknown) =>
+      resolve({ data, error: null }),
   };
   return builder;
 }
 
-function supabaseStub(rpcError: { code: string; message: string } | null = null) {
+function supabaseStub(
+  rpcError: { code: string; message: string } | null = null
+) {
   return {
     from: (table: string) => {
       if (table === 'profiles') return query({ id: 'profile-1' });
@@ -53,20 +54,22 @@ describe('GET /api/studiosp/data authorization', () => {
 
   it.each([
     'overview',
-    'attention',
     'pipeline',
     'followups',
     'intelligence',
     'settings',
     'reports',
-  ])('returns 403 when a broker requests the administrative view %s', async (view) => {
-    getCurrentAccount.mockResolvedValue(context('agent'));
-    const { GET } = await import('./route');
-    const response = await GET(
-      new NextRequest(`http://localhost/api/studiosp/data?view=${view}`)
-    );
-    expect(response.status).toBe(403);
-  });
+  ])(
+    'returns 403 when a broker requests the administrative view %s',
+    async (view) => {
+      getCurrentAccount.mockResolvedValue(context('agent'));
+      const { GET } = await import('./route');
+      const response = await GET(
+        new NextRequest(`http://localhost/api/studiosp/data?view=${view}`)
+      );
+      expect(response.status).toBe(403);
+    }
+  );
 
   it('allows an owner to load an administrative view', async () => {
     getCurrentAccount.mockResolvedValue(context('owner'));
@@ -86,13 +89,20 @@ describe('GET /api/studiosp/data authorization', () => {
     expect(response.status).toBe(200);
   });
 
+  it('allows a broker to load their personal attention queue', async () => {
+    getCurrentAccount.mockResolvedValue(context('agent'));
+    const { GET } = await import('./route');
+    const response = await GET(
+      new NextRequest('http://localhost/api/studiosp/data?view=attention')
+    );
+    expect(response.status).toBe(200);
+  });
+
   it('allows a broker to load the published developments catalog', async () => {
     getCurrentAccount.mockResolvedValue(context('agent'));
     const { GET } = await import('./route');
     const response = await GET(
-      new NextRequest(
-        'http://localhost/api/studiosp/data?view=developments'
-      )
+      new NextRequest('http://localhost/api/studiosp/data?view=developments')
     );
     expect(response.status).toBe(200);
   });
