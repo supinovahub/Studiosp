@@ -82,6 +82,7 @@ export interface StudiospData {
   followupPolicies?: Record<string, unknown>[];
   followups?: Record<string, unknown>[];
   aiConfig?: Record<string, unknown> | null;
+  aiReplyAllowedNumbers?: string[];
   aiRuns?: Record<string, unknown>[];
   schedulingPolicy?: Record<string, unknown> | null;
   reasons?: Record<string, unknown>[];

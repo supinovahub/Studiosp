@@ -19,7 +19,13 @@ import { PageHeader } from './page-header';
 import { ErrorState, LoadingState } from './operational-state';
 import { StatusBadge } from './status-badge';
 
-type Tab = 'behavior' | 'questions' | 'followups' | 'schedule' | 'runs';
+type Tab =
+  | 'behavior'
+  | 'questions'
+  | 'followups'
+  | 'schedule'
+  | 'testing'
+  | 'runs';
 
 export function IntelligencePage() {
   const { data, loading, error, reload } = useStudiospData('intelligence');
@@ -73,6 +79,7 @@ export function IntelligencePage() {
             ['questions', 'Qualificação'],
             ['followups', 'Follow-ups'],
             ['schedule', 'Agendamento'],
+            ['testing', 'Testes da IA'],
             ['runs', 'Execuções'],
           ] as [Tab, string][]
         ).map(([value, label]) => (
@@ -154,8 +161,85 @@ export function IntelligencePage() {
           }
         />
       ) : null}
+      {tab === 'testing' ? (
+        <AiTestingForm
+          numbers={(data.aiReplyAllowedNumbers ?? []).map(String)}
+          saving={saving}
+          disabled={!canManage}
+          onSave={(payload) =>
+            save(
+              'save_ai_reply_allowlist',
+              payload,
+              'Whitelist de testes atualizada.'
+            )
+          }
+        />
+      ) : null}
       {tab === 'runs' ? <RunsPanel runs={data.aiRuns ?? []} /> : null}
     </div>
+  );
+}
+
+function AiTestingForm({
+  numbers,
+  saving,
+  disabled,
+  onSave,
+}: {
+  numbers: string[];
+  saving: boolean;
+  disabled: boolean;
+  onSave: (payload: Record<string, unknown>) => void;
+}) {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    onSave({
+      numbers: String(form.get('numbers') ?? '')
+        .split(/[\n,;]+/)
+        .map((value) => value.trim())
+        .filter(Boolean),
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="border-border bg-card rounded-lg border">
+      <div className="border-border flex items-start gap-3 border-b p-4">
+        <div className="border-primary/20 bg-primary/10 flex size-10 items-center justify-center rounded-lg border">
+          <ShieldCheck className="text-primary size-5" />
+        </div>
+        <div>
+          <h3 className="text-foreground text-sm font-semibold">
+            Whitelist de respostas da IA
+          </h3>
+          <p className="text-muted-foreground mt-1 text-xs leading-5">
+            Durante a homologação, somente estes números podem acionar respostas
+            automáticas. As demais mensagens continuam visíveis no Inbox.
+          </p>
+        </div>
+      </div>
+      <div className="space-y-3 p-4">
+        <Field label="Números autorizados, um por linha">
+          <Textarea
+            name="numbers"
+            rows={6}
+            defaultValue={numbers.join('\n')}
+            placeholder={'+5527981168321\n+5527998303052'}
+            disabled={disabled}
+          />
+        </Field>
+        <p className="text-muted-foreground text-xs">
+          Use DDI e DDD. Lista vazia libera todos os leads elegíveis.
+        </p>
+        {!disabled ? (
+          <div className="flex justify-end">
+            <Button type="submit" disabled={saving}>
+              <Save /> {saving ? 'Salvando...' : 'Salvar whitelist'}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </form>
   );
 }
 

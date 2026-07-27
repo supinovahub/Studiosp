@@ -487,6 +487,7 @@ export async function GET(request: NextRequest) {
         followupResult,
         scheduleResult,
         reasonResult,
+        aiReplyConfigResult,
       ] = await Promise.all([
         supabase
           .from('qualification_questions')
@@ -530,6 +531,11 @@ export async function GET(request: NextRequest) {
           .eq('account_id', accountId)
           .order('category')
           .order('display_order'),
+        supabase
+          .from('ai_configs')
+          .select('auto_reply_allowed_numbers')
+          .eq('account_id', accountId)
+          .maybeSingle(),
       ]);
       response.questions = assertQuery<Row[]>(questionsResult, 'perguntas');
       response.questionOptions = assertQuery<Row[]>(
@@ -540,7 +546,10 @@ export async function GET(request: NextRequest) {
       if (runsResult.error) throw runsResult.error;
       if (followupResult.error) throw followupResult.error;
       if (scheduleResult.error) throw scheduleResult.error;
+      if (aiReplyConfigResult.error) throw aiReplyConfigResult.error;
       response.aiConfig = aiResult.data;
+      response.aiReplyAllowedNumbers =
+        aiReplyConfigResult.data?.auto_reply_allowed_numbers ?? [];
       response.aiRuns = runsResult.data ?? [];
       response.followupPolicies = followupResult.data
         ? [followupResult.data]

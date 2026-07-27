@@ -372,6 +372,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ aiConfig: result.data });
     }
 
+    if (action === 'save_ai_reply_allowlist') {
+      const rawNumbers = Array.isArray(body.numbers) ? body.numbers : [];
+      const numbers = [
+        ...new Set(
+          rawNumbers
+            .map((value) => text(value).replace(/\D/g, ''))
+            .filter((value) => value.length >= 8 && value.length <= 15)
+            .map((value) => `+${value}`)
+        ),
+      ].slice(0, 50);
+      const result = await supabase
+        .from('ai_configs')
+        .update({ auto_reply_allowed_numbers: numbers })
+        .eq('account_id', accountId)
+        .select('auto_reply_allowed_numbers')
+        .single();
+      actionError(result.error);
+      return NextResponse.json({
+        allowedNumbers: result.data?.auto_reply_allowed_numbers ?? [],
+      });
+    }
+
     if (action === 'save_followup_policy') {
       const result = await supabase
         .from('followup_policies')
