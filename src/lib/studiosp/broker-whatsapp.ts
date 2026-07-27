@@ -25,6 +25,21 @@ export async function handleBrokerOperationalReply(args: {
     .maybeSingle();
   if (!broker) return false;
 
+  const { data: offer } = await args.db
+    .from('assignment_offers')
+    .select('*')
+    .eq('account_id', args.accountId)
+    .eq('broker_profile_id', broker.id)
+    .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString())
+    .order('offered_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  // O mesmo número pode existir como corretor e como lead de teste. Sem uma
+  // oferta válida não há contexto operacional suficiente para consumir a
+  // mensagem: devolva o controle ao webhook para que Inbox e IA a processem.
+  if (!offer) return false;
+
   await args.db.from('broker_operational_conversations').upsert(
     {
       account_id: args.accountId,
@@ -36,24 +51,6 @@ export async function handleBrokerOperationalReply(args: {
     },
     { onConflict: 'account_id,whatsapp_config_id,remote_chat_id' }
   );
-
-  const { data: offer } = await args.db
-    .from('assignment_offers')
-    .select('*')
-    .eq('account_id', args.accountId)
-    .eq('broker_profile_id', broker.id)
-    .eq('status', 'pending')
-    .gt('expires_at', new Date().toISOString())
-    .order('offered_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!offer) {
-    await safeReply(
-      args,
-      'Não encontrei nenhum convite de reunião pendente para você no momento.'
-    );
-    return true;
-  }
 
   const normalizedText = normalize(args.text);
   if (/^(sim|s|ok|confirmo|consigo|pode ser|aceito)\b/.test(normalizedText)) {

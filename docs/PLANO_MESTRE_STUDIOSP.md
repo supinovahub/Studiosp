@@ -397,6 +397,10 @@ Políticas comerciais e operacionais serão configuráveis pelo dono. Regras de 
   já enviada ao lead;
 - a mensagem de confirmação é determinística e derivada do `appointment`
   persistido, não de texto livre do modelo.
+- quando um mesmo número pertence simultaneamente a um corretor e a um lead, o
+  fluxo operacional do corretor só pode consumir a mensagem se existir uma
+  oferta de reunião pendente e válida; sem oferta, a mensagem segue para o
+  Inbox e para a IA como interação do lead.
 
 ## 6. Distribuição para corretores
 
