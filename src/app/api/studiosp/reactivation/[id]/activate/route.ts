@@ -3,6 +3,9 @@ import { requireRole, toErrorResponse } from '@/lib/auth/account';
 import { supabaseAdmin } from '@/lib/automations/admin-client';
 import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 import { normalizePhone } from '@/lib/whatsapp/phone-utils';
+import { whatsappConnectionKey } from '@/lib/whatsapp/connection-key';
+import { contactUpdatesFromImportedLead } from '@/lib/reactivation/contact-merge';
+import { reactivationConversationUpdates } from '@/lib/reactivation/conversation-reset';
 import { parseReactivationCadence } from '@/lib/reactivation/cadence';
 
 type Row = Record<string, unknown>;
@@ -38,7 +41,9 @@ export async function POST(
           .in('status', ['pending_review', 'ready']),
         db
           .from('whatsapp_config')
-          .select('user_id,status')
+          .select(
+            'id,user_id,status,provider,phone_number_id,uazapi_instance_id'
+          )
           .eq('account_id', accountId)
           .maybeSingle(),
       ]);
@@ -57,6 +62,7 @@ export async function POST(
         { error: 'A campanha não possui leads prontos.' },
         { status: 409 }
       );
+    const connectionKey = whatsappConnectionKey(whatsapp);
 
     let queued = 0;
     const failures: string[] = [];
@@ -72,7 +78,8 @@ export async function POST(
           db,
           accountId,
           whatsapp.user_id,
-          String(contact.id)
+          String(contact.id),
+          connectionKey
         );
         const { data: opportunity, error: opportunityError } = await db.rpc(
           'studiosp_create_opportunity',
@@ -223,7 +230,19 @@ async function findOrCreateContact(
     .eq('phone_normalized', phoneNormalized)
     .maybeSingle();
   if (lookupError) throw lookupError;
-  if (existing) return existing;
+  if (existing) {
+    const updates = contactUpdatesFromImportedLead(existing, args.lead);
+    if (!Object.keys(updates).length) return existing;
+    const { data: updated, error: updateError } = await db
+      .from('contacts')
+      .update(updates)
+      .eq('id', existing.id)
+      .eq('account_id', args.accountId)
+      .select()
+      .single();
+    if (updateError) throw updateError;
+    return updated;
+  }
   const { data, error } = await db
     .from('contacts')
     .insert({
@@ -263,8 +282,10 @@ async function findOrCreateConversation(
   db: ReturnType<typeof supabaseAdmin>,
   accountId: string,
   ownerUserId: string,
-  contactId: string
+  contactId: string,
+  connectionKey: string
 ) {
+  const activationUpdates = reactivationConversationUpdates(connectionKey);
   const { data: existing } = await db
     .from('conversations')
     .select('*')
@@ -272,13 +293,24 @@ async function findOrCreateConversation(
     .eq('contact_id', contactId)
     .limit(1)
     .maybeSingle();
-  if (existing) return existing;
+  if (existing) {
+    const { data: updated, error: updateError } = await db
+      .from('conversations')
+      .update(activationUpdates)
+      .eq('id', existing.id)
+      .eq('account_id', accountId)
+      .select()
+      .single();
+    if (updateError) throw updateError;
+    return updated;
+  }
   const { data, error } = await db
     .from('conversations')
     .insert({
       account_id: accountId,
       user_id: ownerUserId,
       contact_id: contactId,
+      ...activationUpdates,
     })
     .select()
     .single();

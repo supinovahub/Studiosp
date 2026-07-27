@@ -1602,6 +1602,13 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   reprocessamentos, além do detalhe por lead e ID retornado pelo provedor;
 - tentativas consecutivas de envio da reativação usam um intervalo aleatório
   entre 30 e 50 segundos, sem alterar os demais fluxos de mensageria;
+- toda conversa e mensagem originada pela reativação deve ser vinculada à
+  conexão de WhatsApp ativa para permanecer visível no Inbox;
+- dados importados podem substituir nomes vazios ou nomes-placeholder iguais
+  ao telefone, mas não sobrescrevem nomes humanos já cadastrados;
+- ao ativar uma campanha, a conversa inicia um novo ciclo de IA: atribuição
+  humana anterior é removida, a pausa e o contador são reiniciados e o
+  histórico anterior fica fora do novo contexto automático;
 - desenvolvimento e homologação acontecem na branch integrada
   `feature/reactivacao-leads` e no Supabase staging.
 
