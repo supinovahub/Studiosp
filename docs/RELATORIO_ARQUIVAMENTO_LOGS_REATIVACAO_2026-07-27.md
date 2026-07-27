@@ -61,3 +61,18 @@ de saída deixou de restringir a campanha aos dois números de teste.
 - Banco: migration compensatória para remover `archived_at` e recriar a
   constraint anterior somente depois de restaurar qualquer campanha arquivada
   para um status compatível.
+
+## Publicação em produção
+
+- Autorização de promoção recebida em 27/07/2026.
+- Commit promovido para `main`: `6705520`.
+- Migration aplicada no Supabase Studiosp de produção
+  (`ixttqwjfaeybaisglxee`).
+- Deploy Vercel: `dpl_DpBvroLY45jrHPzCaPLgh7vqMpUC`.
+- Estado final do deploy: `READY`, com alias `studiosp.vercel.app`.
+- Smoke test autenticado concluído:
+  - filtro `Exibir arquivadas` visível;
+  - ação `Arquivar` visível em campanhas elegíveis;
+  - painel `Analisar logs` aberto sobre uma campanha real;
+  - status, tentativas, horários e IDs da UAZAPI exibidos corretamente;
+  - nenhuma falha de runtime encontrada nas rotas de reativação após o deploy.
