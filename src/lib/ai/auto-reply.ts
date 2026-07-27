@@ -117,6 +117,21 @@ export async function dispatchInboundToAiReply(
       return { outcome: 'skipped', reason: 'assigned_to_human' };
     if (conv.ai_autoreply_disabled)
       return { outcome: 'skipped', reason: 'conversation_paused' };
+    const contextBoundary = conv.ai_context_started_at;
+    if (!conv.ai_context_started_at) {
+      const newContextStartedAt = new Date().toISOString();
+      const { error: contextStartError } = await db
+        .from('conversations')
+        .update({ ai_context_started_at: newContextStartedAt })
+        .eq('id', conversationId);
+      if (contextStartError) {
+        return {
+          outcome: 'failed',
+          reason: 'conversation_context_start_failed',
+          retryable: true,
+        };
+      }
+    }
     const contextStartedAt = conv.ai_context_started_at
       ? new Date(conv.ai_context_started_at).getTime()
       : 0;
@@ -153,7 +168,7 @@ export async function dispatchInboundToAiReply(
       db,
       conversationId,
       undefined,
-      conv.ai_context_started_at
+      contextBoundary
     );
     if (messages.length === 0)
       return { outcome: 'skipped', reason: 'no_conversation_context' };
