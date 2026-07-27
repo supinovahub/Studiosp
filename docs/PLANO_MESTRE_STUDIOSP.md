@@ -935,6 +935,19 @@ As opções de metragem e condição comercial devem ser registros relacionados 
 
 O matching compara o perfil financeiro, a localização, a preferência por imóvel na planta ou pronto e outras perguntas estruturadas com essas opções comerciais. O lead recebe apenas a quantidade de oportunidades aderentes; o corretor recebe os empreendimentos, metragens e referências comerciais relevantes.
 
+### Variação das mensagens de reativação
+
+A abordagem de reativação não usa um único molde repetido. O sistema seleciona
+de forma determinística uma variante com estrutura, saudação, contextualização,
+menção ao objetivo, referência de entrada e pergunta final diferentes. A
+variante usada é registrada no evento comercial para auditoria e comparação de
+resultado.
+
+O envio também é escalonado: o primeiro contato pode sair imediatamente, os
+seguintes são distribuídos em intervalos e o worker reivindica apenas uma
+mensagem por ciclo. Essa proteção reduz repetição e rajadas, mas não substitui
+consentimento, qualidade da base, opt-out, aquecimento e limites do provedor.
+
 ### Biblioteca de mídias dos empreendimentos
 
 #### Decisão confirmada para a Versão 1
@@ -1247,6 +1260,14 @@ extração e da higienização, o conteúdo é dividido em partes persistentes:
 - após três falhas da mesma parte, a fonte é marcada para revisão e o erro fica
   visível, sem publicar ou cadastrar conteúdo parcial automaticamente.
 
+#### Seleção segura do catálogo importado
+
+- o preview permite incluir ou ignorar cada item antes da aprovação;
+- o filtro operacional `studios até 40 m²` mantém somente itens com metragem
+  máxima confiável de até 40 m² e seus ancestrais necessários;
+- itens fora do filtro ficam ignorados, mas podem ser reincluídos manualmente;
+- o cadastro continua dependendo de uma confirmação explícita do dono.
+
 #### Fontes iniciais para validar somente a análise e o preview
 
 - um tabelão de junho com múltiplos empreendimentos, unidades e preços;
@@ -1255,11 +1276,11 @@ extração e da higienização, o conteúdo é dividido em partes persistentes:
   que contém dados pessoais e deverá comprovar a proteção contra ingestão
   indevida.
 
-Esses três documentos não estão autorizados para importação. Eles serão usados
-em staging somente para validar extração, proteção de dados, organização,
-detecção de conflitos e qualidade do preview. A homologação deve parar antes da
-aprovação e comprovar que nenhuma tabela operacional ou base de contexto foi
-alterada.
+O dono autorizou posteriormente o cadastro, em staging, dos studios de até
+40 m² encontrados nesses documentos. A aprovação deve usar o filtro de
+metragem, manter os empreendimentos como rascunho e preservar a revisão
+individual. Publicação para corretores e indexação na base da IA continuam
+dependendo de ação explícita posterior.
 
 ## 13. Origem e atribuição dos leads
 

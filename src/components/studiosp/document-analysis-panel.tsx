@@ -47,6 +47,7 @@ type BatchDetail = {
   items: Array<{
     id: string;
     item_type: string;
+    parent_item_id?: string | null;
     proposed_action: string;
     display_name: string;
     confidence: number;
@@ -343,6 +344,42 @@ export function DocumentAnalysisPanel({
     }
   }
 
+  async function updateItemDecisions(
+    itemDecisions: Array<{ id: string; decision: 'pending' | 'rejected' }>
+  ) {
+    if (!selected || !itemDecisions.length) return;
+    setError(null);
+    const response = await fetch('/api/studiosp/document-analysis', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        batchId: selected.batch.id,
+        itemDecisions,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || 'Não foi possível atualizar a seleção.');
+    }
+    await loadBatch(selected.batch.id);
+  }
+
+  async function selectStudiosUpTo40() {
+    if (!selected) return;
+    const eligible = studioItemIds(selected.items, 40);
+    await updateItemDecisions(
+      selected.items
+        .filter((item) => item.decision !== 'approved')
+        .map((item) => ({
+          id: item.id,
+          decision: eligible.has(item.id) ? 'pending' : 'rejected',
+        }))
+    );
+    setSuccess(
+      `${eligible.size} itens relacionados a studios de até 40 m² foram mantidos para revisão.`
+    );
+  }
+
   if (!open) {
     return (
       <Button variant="outline" onClick={() => setOpen(true)}>
@@ -574,7 +611,32 @@ export function DocumentAnalysisPanel({
                 </div>
 
                 <div className="border-border rounded-lg border p-3">
-                  <p className="text-foreground font-medium">3. Preview</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-foreground font-medium">3. Preview</p>
+                      <p className="text-muted-foreground text-xs">
+                        Revise o que será incluído antes de cadastrar.
+                      </p>
+                    </div>
+                    {selected.batch.status === 'ready' ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          void selectStudiosUpTo40().catch((selectionError) =>
+                            setError(
+                              selectionError instanceof Error
+                                ? selectionError.message
+                                : 'Não foi possível aplicar o filtro.'
+                            )
+                          )
+                        }
+                      >
+                        Manter studios até 40 m²
+                      </Button>
+                    ) : null}
+                  </div>
                   {selected.issues.length ? (
                     <ul className="mt-3 space-y-1">
                       {selected.issues.map((issue) => (
@@ -598,13 +660,44 @@ export function DocumentAnalysisPanel({
                           <p className="text-foreground text-sm font-medium">
                             {item.display_name}
                           </p>
-                          <span className="text-muted-foreground text-xs">
-                            {item.decision === 'approved'
-                              ? 'Cadastrado'
-                              : item.decision === 'rejected'
-                                ? 'Ignorado'
-                                : `${Math.round(Number(item.confidence) * 100)}%`}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-xs">
+                              {item.decision === 'approved'
+                                ? 'Cadastrado'
+                                : item.decision === 'rejected'
+                                  ? 'Ignorado'
+                                  : `${Math.round(Number(item.confidence) * 100)}%`}
+                            </span>
+                            {!['approved'].includes(item.decision) &&
+                            selected.batch.status === 'ready' ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  void updateItemDecisions([
+                                    {
+                                      id: item.id,
+                                      decision:
+                                        item.decision === 'rejected'
+                                          ? 'pending'
+                                          : 'rejected',
+                                    },
+                                  ]).catch((selectionError) =>
+                                    setError(
+                                      selectionError instanceof Error
+                                        ? selectionError.message
+                                        : 'Não foi possível atualizar o item.'
+                                    )
+                                  )
+                                }
+                              >
+                                {item.decision === 'rejected'
+                                  ? 'Incluir'
+                                  : 'Ignorar'}
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
                         <dl className="mt-2 grid min-w-0 gap-2 lg:grid-cols-2">
                           {item.fields.map((field) => (
@@ -716,6 +809,35 @@ export function DocumentAnalysisPanel({
     </div>,
     document.body
   );
+}
+
+function studioItemIds(items: BatchDetail['items'], limit: number) {
+  const eligible = new Set<string>();
+  const byId = new Map(items.map((item) => [item.id, item]));
+  for (const item of items) {
+    if (!['development', 'offer'].includes(item.item_type)) continue;
+    const maximum = numericField(item, 'area_max_sqm');
+    const minimum = numericField(item, 'area_min_sqm');
+    const reference = maximum ?? minimum;
+    if (reference == null || reference <= 0 || reference > limit) continue;
+    eligible.add(item.id);
+    let parentId = item.parent_item_id;
+    const visited = new Set<string>();
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      eligible.add(parentId);
+      parentId = byId.get(parentId)?.parent_item_id;
+    }
+  }
+  return eligible;
+}
+
+function numericField(item: BatchDetail['items'][number], fieldName: string) {
+  const value = item.fields.find(
+    (field) => field.field_name === fieldName
+  )?.proposed_value;
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function MediaCandidates({

@@ -1,13 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { engineSendText } from '@/lib/flows/meta-send';
-import { buildReactivationMessage } from './cadence';
+import { buildReactivationMessageWithVariant } from './cadence';
 
 type Row = Record<string, unknown>;
 
 export async function sendDueReactivationTouches(db: SupabaseClient) {
   const { data: touches, error } = await db.rpc(
     'studiosp_claim_reactivation_touches',
-    { p_worker_id: `reactivation:${Date.now()}`, p_limit: 20 }
+    { p_worker_id: `reactivation:${Date.now()}`, p_limit: 1 }
   );
   if (error) {
     console.error('[Reativação] falha ao reivindicar fila:', error);
@@ -45,13 +45,16 @@ export async function sendDueReactivationTouches(db: SupabaseClient) {
       continue;
     }
     try {
-      const text = buildReactivationMessage(lead, Number(touch.step_number));
+      const message = buildReactivationMessageWithVariant(
+        lead,
+        Number(touch.step_number)
+      );
       const result = await engineSendText({
         accountId: String(touch.account_id),
         userId: await ownerUserId(db, String(touch.account_id)),
         conversationId: lead.conversation_id,
         contactId: lead.contact_id,
-        text,
+        text: message.text,
         aiGenerated: false,
       });
       const now = new Date().toISOString();
@@ -74,7 +77,10 @@ export async function sendDueReactivationTouches(db: SupabaseClient) {
           reactivation_lead_id: lead.id,
           event_type: `touch_${touch.step_number}_sent`,
           actor_type: 'system',
-          payload: { message_id: result.whatsapp_message_id },
+          payload: {
+            message_id: result.whatsapp_message_id,
+            message_variant: message.variant,
+          },
         }),
       ]);
       sent++;

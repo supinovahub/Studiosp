@@ -93,6 +93,10 @@ export async function POST(
         if (opportunityError) throw opportunityError;
         const opportunityId = String((opportunity as Row).id);
         const now = Date.now();
+        // Distribui os contatos para evitar rajadas. O primeiro lead pode sair
+        // imediatamente; os seguintes ficam espaçados e o worker reivindica
+        // somente uma mensagem por ciclo.
+        const deliveryOffset = queued * 60_000;
         const cadence = parseReactivationCadence(campaign.cadence);
         const { error: touchesError } = await db
           .from('reactivation_touches')
@@ -102,7 +106,9 @@ export async function POST(
               campaign_id: id,
               reactivation_lead_id: lead.id,
               step_number: index + 1,
-              scheduled_for: new Date(now + day * 86_400_000).toISOString(),
+              scheduled_for: new Date(
+                now + day * 86_400_000 + deliveryOffset
+              ).toISOString(),
             })),
             {
               onConflict: 'reactivation_lead_id,step_number',

@@ -151,3 +151,18 @@ pronto` com 26 itens estruturados e 29 imagens editáveis.
   comprovando checkpoint e processamento incremental.
 - Nenhuma parte falhou nesse recorte da homologação e nenhuma alteração foi
   feita no Supabase de produção.
+
+### Abordagem dinâmica e seleção do catálogo
+
+- A reativação passou a possuir 12 estruturas completas para D0 e quatro
+  variantes por etapa posterior.
+- A escolha é determinística por lead e etapa, evitando mudanças em retries e
+  mantendo rastreabilidade.
+- Nome, objetivo e entrada continuam personalizados, com diferentes ordens,
+  saudações e perguntas finais.
+- O evento de envio registra `message_variant`.
+- A ativação escalona os leads em intervalos de um minuto e o worker envia
+  somente uma mensagem por ciclo, evitando rajadas após atrasos.
+- O preview documental ganhou decisão por item e filtro para manter somente
+  studios com metragem máxima confiável de até 40 m².
+- Nenhuma campanha real foi disparada durante esta alteração.

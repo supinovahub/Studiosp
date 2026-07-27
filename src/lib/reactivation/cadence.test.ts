@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildReactivationMessage,
+  buildReactivationMessageWithVariant,
   parseReactivationCadence,
 } from './cadence';
 
@@ -32,8 +33,40 @@ describe('buildReactivationMessage', () => {
     const followup = buildReactivationMessage(lead, 2);
 
     expect(initial).toContain('Matheus');
-    expect(initial).toContain('investir');
+    expect(initial).toContain('investimento');
     expect(initial).toContain('R$');
     expect(followup).not.toContain('100.000');
+  });
+
+  it('distribui leads entre estruturas diferentes de forma determinística', () => {
+    const messages = Array.from({ length: 12 }, (_, index) =>
+      buildReactivationMessageWithVariant(
+        {
+          id: `lead-${index}`,
+          name: 'Arthur Rocha',
+          objective: 'invest',
+          entry_value: 100000,
+        },
+        1
+      )
+    );
+
+    expect(
+      new Set(messages.map((message) => message.variant)).size
+    ).toBeGreaterThan(5);
+    expect(
+      new Set(messages.map((message) => message.text)).size
+    ).toBeGreaterThan(5);
+    expect(
+      buildReactivationMessageWithVariant(
+        { id: 'lead-1', name: 'Arthur Rocha', objective: 'invest' },
+        1
+      )
+    ).toEqual(
+      buildReactivationMessageWithVariant(
+        { id: 'lead-1', name: 'Arthur Rocha', objective: 'invest' },
+        1
+      )
+    );
   });
 });

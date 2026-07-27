@@ -335,12 +335,13 @@ export async function PATCH(request: Request) {
       batchId?: unknown;
       fieldId?: unknown;
       value?: unknown;
+      itemDecisions?: unknown;
     } | null;
     const batchId = String(body?.batchId ?? '');
     const fieldId = String(body?.fieldId ?? '');
-    if (!batchId || !fieldId) {
+    if (!batchId) {
       return NextResponse.json(
-        { error: 'Lote ou campo não informado.' },
+        { error: 'Lote não informado.' },
         { status: 400 }
       );
     }
@@ -355,6 +356,40 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         { error: 'O preview não está disponível para edição.' },
         { status: 409 }
+      );
+    }
+    if (Array.isArray(body?.itemDecisions)) {
+      const decisions = body.itemDecisions.slice(0, 500).flatMap((entry) => {
+        if (!entry || typeof entry !== 'object') return [];
+        const value = entry as Record<string, unknown>;
+        const id = String(value.id ?? '');
+        const decision = String(value.decision ?? '');
+        return id && ['pending', 'rejected'].includes(decision)
+          ? [{ id, decision }]
+          : [];
+      });
+      if (!decisions.length) {
+        return NextResponse.json(
+          { error: 'Nenhuma decisão válida foi informada.' },
+          { status: 400 }
+        );
+      }
+      for (const decision of decisions) {
+        const { error } = await ctx.supabase
+          .from('document_analysis_items')
+          .update({ decision: decision.decision })
+          .eq('account_id', ctx.accountId)
+          .eq('batch_id', batchId)
+          .eq('id', decision.id)
+          .neq('decision', 'approved');
+        if (error) throw error;
+      }
+      return NextResponse.json({ updated: decisions.length });
+    }
+    if (!fieldId) {
+      return NextResponse.json(
+        { error: 'Campo não informado.' },
+        { status: 400 }
       );
     }
     const { data: field, error: fieldError } = await ctx.supabase
