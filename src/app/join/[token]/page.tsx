@@ -31,6 +31,7 @@ import {
   CheckCircle,
   Loader2,
   MailX,
+  MessageCircle,
   ShieldCheck,
   UsersRound,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -51,6 +53,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  isValidBrokerWhatsApp,
+  normalizeBrokerWhatsApp,
+} from '@/lib/studiosp/broker-phone';
 import { createClient } from '@/lib/supabase/client';
 
 interface PeekOk {
@@ -74,19 +80,19 @@ const ROLE_LABEL: Record<PeekOk['role'], string> = {
 const FAIL_COPY: Record<PeekFail['reason'], { title: string; body: string }> = {
   not_found: {
     title: 'Convite não encontrado',
-    body: 'This link doesn’t match a valid invitation. Double-check the URL or ask the person who invited you to send a new one.',
+    body: 'Este link não corresponde a um convite válido. Confira o endereço ou peça um novo convite ao responsável pela equipe.',
   },
   used: {
     title: 'Convite já usado',
-    body: 'This invitation has already been accepted. If that wasn’t you, ask the account admin to send a fresh link.',
+    body: 'Este convite já foi aceito. Se não foi você, peça um novo link ao responsável pela equipe.',
   },
   expired: {
     title: 'O convite expirou',
-    body: 'This invitation has expired. Ask the account admin to send a new one — they take a few seconds to generate.',
+    body: 'Este convite expirou. Peça ao responsável pela equipe que gere um novo link.',
   },
   server_error: {
     title: 'Algo deu errado',
-    body: 'We couldn’t verify this invitation right now. Try refreshing the page in a moment.',
+    body: 'Não foi possível verificar este convite agora. Tente novamente em instantes.',
   },
 };
 
@@ -108,6 +114,8 @@ export default function JoinPage() {
   // step. Surface a blocking modal that walks them through it.
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [whatsappE164, setWhatsappE164] = useState('');
+  const [whatsappConsent, setWhatsappConsent] = useState(false);
 
   // Extracted so the "Try again" button on the server_error card
   // can re-run the same logic without remounting the component.
@@ -165,11 +173,29 @@ export default function JoinPage() {
 
   const handleAccept = useCallback(async () => {
     if (!token) return;
+    const normalizedWhatsApp = normalizeBrokerWhatsApp(whatsappE164);
+    if (
+      peek?.ok &&
+      peek.role === 'agent' &&
+      (!isValidBrokerWhatsApp(normalizedWhatsApp) || !whatsappConsent)
+    ) {
+      toast.error(
+        'Informe seu WhatsApp com DDI e confirme que o número é seu.'
+      );
+      return;
+    }
     setAccepting(true);
     try {
       const res = await fetch(
         `/api/invitations/${encodeURIComponent(token)}/redeem`,
-        { method: 'POST' }
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            whatsappE164:
+              peek?.ok && peek.role === 'agent' ? normalizedWhatsApp : null,
+          }),
+        }
       );
       if (!res.ok) {
         const payload = (await res.json().catch(() => ({}))) as {
@@ -183,7 +209,7 @@ export default function JoinPage() {
         if (res.status === 409) {
           setConflictMessage(
             payload.error ||
-              'You are already in another account. Sign in with a different email to join this one.'
+              'Esta conta já participa de outra operação. Entre com outro e-mail para aceitar este convite.'
           );
         } else {
           toast.error(payload.error || 'Falha ao aceitar o convite');
@@ -200,7 +226,7 @@ export default function JoinPage() {
       toast.error('Não foi possível acessar o servidor');
       setAccepting(false);
     }
-  }, [token]);
+  }, [peek, token, whatsappConsent, whatsappE164]);
 
   const handleSignOutAndRetry = useCallback(async () => {
     setSigningOut(true);
@@ -309,7 +335,7 @@ export default function JoinPage() {
           {ROLE_LABEL[peek.role]}
         </span>
         . Link válido até{' '}
-        {new Date(peek.expires_at).toLocaleDateString(undefined, {
+        {new Date(peek.expires_at).toLocaleDateString('pt-BR', {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
@@ -326,10 +352,73 @@ export default function JoinPage() {
         <Card className="border-border bg-card w-full max-w-md">
           {inviteHeader}
           <CardContent className="flex flex-col gap-3">
+            {peek.role === 'agent' ? (
+              <div className="border-border bg-muted/25 space-y-3 rounded-lg border p-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="border-primary/20 bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg border">
+                    <MessageCircle className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-foreground text-sm font-medium">
+                      WhatsApp operacional
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                      A IA enviará por este número os convites de reunião para
+                      você aceitar, rejeitar ou transferir.
+                    </p>
+                  </div>
+                </div>
+                <label
+                  htmlFor="broker-whatsapp"
+                  className="text-foreground block text-xs font-medium"
+                >
+                  Seu WhatsApp com DDI
+                </label>
+                <Input
+                  id="broker-whatsapp"
+                  name="brokerWhatsapp"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="+55 11 99999-9999"
+                  value={whatsappE164}
+                  onChange={(event) => setWhatsappE164(event.target.value)}
+                  aria-describedby="broker-whatsapp-help"
+                  aria-invalid={
+                    whatsappE164.length > 0 &&
+                    !isValidBrokerWhatsApp(whatsappE164)
+                  }
+                  required
+                  className="h-10"
+                />
+                <p
+                  id="broker-whatsapp-help"
+                  className="text-muted-foreground text-xs"
+                >
+                  Use o número que você acompanha durante o atendimento.
+                </p>
+                <label className="text-muted-foreground flex items-start gap-2 text-xs leading-relaxed">
+                  <input
+                    type="checkbox"
+                    checked={whatsappConsent}
+                    onChange={(event) =>
+                      setWhatsappConsent(event.target.checked)
+                    }
+                    className="accent-primary mt-0.5 size-4 shrink-0"
+                  />
+                  Confirmo que este número é meu e pode receber mensagens
+                  operacionais da Studiosp.
+                </label>
+              </div>
+            ) : null}
             <Button
               onClick={handleAccept}
-              disabled={accepting}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 w-full"
+              disabled={
+                accepting ||
+                (peek.role === 'agent' &&
+                  (!isValidBrokerWhatsApp(whatsappE164) || !whatsappConsent))
+              }
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-full"
             >
               {accepting ? (
                 <>

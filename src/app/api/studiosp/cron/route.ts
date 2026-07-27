@@ -6,6 +6,7 @@ import { sendProviderText } from '@/lib/whatsapp/provider';
 import { engineSendText } from '@/lib/flows/meta-send';
 import { processNextDocumentAnalysis } from '@/lib/document-analysis/worker';
 import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
+import { processAiReplyQueue } from '@/lib/ai/reply-queue';
 
 export const maxDuration = 300;
 
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
   const cancellations = await cancelUncoveredAppointments(db);
   const documentAnalysis = await processNextDocumentAnalysis(db);
   const reactivation = await sendDueReactivationTouches(db);
+  const aiReplies = await processAiReplyQueue(db, 25);
   return NextResponse.json({
     reassigned,
     brokerNotifications,
@@ -38,6 +40,7 @@ export async function GET(request: Request) {
     cancellations,
     documentAnalysis,
     reactivation,
+    aiReplies,
   });
 }
 

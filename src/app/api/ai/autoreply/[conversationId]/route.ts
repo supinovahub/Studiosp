@@ -5,6 +5,8 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
+import { supabaseAdmin } from '@/lib/ai/admin-client';
+import { processAiReplyQueue } from '@/lib/ai/reply-queue';
 
 type Params = { params: Promise<{ conversationId: string }> };
 
@@ -39,6 +41,93 @@ export async function POST(request: Request, { params }: Params) {
 
     const { conversationId } = await params;
     const body = await request.json().catch(() => null);
+    if (body?.retry_last === true) {
+      const admin = supabaseAdmin();
+      const { data: conversation } = await admin
+        .from('conversations')
+        .select('id, account_id, contact_id, user_id, contacts(phone)')
+        .eq('id', conversationId)
+        .eq('account_id', accountId)
+        .maybeSingle();
+      if (!conversation) {
+        return NextResponse.json(
+          { error: 'Conversa não encontrada' },
+          { status: 404 }
+        );
+      }
+      const { data: trigger } = await admin
+        .from('messages')
+        .select('id')
+        .eq('account_id', accountId)
+        .eq('conversation_id', conversationId)
+        .eq('sender_type', 'customer')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!trigger) {
+        return NextResponse.json(
+          { error: 'Não há mensagem do cliente para reenfileirar' },
+          { status: 409 }
+        );
+      }
+      const contact = Array.isArray(conversation.contacts)
+        ? conversation.contacts[0]
+        : conversation.contacts;
+      const { data: existing } = await admin
+        .from('ai_reply_jobs')
+        .select('id')
+        .eq('account_id', accountId)
+        .eq('trigger_message_id', trigger.id)
+        .maybeSingle();
+      if (existing) {
+        await admin
+          .from('ai_reply_jobs')
+          .update({
+            status: 'queued',
+            attempt_count: 0,
+            available_at: new Date().toISOString(),
+            claimed_at: null,
+            lease_expires_at: null,
+            completed_at: null,
+            outcome_reason: 'manual_retry',
+            last_error: null,
+          })
+          .eq('id', existing.id);
+      } else {
+        const { error: enqueueError } = await admin.rpc(
+          'enqueue_ai_reply_job',
+          {
+            p_account_id: accountId,
+            p_conversation_id: conversationId,
+            p_contact_id: conversation.contact_id,
+            p_trigger_message_id: trigger.id,
+            p_config_owner_user_id: conversation.user_id,
+            p_sender_phone: contact?.phone ?? '',
+          }
+        );
+        if (enqueueError) {
+          console.error('[ai/autoreply] retry enqueue error:', enqueueError);
+          return NextResponse.json(
+            { error: 'Falha ao reenfileirar a mensagem' },
+            { status: 500 }
+          );
+        }
+      }
+      await admin
+        .from('conversations')
+        .update({
+          assigned_agent_id: null,
+          ai_autoreply_disabled: false,
+          ai_processing_status: 'queued',
+          ai_processing_reason: 'manual_retry',
+          ai_reply_count: 0,
+          ai_handoff_summary: null,
+        })
+        .eq('id', conversationId)
+        .eq('account_id', accountId);
+      const processed = await processAiReplyQueue(admin, 5);
+      return NextResponse.json({ success: true, queued: true, processed });
+    }
     if (!body || typeof body.paused !== 'boolean') {
       return NextResponse.json(
         { error: 'pausado (booleano) é obrigatório' },
@@ -88,6 +177,12 @@ export async function POST(request: Request, { params }: Params) {
       // a human choosing to re-engage the assistant.
       update.ai_reply_count = 0;
       update.ai_handoff_summary = null;
+      update.ai_processing_status = 'idle';
+      update.ai_processing_reason = null;
+    }
+    if (paused) {
+      update.ai_processing_status = 'paused';
+      update.ai_processing_reason = 'human_takeover';
     }
 
     const { error: upErr } = await supabase

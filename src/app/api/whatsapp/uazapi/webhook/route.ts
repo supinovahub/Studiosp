@@ -7,7 +7,7 @@ import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { downloadUazapiMedia } from '@/lib/whatsapp/uazapi';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
-import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
+import { enqueueInboundAiReply } from '@/lib/ai/reply-queue';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import {
   ensureStudiospOpportunity,
@@ -585,10 +585,11 @@ async function handleInbound(
   }
 
   if (!flow.consumed && !interactiveReplyId && text?.trim()) {
-    await dispatchInboundToAiReply({
+    await enqueueInboundAiReply({
       accountId: config.account_id,
       conversationId: conversation.id,
       contactId: contactOutcome.contact.id,
+      triggerMessageId: storedMessage.id,
       configOwnerUserId: config.user_id,
       senderPhone: phone,
     });

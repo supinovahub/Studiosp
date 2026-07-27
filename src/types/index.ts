@@ -188,6 +188,19 @@ export interface Conversation {
   ai_autoreply_disabled?: boolean;
   ai_reply_count?: number;
   ai_handoff_summary?: string | null;
+  ai_processing_status?:
+    | 'idle'
+    | 'queued'
+    | 'processing'
+    | 'retrying'
+    | 'paused'
+    | 'handoff'
+    | 'failed';
+  ai_processing_reason?: string | null;
+  ai_processing_job_id?: string | null;
+  ai_last_inbound_at?: string | null;
+  ai_last_attempt_at?: string | null;
+  ai_last_response_at?: string | null;
   history_import_id?: string | null;
   ai_context_started_at?: string | null;
 }
