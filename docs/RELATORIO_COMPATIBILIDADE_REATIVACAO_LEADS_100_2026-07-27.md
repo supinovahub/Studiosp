@@ -61,7 +61,12 @@ arquivo de origem:
 
 ## Homologação pendente
 
-1. publicar o preview da branch;
+O preview da branch foi publicado no commit `9cb768c`. A seleção automática do
+arquivo pelo Chrome ficou bloqueada porque a extensão não possui acesso a URLs
+de arquivo; por isso, nenhum arquivo foi importado pelo navegador.
+
+1. habilitar acesso a URLs de arquivo na extensão ou selecionar o CSV
+   manualmente;
 2. analisar o arquivo pela interface e conferir o resumo 100/100;
 3. criar a campanha somente como rascunho;
 4. duplicar uma amostra com 1–3 números controlados;
