@@ -813,19 +813,36 @@ export function DocumentAnalysisPanel({
 
 function studioItemIds(items: BatchDetail['items'], limit: number) {
   const eligible = new Set<string>();
+  const byId = new Map(items.map((item) => [item.id, item]));
   for (const item of items) {
     if (!['development', 'offer'].includes(item.item_type)) continue;
     const maximum = numericField(item, 'area_max_sqm');
-    const minimum = numericField(item, 'area_min_sqm');
-    const reference = maximum ?? minimum;
-    if (reference == null || reference <= 0 || reference > limit) continue;
-    eligible.add(item.id);
-    // A aprovação relaciona a opção ao pai direto. Não percorra cadeias
-    // profundas propostas pela IA, pois cabeçalhos de páginas podem aparecer
-    // como ancestrais intermediários e não são empreendimentos cadastráveis.
-    if (item.parent_item_id) eligible.add(item.parent_item_id);
+    if (maximum == null || maximum <= 0 || maximum > limit) continue;
+    if (item.item_type === 'development') {
+      eligible.add(item.id);
+      continue;
+    }
+    const parent = item.parent_item_id
+      ? byId.get(item.parent_item_id)
+      : undefined;
+    if (parent?.item_type === 'development' && hasCatalogIdentity(parent)) {
+      eligible.add(parent.id);
+      eligible.add(item.id);
+    }
   }
   return eligible;
+}
+
+function hasCatalogIdentity(item: BatchDetail['items'][number]) {
+  const hasName =
+    item.display_name.trim().length >= 6 &&
+    !/^(masp|nrs|hmp|trianon|faria lima)$/i.test(item.display_name.trim());
+  const hasLocation = item.fields.some(
+    (field) =>
+      ['address', 'neighborhood'].includes(field.field_name) &&
+      String(field.proposed_value ?? '').trim().length >= 4
+  );
+  return hasName && hasLocation;
 }
 
 function numericField(item: BatchDetail['items'][number], fieldName: string) {
