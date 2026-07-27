@@ -590,6 +590,7 @@ async function handleInbound(
       conversationId: conversation.id,
       contactId: contactOutcome.contact.id,
       configOwnerUserId: config.user_id,
+      senderPhone: phone,
     });
   }
 

@@ -16,12 +16,15 @@ import {
   prepareStudiospTurn,
   scheduleStudiospFollowups,
 } from './studiosp-orchestrator';
+import { isInboundAiReplyAllowed } from './inbound-allowlist';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
   accountId: string;
   conversationId: string;
   contactId: string;
+  /** Sender number used by the staging-safe AI reply allowlist. */
+  senderPhone: string;
   /** The account's WhatsApp config owner, used for the outbound send's
    *  audit columns (mirrors how the flow runner passes it through). */
   configOwnerUserId: string;
@@ -49,9 +52,19 @@ interface DispatchArgs {
 export async function dispatchInboundToAiReply(
   args: DispatchArgs
 ): Promise<void> {
-  const { accountId, conversationId, contactId, configOwnerUserId } = args;
+  const {
+    accountId,
+    conversationId,
+    contactId,
+    configOwnerUserId,
+    senderPhone,
+  } = args;
 
   try {
+    // Apply this before loading account configuration, conversation context or
+    // calling the provider. Blocked messages remain available to humans.
+    if (!isInboundAiReplyAllowed(senderPhone)) return;
+
     const db = supabaseAdmin();
 
     const config = await loadAiConfig(db, accountId);

@@ -10,6 +10,10 @@ Este roteiro cobre somente validações que dependem de navegador, contas reais,
 - O processamento recorrente roda a cada cinco minutos pelo Supabase; ele não depende do plano da Vercel.
 - O preview permanece protegido pela Vercel; o relógio usa um segredo de automação guardado no Vault do Supabase.
 - Para testar WhatsApp, cadastre primeiro números controlados em `OUTBOUND_TEST_NUMBERS`; não ative envios gerais.
+- Durante testes da IA, use `AI_AUTOREPLY_ALLOWED_NUMBERS` para limitar quais
+  números de leads podem acionar respostas automáticas. Mensagens de números
+  fora da lista devem continuar aparecendo no inbox, sem chamada ao provedor e
+  sem resposta da IA.
 - Não promova a branch nem exclua o banco de homologação antes da aprovação expressa do dono.
 
 ## 1. Acesso e perfis

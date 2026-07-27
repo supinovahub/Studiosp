@@ -97,6 +97,7 @@ const ARGS = {
   conversationId: 'conv-1',
   contactId: 'contact-1',
   configOwnerUserId: 'user-1',
+  senderPhone: '5527981168321',
 };
 
 function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
@@ -116,6 +117,7 @@ function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
 }
 
 beforeEach(() => {
+  vi.stubEnv('AI_AUTOREPLY_ALLOWED_NUMBERS', '');
   h.state.conv = {
     assigned_agent_id: null,
     ai_autoreply_disabled: false,
@@ -169,6 +171,16 @@ beforeEach(() => {
 });
 
 describe('dispatchInboundToAiReply — eligibility gates', () => {
+  it('does not call the provider for a number outside the allowlist', async () => {
+    vi.stubEnv('AI_AUTOREPLY_ALLOWED_NUMBERS', '5527998303052');
+
+    await dispatchInboundToAiReply(ARGS);
+
+    expect(h.loadAiConfig).not.toHaveBeenCalled();
+    expect(h.generateReply).not.toHaveBeenCalled();
+    expect(h.engineSendText).not.toHaveBeenCalled();
+  });
+
   it('claims a slot and sends on the happy path', async () => {
     await dispatchInboundToAiReply(ARGS);
     expect(h.state.rpcCalls).toEqual([
