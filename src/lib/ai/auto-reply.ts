@@ -246,7 +246,7 @@ export async function dispatchInboundToAiReply(
           .update({
             status: 'opted_out',
             ended_at: now,
-            cooldown_until: now,
+            cooldown_until: null,
           })
           .eq('account_id', accountId)
           .eq('contact_id', contactId)

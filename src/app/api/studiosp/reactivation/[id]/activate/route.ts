@@ -77,7 +77,7 @@ export async function POST(
         });
         const { data: latestSession, error: activeSessionError } = await db
           .from('reactivation_sessions')
-          .select('campaign_id,status,cooldown_until')
+          .select('campaign_id,status')
           .eq('account_id', accountId)
           .eq('contact_id', contact.id)
           .order('started_at', { ascending: false })
@@ -89,16 +89,6 @@ export async function POST(
             latestSession.campaign_id === id
               ? 'Contato já está ativo nesta campanha.'
               : 'Contato já participa de outra campanha ativa.'
-          );
-        }
-        if (
-          latestSession?.cooldown_until &&
-          new Date(latestSession.cooldown_until).getTime() > Date.now()
-        ) {
-          throw new Error(
-            `Contato está em período de segurança até ${new Date(
-              latestSession.cooldown_until
-            ).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`
           );
         }
         const conversation = await findOrCreateConversation(

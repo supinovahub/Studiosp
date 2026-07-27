@@ -18,9 +18,10 @@ reativação para o orquestrador.
 
 - criada a tabela `reactivation_sessions`, com RLS, grants explícitos e índice
   único parcial que permite somente uma sessão ativa por contato;
-- ativação de campanha bloqueia contato já ativo ou em período de segurança;
+- ativação de campanha bloqueia somente contato que já participa de uma sessão
+  ativa;
 - a resposta do contato encerra a sessão, cancela contatos agendados ou em
-  processamento em todas as campanhas e aplica cooldown de 30 dias;
+  processamento em todas as campanhas sem aplicar cooldown após a resposta;
 - o contexto conhecido da importação fica ligado à sessão e passa a orientar a
   IA mesmo quando a oportunidade já existia;
 - a fila aplica uma janela de silêncio de 8 segundos e marca jobs anteriores da

@@ -292,9 +292,7 @@ export async function prepareStudiospTurn(args: {
         status: 'replied',
         replied_at: endedAt,
         ended_at: endedAt,
-        cooldown_until: new Date(
-          Date.now() + 30 * 24 * 60 * 60 * 1000
-        ).toISOString(),
+        cooldown_until: null,
       })
       .eq('id', reactivationSession.id)
       .eq('status', 'active');
