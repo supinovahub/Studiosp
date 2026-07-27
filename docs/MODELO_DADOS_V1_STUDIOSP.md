@@ -625,6 +625,38 @@ Regras:
 - toda saída para WhatsApp usa idempotência própria;
 - jobs não varrem tabelas inteiras sem índice parcial de pendência.
 
+### 16.1 Fila durável de respostas da IA
+
+`ai_reply_jobs` registra um job único por `(account_id, trigger_message_id)`.
+Cada job guarda conversa, contato, mensagem disparadora, telefone normalizado,
+responsável pela conexão, correlação, disponibilidade, lease, tentativas,
+resultado e erro sanitizado.
+
+`ai_reply_attempts` registra cada processamento com número da tentativa, estado,
+motivo, latência e timestamps. Dono/administrador possuem leitura; somente o
+servidor escreve.
+
+Estados dos jobs:
+
+```text
+queued, processing, retrying, completed, skipped, handoff, failed
+```
+
+Estados projetados em `conversations.ai_processing_status`:
+
+```text
+idle, queued, processing, retrying, paused, handoff, failed
+```
+
+O claim usa `FOR UPDATE SKIP LOCKED`, lease recuperável e seleção do job mais
+antigo de cada conversa. Jobs posteriores da mesma conversa aguardam o anterior
+terminar. O webhook tenta drenar a fila imediatamente e o cron é a contingência
+durável.
+
+Falhas temporárias usam até três tentativas com backoff e jitter. Falha
+definitiva ou atraso superior a três minutos abre `attention_item` idempotente.
+O limite de respostas é por sessão e, quando atingido, produz handoff explícito.
+
 ## 17. Matriz de acesso por RLS
 
 | Domínio               | Dono           | Corretor               | Servidor IA/webhook      |

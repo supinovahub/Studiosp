@@ -7,7 +7,7 @@ import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe';
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature';
 import { runAutomationsForTrigger } from '@/lib/automations/engine';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
-import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply';
+import { enqueueInboundAiReply } from '@/lib/ai/reply-queue';
 import {
   ensureStudiospOpportunity,
   transcribeStudiospAudio,
@@ -927,10 +927,11 @@ async function processMessage(
   // the webhook dispatch below); `dispatchInboundToAiReply` owns its
   // eligibility gates + try/catch and never throws.
   if (!flowConsumed && !interactiveReplyId && inboundText.trim()) {
-    await dispatchInboundToAiReply({
+    await enqueueInboundAiReply({
       accountId,
       conversationId: conversation.id,
       contactId: contactRecord.id,
+      triggerMessageId: storedMessage.id,
       configOwnerUserId,
       senderPhone,
     });

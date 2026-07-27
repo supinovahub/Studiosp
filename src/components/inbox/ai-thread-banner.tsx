@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Sparkles, Hand, Undo2, Loader2 } from "lucide-react";
+import { Sparkles, Hand, Undo2, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -51,6 +51,8 @@ interface AiThreadBannerProps {
   /** Current assignee; when a human owns the thread the bot won't run,
    *  so the "AI active" banner is suppressed. */
   assignedAgentId?: string | null;
+  processingStatus?: string | null;
+  processingReason?: string | null;
   /** The acting agent — "Take over" assigns the thread to them. */
   currentUserId?: string | null;
   /** Called after a successful toggle so the parent can patch its local
@@ -75,6 +77,8 @@ export function AiThreadBanner({
   disabled,
   handoffSummary,
   assignedAgentId,
+  processingStatus,
+  processingReason,
   currentUserId,
   onChange,
 }: AiThreadBannerProps) {
@@ -134,8 +138,68 @@ export function AiThreadBanner({
     [conversationId, currentUserId, onChange, t],
   );
 
+  const retry = useCallback(async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/ai/autoreply/${conversationId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retry_last: true }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body?.error ?? "Não foi possível tentar novamente");
+        return;
+      }
+      toast.success("Mensagem reenfileirada para a IA");
+    } catch {
+      toast.error(t("networkError"));
+    } finally {
+      setBusy(false);
+    }
+  }, [conversationId, t]);
+
   // Account has no auto-reply → nothing to show. (Still loading → nothing.)
   if (!autoReplyOn) return null;
+
+  if (processingStatus === "queued" || processingStatus === "processing" || processingStatus === "retrying") {
+    const label =
+      processingStatus === "queued"
+        ? "Resposta da IA na fila"
+        : processingStatus === "retrying"
+          ? "Falha temporária — nova tentativa agendada"
+          : "A IA está processando a resposta";
+    return (
+      <Banner tone="primary">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-primary" />
+          <span className="truncate font-medium text-foreground">{label}</span>
+        </div>
+        <BannerButton onClick={() => toggle(true)} busy={busy} icon={Hand}>
+          {t("takeOver")}
+        </BannerButton>
+      </Banner>
+    );
+  }
+
+  if (processingStatus === "failed") {
+    return (
+      <Banner tone="danger">
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 font-medium text-destructive">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            A IA não conseguiu responder
+          </p>
+          <p className="truncate text-muted-foreground" title={processingReason ?? undefined}>
+            O atendimento foi sinalizado para revisão humana.
+          </p>
+        </div>
+        <BannerButton onClick={retry} busy={busy} icon={RefreshCw}>
+          Tentar novamente
+        </BannerButton>
+      </Banner>
+    );
+  }
 
   // Paused here (a human took over, or the model handed off).
   if (paused) {
@@ -179,7 +243,7 @@ function Banner({
   tone,
   children,
 }: {
-  tone: "primary" | "muted";
+  tone: "primary" | "muted" | "danger";
   children: React.ReactNode;
 }) {
   return (
@@ -188,7 +252,9 @@ function Banner({
         "flex items-center gap-3 border-b px-3 py-2 text-xs sm:px-4",
         tone === "primary"
           ? "border-primary/20 bg-primary/5"
-          : "border-border bg-muted/40",
+          : tone === "danger"
+            ? "border-destructive/30 bg-destructive/5"
+            : "border-border bg-muted/40",
       )}
     >
       {children}

@@ -1218,6 +1218,8 @@ export function MessageThread({
         disabled={conversation.ai_autoreply_disabled ?? false}
         handoffSummary={conversation.ai_handoff_summary}
         assignedAgentId={assignedAgentId}
+        processingStatus={conversation.ai_processing_status}
+        processingReason={conversation.ai_processing_reason}
         currentUserId={user?.id}
         onChange={(patch) => {
           if ('assigned_agent_id' in patch) {

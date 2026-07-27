@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select';
 import { SettingsPanelHead } from './settings-panel-head';
 import { AiKnowledgeCard } from './ai-knowledge';
+import { AiReliabilityPanel } from './ai-reliability-panel';
 import { AI_PROVIDER_DEFAULT_MODEL } from '@/lib/ai/defaults';
 import type { AiProvider } from '@/lib/ai/types';
 import type { AccountMember } from '@/types';
@@ -78,7 +79,7 @@ export function AiConfig() {
   const [communicationPrompt, setCommunicationPrompt] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
-  const [maxPerConversation, setMaxPerConversation] = useState(3);
+  const [maxPerConversation, setMaxPerConversation] = useState(30);
   const [allowedNumbers, setAllowedNumbers] = useState('');
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
@@ -106,7 +107,7 @@ export function AiConfig() {
         setCommunicationPrompt(data.communication_prompt ?? '');
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
-        setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
+        setMaxPerConversation(data.auto_reply_max_per_conversation ?? 30);
         setAllowedNumbers(
           (data.auto_reply_allowed_numbers ?? []).join('\n')
         );
@@ -455,12 +456,12 @@ export function AiConfig() {
               <Input
                 id="ai-max"
                 type="number"
-                min={1}
-                max={20}
+                min={10}
+                max={50}
                 value={maxPerConversation}
                 onChange={(e) =>
                   setMaxPerConversation(
-                    Math.min(20, Math.max(1, Number(e.target.value) || 1))
+                    Math.min(50, Math.max(10, Number(e.target.value) || 30))
                   )
                 }
                 disabled={disabled || !autoReplyEnabled}
@@ -515,6 +516,8 @@ export function AiConfig() {
             </div>
           </CardContent>
         </Card>
+
+        <AiReliabilityPanel />
 
         <AiKnowledgeCard
           accountId={accountId}

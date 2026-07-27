@@ -13,6 +13,32 @@ Especificação da importação segura de conversas antigas:
 
 ## Estado da implementação
 
+### Robustez operacional da IA — decisão de 27 de julho de 2026
+
+#### Confirmado
+
+- toda mensagem elegível para resposta automática deve gerar um trabalho
+  persistido e idempotente antes do processamento;
+- o webhook não é a única garantia de execução: jobs abandonados ou com falha
+  temporária são retomados pelo processador agendado;
+- uma conversa é processada em ordem, com no máximo um job ativo por vez;
+- falhas temporárias recebem até três tentativas com espera progressiva e
+  jitter;
+- o limite de segurança é de 30 respostas por sessão de 24 horas, configurável
+  entre 10 e 50;
+- atingir o limite nunca silencia a IA: pausa a conversa, abre atenção e
+  transfere o atendimento para revisão humana;
+- mensagens sem resposta por mais de três minutos geram alerta operacional;
+- o Inbox deve mostrar o estado real: fila, processamento, retry, pausa,
+  handoff ou falha;
+- o dono terá métricas agregadas das últimas 24 horas, inclusive fila, falhas,
+  handoffs, atrasos e latência P95;
+- cada tentativa mantém correlação com conta, conversa e mensagem que a
+  originou, sem duplicar o conteúdo integral do lead;
+- quando o provedor pode ter aceitado uma mensagem mas a persistência local
+  falha, o sistema prefere revisão humana a um retry que possa duplicar o
+  envio.
+
 A V1 está implementada na branch de homologação `codex/v1-platform`. Produção e `main` permanecem preservadas. A promoção depende da conclusão do roteiro de homologação e de autorização expressa do dono.
 
 ### Situação em 24 de julho de 2026

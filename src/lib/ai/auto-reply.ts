@@ -28,7 +28,15 @@ interface DispatchArgs {
   /** The account's WhatsApp config owner, used for the outbound send's
    *  audit columns (mirrors how the flow runner passes it through). */
   configOwnerUserId: string;
+  /** Exact inbound row that created the durable job. */
+  triggerMessageId?: string | null;
 }
+
+export type AiDispatchResult =
+  | { outcome: 'completed' }
+  | { outcome: 'handoff'; reason: string }
+  | { outcome: 'skipped'; reason: string }
+  | { outcome: 'failed'; reason: string; retryable: boolean };
 
 /**
  * AI auto-reply for a freshly-arrived inbound message.
@@ -51,25 +59,27 @@ interface DispatchArgs {
  */
 export async function dispatchInboundToAiReply(
   args: DispatchArgs
-): Promise<void> {
+): Promise<AiDispatchResult> {
   const {
     accountId,
     conversationId,
     contactId,
     configOwnerUserId,
     senderPhone,
+    triggerMessageId,
   } = args;
 
   try {
     const db = supabaseAdmin();
 
     const config = await loadAiConfig(db, accountId);
-    if (!config || !config.autoReplyEnabled) return;
+    if (!config || !config.autoReplyEnabled)
+      return { outcome: 'skipped', reason: 'ai_config_disabled' };
     // Block before loading conversation context or calling the provider.
     if (
       !isInboundAiReplyAllowed(senderPhone, config.autoReplyAllowedNumbers)
     )
-      return;
+      return { outcome: 'skipped', reason: 'sender_not_allowed' };
 
     // Deterministic, user-configured responders win over the LLM — the
     // caller already excludes messages a Flow consumed. Message-level
@@ -86,7 +96,8 @@ export async function dispatchInboundToAiReply(
       .eq('is_active', true)
       .in('trigger_type', ['new_message_received', 'keyword_match'])
       .limit(1);
-    if (autoResponders && autoResponders.length > 0) return;
+    if (autoResponders && autoResponders.length > 0)
+      return { outcome: 'skipped', reason: 'automation_has_priority' };
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
@@ -95,12 +106,48 @@ export async function dispatchInboundToAiReply(
       )
       .eq('id', conversationId)
       .maybeSingle();
-    if (convErr || !conv) return;
-    if (conv.assigned_agent_id) return; // a human owns this thread
-    if (conv.ai_autoreply_disabled) return; // handed off / turned off here
+    if (convErr)
+      return {
+        outcome: 'failed',
+        reason: 'conversation_lookup_failed',
+        retryable: true,
+      };
+    if (!conv) return { outcome: 'skipped', reason: 'conversation_not_found' };
+    if (conv.assigned_agent_id)
+      return { outcome: 'skipped', reason: 'assigned_to_human' };
+    if (conv.ai_autoreply_disabled)
+      return { outcome: 'skipped', reason: 'conversation_paused' };
+    const contextStartedAt = conv.ai_context_started_at
+      ? new Date(conv.ai_context_started_at).getTime()
+      : 0;
+    if (
+      contextStartedAt > 0 &&
+      Date.now() - contextStartedAt >= 24 * 60 * 60 * 1000
+    ) {
+      const newContextStartedAt = new Date().toISOString();
+      await db
+        .from('conversations')
+        .update({
+          ai_reply_count: 0,
+          ai_context_started_at: newContextStartedAt,
+          ai_handoff_summary: null,
+        })
+        .eq('id', conversationId)
+        .eq('account_id', accountId);
+      conv.ai_reply_count = 0;
+      conv.ai_context_started_at = newContextStartedAt;
+    }
     // Cheap early-out; the authoritative cap check is the atomic claim
     // below (this read can race a concurrent inbound).
-    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return;
+    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) {
+      await handoffForReplyLimit({
+        db,
+        accountId,
+        conversationId,
+        limit: config.autoReplyMaxPerConversation,
+      });
+      return { outcome: 'handoff', reason: 'session_reply_limit_reached' };
+    }
 
     const messages = await buildConversationContext(
       db,
@@ -108,16 +155,20 @@ export async function dispatchInboundToAiReply(
       undefined,
       conv.ai_context_started_at
     );
-    if (messages.length === 0) return;
+    if (messages.length === 0)
+      return { outcome: 'skipped', reason: 'no_conversation_context' };
 
-    const { data: triggerMessage } = await db
+    const triggerQuery = db
       .from('messages')
       .select('id')
       .eq('conversation_id', conversationId)
-      .eq('sender_type', 'customer')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .eq('sender_type', 'customer');
+    const { data: triggerMessage } = triggerMessageId
+      ? await triggerQuery.eq('id', triggerMessageId).maybeSingle()
+      : await triggerQuery
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
     // Account-wide throttle on the shared BYO key. The per-conversation
     // cap bounds one thread; this bounds a burst across many threads (a
@@ -132,7 +183,11 @@ export async function dispatchInboundToAiReply(
       console.warn(
         `[ai auto-reply] account ${accountId} hit the per-account rate limit — skipping this inbound.`
       );
-      return;
+      return {
+        outcome: 'failed',
+        reason: 'account_rate_limited',
+        retryable: true,
+      };
     }
 
     // Ground the reply in the account's knowledge base (best-effort).
@@ -184,7 +239,7 @@ export async function dispatchInboundToAiReply(
         .from('conversations')
         .update({ ai_autoreply_disabled: true })
         .eq('id', conversationId);
-      return;
+      return { outcome: 'handoff', reason: 'lead_opted_out' };
     }
     const studiosp = await prepareStudiospTurn({
       db,
@@ -284,7 +339,7 @@ export async function dispatchInboundToAiReply(
           { onConflict: 'account_id,deduplication_key', ignoreDuplicates: true }
         );
       }
-      return;
+      return { outcome: 'handoff', reason: 'model_or_policy_handoff' };
     }
 
     // Atomically claim a reply slot: the cap check + increment happen in
@@ -305,9 +360,21 @@ export async function dispatchInboundToAiReply(
       // service role, or the migration not applied. Log it loudly: a
       // silent return makes "auto-reply never fires" undiagnosable.
       console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr);
-      return;
+      return {
+        outcome: 'failed',
+        reason: 'reply_slot_claim_failed',
+        retryable: true,
+      };
     }
-    if (claimed !== true) return; // lost the per-conversation cap race
+    if (claimed !== true) {
+      await handoffForReplyLimit({
+        db,
+        accountId,
+        conversationId,
+        limit: config.autoReplyMaxPerConversation,
+      });
+      return { outcome: 'handoff', reason: 'session_reply_limit_reached' };
+    }
 
     const messageParts = splitAiMessage(text);
     for (const [index, messagePart] of messageParts.entries()) {
@@ -337,7 +404,68 @@ export async function dispatchInboundToAiReply(
       accountId,
       opportunityId: studiosp.opportunityId,
     });
+    return { outcome: 'completed' };
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err);
+    const reason = err instanceof Error ? err.message : 'unknown_dispatch_error';
+    return {
+      outcome: 'failed',
+      reason,
+      // If the provider accepted the send but local persistence failed, an
+      // automatic retry could duplicate a real WhatsApp message. Escalate for
+      // reconciliation instead of guessing.
+      retryable: !(
+        reason.toLowerCase().includes('mensagem enviada') &&
+        reason.toLowerCase().includes('salv')
+      ),
+    };
   }
+}
+
+async function handoffForReplyLimit({
+  db,
+  accountId,
+  conversationId,
+  limit,
+}: {
+  db: ReturnType<typeof supabaseAdmin>;
+  accountId: string;
+  conversationId: string;
+  limit: number;
+}) {
+  const summary = `A sessão atingiu o limite de segurança de ${limit} respostas da IA. O atendimento precisa de revisão humana.`;
+  await db
+    .from('conversations')
+    .update({
+      ai_autoreply_disabled: true,
+      ai_handoff_summary: summary,
+      ai_processing_status: 'handoff',
+      ai_processing_reason: 'session_reply_limit_reached',
+    })
+    .eq('id', conversationId)
+    .eq('account_id', accountId);
+
+  const { data: opportunity } = await db
+    .from('opportunities')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('primary_conversation_id', conversationId)
+    .not('stage', 'in', '("won","lost")')
+    .maybeSingle();
+  if (!opportunity) return;
+
+  await db.from('attention_items').upsert(
+    {
+      account_id: accountId,
+      opportunity_id: opportunity.id,
+      assigned_role: 'owner',
+      kind: 'ai_handoff',
+      severity: 'warning',
+      title: 'Limite de segurança da IA atingido',
+      context: { summary, limit, conversation_id: conversationId },
+      due_at: new Date().toISOString(),
+      deduplication_key: `ai-reply-limit:${conversationId}`,
+    },
+    { onConflict: 'account_id,deduplication_key', ignoreDuplicates: true }
+  );
 }
