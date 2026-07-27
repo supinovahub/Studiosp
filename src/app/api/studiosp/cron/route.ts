@@ -88,7 +88,6 @@ async function reassignExpiredOffers(db: ReturnType<typeof supabaseAdmin>) {
       .eq('account_id', offer.account_id)
       .eq('is_active', true)
       .eq('is_available', true)
-      .not('whatsapp_verified_at', 'is', null)
       .order('routing_priority')
       .order('last_assignment_at', { ascending: true, nullsFirst: true })
       .limit(25);
@@ -128,7 +127,7 @@ async function reassignExpiredOffers(db: ReturnType<typeof supabaseAdmin>) {
             0,
             ...(previousOffers ?? []).map((item) => Number(item.attempt_order))
           ) + 1,
-        channel: 'both',
+        channel: next.whatsapp_verified_at ? 'both' : 'dashboard',
         expires_at: expiresAt,
       });
     } else {

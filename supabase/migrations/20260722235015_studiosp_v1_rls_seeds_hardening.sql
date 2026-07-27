@@ -1685,7 +1685,7 @@ begin
     set status = 'expired'
     where id = v_offer.id
     returning * into v_offer;
-    raise exception 'O prazo desta oferta terminou.' using errcode = '23514';
+    return v_offer;
   end if;
   if p_action in ('reject', 'transfer') and (
     p_reason_id is null or not exists (
@@ -1746,7 +1746,6 @@ begin
     where bp.account_id = v_offer.account_id
       and bp.is_active and bp.is_available
       and (bp.unavailable_until is null or bp.unavailable_until <= now())
-      and bp.whatsapp_verified_at is not null
       and bp.id <> v_broker_id
       and not exists (
         select 1 from public.assignment_offers previous
@@ -1774,7 +1773,16 @@ begin
         channel, expires_at
       ) values (
         v_offer.account_id, v_offer.appointment_id, v_next_broker_id,
-        v_next_order, 'both',
+        v_next_order,
+        case
+          when exists (
+            select 1
+            from public.broker_profiles channel_broker
+            where channel_broker.id = v_next_broker_id
+              and channel_broker.whatsapp_verified_at is not null
+          ) then 'both'
+          else 'dashboard'
+        end,
         least(
           now() + make_interval(mins => v_policy.broker_offer_sla_minutes),
           greatest(v_appointment.starts_at, now() + interval '1 minute')
