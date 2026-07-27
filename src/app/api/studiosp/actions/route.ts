@@ -5,6 +5,10 @@ import {
   toErrorResponse,
 } from '@/lib/auth/account';
 import { hasMinRole } from '@/lib/auth/roles';
+import {
+  isValidBrokerWhatsApp,
+  normalizeBrokerWhatsApp,
+} from '@/lib/studiosp/broker-phone';
 
 function text(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
@@ -108,6 +112,35 @@ export async function POST(request: NextRequest) {
       });
       actionError(result.error);
       return NextResponse.json({ offer: result.data });
+    }
+
+    if (action === 'register_own_broker_whatsapp') {
+      if (role !== 'agent') {
+        throw new ForbiddenError(
+          'Somente corretores podem confirmar o WhatsApp operacional.'
+        );
+      }
+      const whatsappE164 = normalizeBrokerWhatsApp(body.whatsappE164);
+      if (!isValidBrokerWhatsApp(whatsappE164)) {
+        return NextResponse.json(
+          { error: 'Informe um WhatsApp válido com DDI.' },
+          { status: 400 }
+        );
+      }
+      const result = await supabase.rpc(
+        'studiosp_register_my_broker_whatsapp',
+        {
+          p_whatsapp_e164: whatsappE164,
+        }
+      );
+      if (result.error?.code === '23505') {
+        return NextResponse.json(
+          { error: 'Este WhatsApp já pertence a outro corretor.' },
+          { status: 409 }
+        );
+      }
+      actionError(result.error);
+      return NextResponse.json({ broker: result.data });
     }
 
     if (!hasMinRole(role, 'admin')) {
@@ -435,28 +468,26 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'save_broker') {
-      const rawWhatsapp = text(body.whatsappE164).replace(/[\s()-]/g, '');
-      const whatsappE164 = rawWhatsapp
-        ? rawWhatsapp.startsWith('+')
-          ? rawWhatsapp
-          : `+${rawWhatsapp}`
-        : null;
-      if (whatsappE164 && !/^\+[1-9][0-9]{7,14}$/.test(whatsappE164)) {
+      const whatsappE164 = normalizeBrokerWhatsApp(body.whatsappE164) || null;
+      if (whatsappE164 && !isValidBrokerWhatsApp(whatsappE164)) {
         return NextResponse.json(
           { error: 'Informe um WhatsApp válido com DDI.' },
           { status: 400 }
         );
       }
+      const whatsappVerified =
+        Boolean(whatsappE164) && body.whatsappVerified === true;
+      const isAvailable = body.isAvailable !== false && whatsappVerified;
       const result = await supabase
         .from('broker_profiles')
         .update({
           whatsapp_e164: whatsappE164,
-          whatsapp_verified_at: body.whatsappVerified
+          whatsapp_verified_at: whatsappVerified
             ? new Date().toISOString()
             : null,
           routing_priority: Number(body.routingPriority ?? 100),
           max_parallel_assignments: Number(body.maxParallelAssignments ?? 1),
-          is_available: body.isAvailable !== false,
+          is_available: isAvailable,
           is_active: body.isActive !== false,
         })
         .eq('account_id', accountId)

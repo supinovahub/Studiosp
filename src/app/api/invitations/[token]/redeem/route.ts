@@ -26,6 +26,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
+import { normalizeBrokerWhatsApp } from '@/lib/studiosp/broker-phone';
 import { createClient } from '@/lib/supabase/server';
 
 function getClientIp(request: Request): string {
@@ -47,6 +48,18 @@ function rpcErrorToResponse(err: PostgrestError): NextResponse {
     return NextResponse.json(
       { error: 'Falha ao processar a solicitação' },
       { status: 400 }
+    );
+  }
+  if (err.code === '23514') {
+    return NextResponse.json(
+      { error: 'Informe um WhatsApp válido com DDI.' },
+      { status: 400 }
+    );
+  }
+  if (err.code === 'P0001') {
+    return NextResponse.json(
+      { error: 'Este WhatsApp já pertence a outro corretor.' },
+      { status: 409 }
     );
   }
   if (err.code === '23505') {
@@ -79,6 +92,10 @@ export async function POST(
   }
 
   const supabase = await createClient();
+  const body = (await request.json().catch(() => ({}))) as {
+    whatsappE164?: unknown;
+  };
+  const whatsappE164 = normalizeBrokerWhatsApp(body.whatsappE164) || null;
 
   // The RPC checks `auth.uid()` itself, but failing fast here
   // gives a cleaner 401 without a Supabase round trip on the
@@ -90,9 +107,13 @@ export async function POST(
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
-  const { data: accountId, error } = await supabase.rpc('redeem_invitation', {
-    p_token_hash: hashInviteToken(token),
-  });
+  const { data: accountId, error } = await supabase.rpc(
+    'redeem_invitation_with_broker_whatsapp',
+    {
+      p_token_hash: hashInviteToken(token),
+      p_whatsapp_e164: whatsappE164,
+    }
+  );
 
   if (error) return rpcErrorToResponse(error);
 

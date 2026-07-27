@@ -45,6 +45,26 @@ export async function GET(
       );
     }
 
+    // A URL do provedor é opaca, mas não deve funcionar como atalho para
+    // baixar uma mídia de outra conversa da conta. A consulta passa pelo
+    // RLS de `messages`, então corretores só encontram mídias de leads que
+    // foram atribuídos a eles após a aceitação da reunião.
+    const storedMediaUrl = `/api/whatsapp/media/${mediaId}`;
+    const { data: visibleMessage, error: messageError } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('account_id', accountId)
+      .eq('media_url', storedMediaUrl)
+      .limit(1)
+      .maybeSingle();
+
+    if (messageError || !visibleMessage) {
+      return NextResponse.json(
+        { error: 'Mídia não encontrada' },
+        { status: 404 }
+      );
+    }
+
     // Fetch and decrypt WhatsApp config
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
