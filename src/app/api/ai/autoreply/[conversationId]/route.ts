@@ -120,6 +120,9 @@ export async function POST(request: Request, { params }: Params) {
           ai_autoreply_disabled: false,
           ai_processing_status: 'queued',
           ai_processing_reason: 'manual_retry',
+          ai_control_mode: 'ai_active',
+          ai_control_reason: null,
+          ai_control_changed_at: new Date().toISOString(),
           ai_reply_count: 0,
           ai_handoff_summary: null,
         })
@@ -140,7 +143,7 @@ export async function POST(request: Request, { params }: Params) {
     // Confirm the conversation is in the caller's account before writing.
     const { data: conv, error: convErr } = await supabase
       .from('conversations')
-      .select('id')
+      .select('id, ai_control_mode')
       .eq('id', conversationId)
       .eq('account_id', accountId)
       .maybeSingle();
@@ -158,7 +161,20 @@ export async function POST(request: Request, { params }: Params) {
       );
     }
 
-    const update: Record<string, unknown> = { ai_autoreply_disabled: paused };
+    const update: Record<string, unknown> = {
+      ai_autoreply_disabled: paused,
+      ai_control_mode: paused
+        ? assignToMe
+          ? 'human_active'
+          : 'paused'
+        : 'ai_active',
+      ai_control_reason: paused
+        ? assignToMe
+          ? 'human_takeover'
+          : 'manual_pause'
+        : null,
+      ai_control_changed_at: new Date().toISOString(),
+    };
 
     if (paused) {
       if (assignToMe) update.assigned_agent_id = userId;
@@ -196,6 +212,28 @@ export async function POST(request: Request, { params }: Params) {
         { error: 'Falha ao atualizar a conversa' },
         { status: 500 }
       );
+    }
+    if (paused && conv.ai_control_mode === 'awaiting_guidance') {
+      const admin = supabaseAdmin();
+      const resolvedAt = new Date().toISOString();
+      await Promise.all([
+        admin
+          .from('ai_guidance_requests')
+          .update({ status: 'cancelled', resolved_at: resolvedAt })
+          .eq('account_id', accountId)
+          .eq('conversation_id', conversationId)
+          .in('status', ['open', 'resolving']),
+        admin
+          .from('attention_items')
+          .update({
+            status: 'resolved',
+            resolved_at: resolvedAt,
+            resolution: { outcome: 'human_takeover' },
+          })
+          .eq('account_id', accountId)
+          .eq('deduplication_key', `ai-guidance:${conversationId}`)
+          .in('status', ['open', 'snoozed']),
+      ]);
     }
 
     return NextResponse.json({ success: true, paused });

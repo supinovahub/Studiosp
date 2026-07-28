@@ -8,6 +8,7 @@ import {
   opportunityInvitation,
   qualificationQuestionPrompt,
   requestedStartFromExtraction,
+  selectAvailabilitySlots,
 } from './scheduling-intent';
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
 import { isValidQualificationValue } from './qualification-validation';
@@ -23,6 +24,12 @@ import {
   postureInstruction,
   type ConversationTurn,
 } from './conversation-behavior';
+import {
+  loadPreviousAssistantSemanticContext,
+  type AiSemanticContext,
+} from './semantic-context';
+import { openOperationalFailure } from './guidance';
+import { nextAllowedFollowupAt } from './followup-window';
 
 // O orquestrador combina respostas estruturadas da IA e linhas de várias tabelas.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -244,6 +251,7 @@ export interface StudiospTurnContext {
   outboundOverride: string | null;
   qualificationComplete: boolean;
   nextQualificationPrompt: string | null;
+  semanticContext: AiSemanticContext;
 }
 
 export async function prepareStudiospTurn(args: {
@@ -260,8 +268,13 @@ export async function prepareStudiospTurn(args: {
     grounding: [],
     reservedAppointment: null,
     outboundOverride: null,
-    qualificationComplete: true,
+    qualificationComplete: false,
     nextQualificationPrompt: null,
+    semanticContext: {
+      version: 1,
+      mode: 'qualification',
+      expectedQuestionKey: null,
+    },
   };
   const { data: opportunity } = await args.db
     .from('opportunities')
@@ -299,6 +312,15 @@ export async function prepareStudiospTurn(args: {
       outboundOverride: appointmentConfirmation(existingReservation),
       qualificationComplete: true,
       nextQualificationPrompt: null,
+      semanticContext: {
+        version: 1,
+        mode: 'qualification',
+        expectedQuestionKey: null,
+        offeredSlotId: String(existingReservation.guaranteed_slot_id ?? ''),
+        offeredSlotIds: [
+          String(existingReservation.guaranteed_slot_id ?? ''),
+        ].filter(Boolean),
+      },
     };
   }
 
@@ -333,14 +355,11 @@ export async function prepareStudiospTurn(args: {
         .in('status', ['scheduled', 'processing'])
         .in('reactivation_lead_id', reactivationIds);
     }
-    const endedAt = new Date().toISOString();
+    const repliedAt = new Date().toISOString();
     await args.db
       .from('reactivation_sessions')
       .update({
-        status: 'replied',
-        replied_at: endedAt,
-        ended_at: endedAt,
-        cooldown_until: null,
+        replied_at: repliedAt,
       })
       .eq('id', reactivationSession.id)
       .eq('status', 'active');
@@ -406,7 +425,16 @@ export async function prepareStudiospTurn(args: {
     requested_start_at: null,
     insists_on_requested_time: false,
   };
-  const turn = conversationTurn(args.messages, questions as Row[]);
+  const previousSemanticContext = await loadPreviousAssistantSemanticContext({
+    db: args.db,
+    conversationId: args.conversationId,
+    triggerMessageId: args.triggerMessageId,
+  });
+  const turn = conversationTurn(
+    args.messages,
+    questions as Row[],
+    previousSemanticContext?.expectedQuestionKey
+  );
   const posture = classifyLeadPosture({
     ...turn,
     isReactivation: Boolean(reactivationSession),
@@ -498,6 +526,13 @@ export async function prepareStudiospTurn(args: {
       const allowedOptions = (options as Row[])
         .filter((option) => option.question_id === question.id)
         .map((option) => String(option.value));
+      answer.normalized_value = normalizeQualificationValue({
+        question,
+        normalizedValue: answer.normalized_value,
+        options: (options as Row[]).filter(
+          (option) => option.question_id === question.id
+        ),
+      });
       if (
         !isValidQualificationValue(
           question,
@@ -611,6 +646,20 @@ export async function prepareStudiospTurn(args: {
         })
         .eq('id', runId);
     }
+    await openOperationalFailure({
+      db: args.db,
+      accountId: args.accountId,
+      conversationId: args.conversationId,
+      opportunityId: String(opportunity.id),
+      triggerMessageId: args.triggerMessageId,
+      reasonCode: 'qualification_extraction_failed',
+      summary: 'A extração estruturada da qualificação falhou neste turno.',
+      retryable: true,
+      context: {
+        sanitized_error:
+          error instanceof Error ? error.message.slice(0, 500) : 'unknown',
+      },
+    });
   }
 
   const finalization = await args.db.rpc(
@@ -644,10 +693,15 @@ export async function prepareStudiospTurn(args: {
 
   let reservedAppointment: Row | null = null;
   let reservationFailed = false;
-  const acceptedSlotId =
+  const extractedAcceptedSlotId =
     typeof extraction.accepted_slot_id === 'string'
       ? extraction.accepted_slot_id
       : null;
+  const acceptedSlotId = trustedAcceptedSlotId({
+    extractedSlotId: extractedAcceptedSlotId,
+    previousSemanticContext,
+    latestUserMessage: turn.latestUserMessage,
+  });
   const explicitlyAcceptedSlot = reservableSlots.find(
     (slot) => slot.id === acceptedSlotId
   );
@@ -779,6 +833,12 @@ export async function prepareStudiospTurn(args: {
   const nextQualificationPrompt = qualificationQuestionPrompt(nextQuestion);
   const latestUserText = turn.latestUserMessage;
   const availabilityInquiry = isAvailabilityInquiry(latestUserText);
+  const availabilitySlots = availabilityInquiry
+    ? selectAvailabilitySlots({
+        slots: reservableSlots,
+        latestMessage: latestUserText,
+      })
+    : [];
   const confirmedByQuestion = new Map(
     (questions as Row[]).map((question) => [question.id, question])
   );
@@ -826,6 +886,18 @@ export async function prepareStudiospTurn(args: {
     'Faça no máximo uma pergunta por mensagem. Responda desvios úteis e retome a próxima pergunta depois, sem interrogatório.',
   ].filter((item): item is string => Boolean(item));
 
+  if (reactivationSession && (qualification.complete || reservedAppointment)) {
+    await args.db
+      .from('reactivation_sessions')
+      .update({
+        status: 'completed',
+        ended_at: new Date().toISOString(),
+        cooldown_until: null,
+      })
+      .eq('id', reactivationSession.id)
+      .eq('status', 'active');
+  }
+
   return {
     opportunityId: opportunity.id,
     grounding,
@@ -850,6 +922,27 @@ export async function prepareStudiospTurn(args: {
             : null,
     qualificationComplete: qualification.complete,
     nextQualificationPrompt,
+    semanticContext: {
+      version: 1,
+      mode: reactivationSession ? 'reactivation' : 'qualification',
+      expectedQuestionKey: nextQuestion ? String(nextQuestion.key) : null,
+      presentedFacts: confirmedFacts.map(
+        (fact) =>
+          `${String(fact.label ?? fact.key ?? 'Informação')}: ${JSON.stringify(fact.value)}`
+      ),
+      offeredSlotId:
+        reservedAppointment?.guaranteed_slot_id ??
+        (qualification.complete && reservableSlots[0]
+          ? String(reservableSlots[0].id)
+          : null),
+      offeredSlotIds: reservedAppointment?.guaranteed_slot_id
+        ? [String(reservedAppointment.guaranteed_slot_id)]
+        : availabilitySlots.length
+          ? availabilitySlots.map((slot) => String(slot.id))
+          : qualification.complete && reservableSlots[0]
+            ? [String(reservableSlots[0].id)]
+            : [],
+    },
   };
 }
 
@@ -900,7 +993,10 @@ export async function scheduleStudiospFollowups(args: {
         opportunity_id: args.opportunityId,
         policy_id: policy.id,
         step_number: index + 1,
-        scheduled_for: new Date(now + afterMinutes * 60_000).toISOString(),
+        scheduled_for: nextAllowedFollowupAt(
+          new Date(now + afterMinutes * 60_000),
+          policy
+        ).toISOString(),
         idempotency_key: `${args.opportunityId}:${policy.id}:${Date.now()}:${index + 1}`,
       },
     ];
@@ -1432,6 +1528,90 @@ function moneyRange(value: unknown): { min: number; max: number } | null {
   const max = Number(row.max ?? row.min);
   return Number.isFinite(max)
     ? { min: Number.isFinite(min) ? min : 0, max }
+    : null;
+}
+
+export function normalizeQualificationValue(args: {
+  question: Row;
+  normalizedValue: unknown;
+  options?: Row[];
+}) {
+  if (
+    !args.normalizedValue ||
+    typeof args.normalizedValue !== 'object' ||
+    Array.isArray(args.normalizedValue)
+  ) {
+    return args.normalizedValue;
+  }
+  const value = { ...(args.normalizedValue as Row) };
+  if (value.unknown === true) return value;
+
+  if (args.question.data_type === 'single_choice') {
+    const option = (args.options ?? []).find(
+      (item) => String(item.value) === String(value.value)
+    );
+    return option
+      ? { value: String(option.value), label: String(option.label) }
+      : value;
+  }
+  if (args.question.data_type === 'money_range') {
+    const min = value.min === null ? null : Number(value.min);
+    const max = value.max === null ? null : Number(value.max);
+    return {
+      min: Number.isFinite(min) && !(min === 0 && Number(max) > 0) ? min : null,
+      max: Number.isFinite(max) ? max : null,
+      currency: 'BRL',
+    };
+  }
+  if (args.question.data_type === 'location' && Array.isArray(value.values)) {
+    return {
+      ...value,
+      values: value.values
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) =>
+          item
+            .trim()
+            .replace(/\s+/g, ' ')
+            .replace(/(^|\s)\p{L}/gu, (letter) =>
+              letter.toLocaleUpperCase('pt-BR')
+            )
+            .replace(/\bSao\b/g, 'São')
+        )
+        .filter(Boolean),
+    };
+  }
+  return value;
+}
+
+export function trustedAcceptedSlotId(args: {
+  extractedSlotId: string | null;
+  previousSemanticContext: AiSemanticContext | null;
+  latestUserMessage: string;
+}) {
+  if (!args.extractedSlotId || !args.previousSemanticContext) return null;
+  const offeredSlotIds = new Set(
+    [
+      ...(args.previousSemanticContext.offeredSlotIds ?? []),
+      args.previousSemanticContext.offeredSlotId ?? '',
+    ].filter(Boolean)
+  );
+  if (!offeredSlotIds.has(args.extractedSlotId)) return null;
+
+  const message = normalize(args.latestUserMessage).trim();
+  const explicitlyAccepted =
+    /^(?:sim|s|ok|pode ser|fechado|combinado|confirmo|confirmado|beleza|perfeito|esse|esse horario|esse funciona|o primeiro|o segundo|o terceiro)\b/.test(
+      message
+    ) ||
+    /\b(?:pode ser|esse funciona|funciona pra mim|vamos nesse|fico com|fechado|combinado|confirmo)\b/.test(
+      message
+    ) ||
+    /\b\d{1,2}(?::\d{2})?\s*h(?:oras?)?\b/.test(message);
+  const explicitlyRejected =
+    /\b(?:nao consigo|nao posso|nao funciona|outro horario|melhor outro|nenhum desses|nao nesse)\b/.test(
+      message
+    );
+  return explicitlyAccepted && !explicitlyRejected
+    ? args.extractedSlotId
     : null;
 }
 

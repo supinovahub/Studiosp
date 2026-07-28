@@ -306,17 +306,14 @@ function BehaviorForm({
           </h3>
           <p className="text-muted-foreground mt-1 text-xs leading-5">
             As políticas fixas impedem venda direta e ações perigosas; o texto
-            abaixo personaliza identidade, tom e condução da conversa.
+            abaixo personaliza tom e condução sem alterar a identidade
+            operacional do Pedro.
           </p>
         </div>
       </div>
       <div className="grid gap-4 p-4 md:grid-cols-2">
-        <Field label="Nome da assistente">
-          <Input
-            name="identityName"
-            defaultValue={String(config.identity_name ?? 'Sofia')}
-            disabled={disabled}
-          />
+        <Field label="Identidade operacional">
+          <Input name="identityName" value="Pedro" disabled readOnly />
         </Field>
         <Field label="Tom">
           <select

@@ -50,6 +50,9 @@ export interface StudiospAttention {
   due_at?: string | null;
   created_at: string;
   lead?: StudiospLead | null;
+  guidanceRequest?: Record<string, unknown> | null;
+  guidanceMessages?: Record<string, unknown>[];
+  conversationMessages?: Record<string, unknown>[];
 }
 
 export interface StudiospAppointment {

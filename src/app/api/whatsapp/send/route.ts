@@ -182,6 +182,33 @@ export async function POST(request: Request) {
     // `SendMessageError` carries a machine code + HTTP status; the
     // dashboard maps it to the internal `{ error }` shape.
     try {
+      // Claim human control before the network send. This closes the race in
+      // which the AI could answer while the dashboard message was already on
+      // its way to WhatsApp.
+      const { error: controlError } = await supabase
+        .from('conversations')
+        .update({
+          assigned_agent_id: user.id,
+          ai_autoreply_disabled: true,
+          ai_control_mode: 'human_active',
+          ai_control_reason: 'human_message_sent',
+          ai_control_changed_at: new Date().toISOString(),
+          ai_processing_status: 'paused',
+          ai_processing_reason: 'human_takeover',
+        })
+        .eq('account_id', accountId)
+        .eq('id', conversationId);
+      if (controlError) {
+        console.error(
+          '[whatsapp/send] não foi possível assumir o controle:',
+          controlError
+        );
+        return NextResponse.json(
+          { error: 'Não foi possível assumir o atendimento antes do envio.' },
+          { status: 500 }
+        );
+      }
+
       const result = await sendMessageToConversation(supabase, accountId, {
         conversationId,
         messageType: message_type,

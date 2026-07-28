@@ -99,7 +99,8 @@ export function inferExpectedQuestionKey(
 
 export function conversationTurn(
   messages: ChatMessage[],
-  questions: Row[] = []
+  questions: Row[] = [],
+  trustedExpectedQuestionKey?: string | null
 ): ConversationTurn {
   const latestUserIndex = messages.findLastIndex(
     (message) => message.role === 'user'
@@ -116,10 +117,9 @@ export function conversationTurn(
   return {
     latestUserMessage,
     previousAssistantMessage,
-    expectedQuestionKey: inferExpectedQuestionKey(
-      previousAssistantMessage,
-      questions
-    ),
+    expectedQuestionKey:
+      trustedExpectedQuestionKey ??
+      inferExpectedQuestionKey(previousAssistantMessage, questions),
   };
 }
 

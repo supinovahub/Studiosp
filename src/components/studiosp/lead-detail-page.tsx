@@ -76,6 +76,7 @@ export function LeadDetailPage({ id }: { id: string }) {
     type: 'error' | 'success';
     text: string;
   } | null>(null);
+  const [renderedAt] = useState(() => Date.now());
   const lead = data?.lead;
 
   const qualificationRows = useMemo(() => {
@@ -335,20 +336,28 @@ export function LeadDetailPage({ id }: { id: string }) {
                     <div>
                       <p className="text-foreground text-sm">
                         {answer
-                          ? readableValue(
-                              answer.normalized_value,
-                              answer.raw_text
-                            )
+                          ? readableValue(answer.normalized_value)
                           : 'Ainda não respondida'}
                       </p>
                       {answer ? (
-                        <p className="text-muted-foreground mt-0.5 text-[10px]">
-                          Confiança:{' '}
-                          {Math.round(Number(answer.confidence ?? 0) * 100)}% ·{' '}
-                          {String(answer.status) === 'confirmed'
-                            ? 'confirmada'
-                            : 'provisória'}
-                        </p>
+                        <>
+                          {shouldShowRawAnswer(
+                            answer.normalized_value,
+                            answer.raw_text
+                          ) ? (
+                            <p className="text-muted-foreground mt-0.5 text-[10px]">
+                              Resposta original: “{String(answer.raw_text)}”
+                            </p>
+                          ) : null}
+                          <p className="text-muted-foreground mt-0.5 text-[10px]">
+                            Confiança:{' '}
+                            {Math.round(Number(answer.confidence ?? 0) * 100)}%
+                            {' · '}
+                            {String(answer.status) === 'confirmed'
+                              ? 'confirmada'
+                              : 'provisória'}
+                          </p>
+                        </>
                       ) : null}
                     </div>
                   </div>
@@ -598,7 +607,7 @@ export function LeadDetailPage({ id }: { id: string }) {
                 ) : null}
                 {activeAppointment.status === 'broker_confirmed' &&
                 new Date(activeAppointment.starts_at).getTime() <=
-                  Date.now() ? (
+                  renderedAt ? (
                   <Button
                     className="mt-3 w-full"
                     onClick={() => setCallDialogOpen(true)}
@@ -787,25 +796,40 @@ export function LeadDetailPage({ id }: { id: string }) {
   );
 }
 
-function readableValue(value: unknown, raw: unknown) {
+function readableValue(value: unknown) {
   if (value === null || value === undefined) return 'Não informado';
   if (typeof value === 'object' && !Array.isArray(value)) {
     const object = value as Record<string, unknown>;
+    if (object.unknown === true) return 'Não definido pelo lead';
     if ('min' in object || 'max' in object) {
-      const min = Number(object.min ?? object.max);
-      const max = Number(object.max ?? object.min);
+      const min =
+        object.min === null || object.min === undefined
+          ? null
+          : Number(object.min);
+      const max =
+        object.max === null || object.max === undefined
+          ? null
+          : Number(object.max);
+      if (min === null && max !== null) return `Até ${formatCurrencyBRL(max)}`;
+      if (max === null && min !== null)
+        return `A partir de ${formatCurrencyBRL(min)}`;
+      if (min === null || max === null) return 'Não informado';
       return min === max
         ? formatCurrencyBRL(min)
         : `${formatCurrencyBRL(min)} a ${formatCurrencyBRL(max)}`;
     }
+    if (typeof object.label === 'string' && object.label.trim())
+      return object.label;
+    if (Array.isArray(object.values) && object.values.length)
+      return object.values.map(String).join(', ');
+    if (typeof object.text === 'string' && object.text.trim())
+      return object.text;
   }
-  if (raw && typeof raw === 'string') return raw;
   if (typeof value === 'string' || typeof value === 'number')
     return String(value);
   if (Array.isArray(value)) return value.join(', ');
   if (typeof value === 'object') {
     const object = value as Record<string, unknown>;
-    if ('label' in object) return String(object.label);
     return (
       Object.values(object)
         .filter((item) => item !== null && item !== '')
@@ -814,6 +838,13 @@ function readableValue(value: unknown, raw: unknown) {
     );
   }
   return String(value);
+}
+
+function shouldShowRawAnswer(value: unknown, raw: unknown) {
+  if (typeof raw !== 'string' || !raw.trim()) return false;
+  const canonical = readableValue(value).toLocaleLowerCase('pt-BR');
+  const original = raw.trim().toLocaleLowerCase('pt-BR');
+  return canonical !== original && !canonical.includes(original);
 }
 
 function CallBriefSection({ lead }: { lead: StudiospLead }) {

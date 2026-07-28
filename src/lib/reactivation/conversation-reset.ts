@@ -9,5 +9,8 @@ export function reactivationConversationUpdates(
     ai_reply_count: 0,
     ai_handoff_summary: null,
     ai_context_started_at: contextStartedAt,
+    ai_control_mode: 'ai_active',
+    ai_control_reason: 'reactivation_started',
+    ai_control_changed_at: contextStartedAt,
   };
 }

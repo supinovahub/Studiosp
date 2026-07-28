@@ -125,7 +125,7 @@ export async function loadAiConfig(
     autoReplyAllowedNumbers: row.auto_reply_allowed_numbers ?? [],
     handoffAgentId: row.handoff_agent_id,
     behaviorVersionId: behavior?.id ?? null,
-    identityName: behavior?.identity_name?.trim() || 'Sofia',
+    identityName: behavior?.identity_name?.trim() || 'Pedro',
     toneConfig: {
       language:
         typeof behavior?.tone_config?.language === 'string'

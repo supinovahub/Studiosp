@@ -3,6 +3,8 @@ import { buildConversationContext } from './context';
 import { loadAiConfig } from './config';
 import { buildSystemPrompt } from './defaults';
 import { generateReply } from './generate';
+import { loadTrustedGuidance } from './guidance';
+import { enforceOutboundPolicy } from './response-policy';
 
 const FALLBACK_MESSAGES = [
   'Oi! Conseguiu ver minha última mensagem?',
@@ -44,6 +46,11 @@ export async function generateContextualFollowup(args: {
   }
 
   const isFinalStep = args.stepNumber >= args.totalSteps;
+  const trustedGuidance = await loadTrustedGuidance({
+    db: args.db,
+    accountId: args.accountId,
+    conversationId: args.conversationId,
+  });
   const systemPrompt = buildSystemPrompt({
     internalPrompt: config.internalPrompt,
     communicationPrompt: config.communicationPrompt,
@@ -58,6 +65,7 @@ export async function generateContextualFollowup(args: {
       args.leadSummary
         ? `Resumo factual disponível no sistema: ${args.leadSummary.slice(0, 1000)}.`
         : 'Não há resumo adicional confiável disponível.',
+      ...trustedGuidance,
     ],
   });
 
@@ -68,8 +76,24 @@ export async function generateContextualFollowup(args: {
       messages,
     });
     const text = generated.text.replace(/\s+/g, ' ').trim().slice(0, 1200);
-    return !generated.handoff && text
-      ? text
+    const { data: lead } = await args.db
+      .from('conversations')
+      .select('contacts(name)')
+      .eq('account_id', args.accountId)
+      .eq('id', args.conversationId)
+      .maybeSingle();
+    const contact = Array.isArray(lead?.contacts)
+      ? lead.contacts[0]
+      : lead?.contacts;
+    const policy = enforceOutboundPolicy({
+      text,
+      latestLeadMessage:
+        messages.findLast((message) => message.role === 'user')?.content ?? '',
+      messages,
+      leadName: contact?.name,
+    });
+    return !generated.handoff && !generated.needsGuidance && policy.ok
+      ? policy.text
       : fallbackFollowupMessage(args.stepNumber);
   } catch (error) {
     console.error(

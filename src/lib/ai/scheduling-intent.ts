@@ -152,14 +152,8 @@ export function availabilityReply(args: {
   nextQuestion: string | null;
   now?: Date;
 }) {
-  const usable = args.slots
-    .filter(
-      (slot): slot is Slot & { starts_at: string } =>
-        typeof slot.starts_at === 'string' &&
-        Number.isFinite(new Date(slot.starts_at).getTime())
-    )
-    .slice(0, 3);
-  if (!usable.length) {
+  const effective = selectAvailabilitySlots(args);
+  if (!effective.length) {
     return args.nextQuestion
       ? `Não encontrei um horário disponível dentro da agenda configurada agora. ${args.nextQuestion}`
       : 'Não encontrei um horário disponível dentro da agenda configurada agora.';
@@ -174,13 +168,6 @@ export function availabilityReply(args: {
       month: '2-digit',
       day: '2-digit',
     }).format(value);
-  const asksToday = /\bhoje\b/i.test(args.latestMessage);
-  const selected = asksToday
-    ? usable.filter(
-        (slot) => localDay(new Date(slot.starts_at)) === localDay(now)
-      )
-    : usable;
-  const effective = (selected.length ? selected : usable).slice(0, 3);
   const sameDay = effective.every(
     (slot) =>
       localDay(new Date(slot.starts_at)) ===
@@ -227,4 +214,36 @@ export function availabilityReply(args: {
   return nextQuestion
     ? `${availability} Antes de reservar, preciso concluir seu perfil. ${nextQuestion}`
     : `${availability} Qual desses horários funciona melhor para você?`;
+}
+
+export function selectAvailabilitySlots<T extends Slot>(args: {
+  slots: T[];
+  latestMessage: string;
+  now?: Date;
+}): Array<T & { starts_at: string }> {
+  const usable = args.slots
+    .filter(
+      (slot): slot is T & { starts_at: string } =>
+        typeof slot.starts_at === 'string' &&
+        Number.isFinite(new Date(slot.starts_at).getTime())
+    )
+    .slice(0, 3);
+  if (!usable.length) return [];
+
+  const timezone = 'America/Sao_Paulo';
+  const now = args.now ?? new Date();
+  const localDay = (value: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(value);
+  const asksToday = /\bhoje\b/i.test(args.latestMessage);
+  const selected = asksToday
+    ? usable.filter(
+        (slot) => localDay(new Date(slot.starts_at)) === localDay(now)
+      )
+    : usable;
+  return (selected.length ? selected : usable).slice(0, 3);
 }

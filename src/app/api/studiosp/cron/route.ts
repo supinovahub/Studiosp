@@ -7,6 +7,9 @@ import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 import { processAiReplyQueue } from '@/lib/ai/reply-queue';
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
 import { generateContextualFollowup } from '@/lib/ai/followup';
+import { nextAllowedFollowupAt } from '@/lib/ai/followup-window';
+import { openOperationalFailure } from '@/lib/ai/guidance';
+import { semanticMessageMetadata } from '@/lib/ai/semantic-context';
 
 export const maxDuration = 300;
 
@@ -155,6 +158,27 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
   if (error) return 0;
   let sent = 0;
   for (const followup of (due ?? []) as Row[]) {
+    const { data: policy } = await db
+      .from('followup_policies')
+      .select('timezone, allowed_weekdays, window_start, window_end')
+      .eq('account_id', followup.account_id)
+      .eq('id', followup.policy_id)
+      .maybeSingle();
+    const allowedAt = policy
+      ? nextAllowedFollowupAt(new Date(), policy)
+      : new Date();
+    if (allowedAt.getTime() > Date.now() + 60_000) {
+      await db
+        .from('followup_executions')
+        .update({
+          status: 'scheduled',
+          scheduled_for: allowedAt.toISOString(),
+          claimed_at: null,
+          claimed_by: null,
+        })
+        .eq('id', followup.id);
+      continue;
+    }
     const { data: opportunity } = await db
       .from('opportunities')
       .select('*')
@@ -175,14 +199,15 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
     }
     const { data: conversation } = await db
       .from('conversations')
-      .select('assigned_agent_id, ai_autoreply_disabled')
+      .select('assigned_agent_id, ai_autoreply_disabled, ai_control_mode')
       .eq('account_id', followup.account_id)
       .eq('id', opportunity.primary_conversation_id)
       .maybeSingle();
     if (
       !conversation ||
       conversation.assigned_agent_id ||
-      conversation.ai_autoreply_disabled
+      conversation.ai_autoreply_disabled ||
+      conversation.ai_control_mode !== 'ai_active'
     ) {
       await db
         .from('followup_executions')
@@ -192,7 +217,9 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
             ? 'conversation_not_found'
             : conversation.assigned_agent_id
               ? 'assigned_to_human'
-              : 'conversation_paused',
+              : conversation.ai_control_mode === 'awaiting_guidance'
+                ? 'awaiting_owner_guidance'
+                : 'conversation_paused',
         })
         .eq('id', followup.id);
       continue;
@@ -245,6 +272,11 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         contactId: opportunity.contact_id,
         text: followupText,
         aiGenerated: true,
+        semanticContext: semanticMessageMetadata({
+          version: 1,
+          mode: 'followup',
+          expectedQuestionKey: null,
+        }),
       });
       await db
         .from('followup_executions')
@@ -268,16 +300,27 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         .eq('id', opportunity.id);
       sent++;
     } catch (sendError) {
+      const failureMessage =
+        sendError instanceof Error
+          ? sendError.message.slice(0, 500)
+          : 'Falha desconhecida';
       await db
         .from('followup_executions')
         .update({
           status: 'failed',
-          last_error:
-            sendError instanceof Error
-              ? sendError.message.slice(0, 500)
-              : 'Falha desconhecida',
+          last_error: failureMessage,
         })
         .eq('id', followup.id);
+      await openOperationalFailure({
+        db,
+        accountId: followup.account_id,
+        conversationId: opportunity.primary_conversation_id,
+        opportunityId: opportunity.id,
+        reasonCode: 'followup_send_failed',
+        summary: failureMessage,
+        retryable: true,
+        context: { followup_execution_id: followup.id },
+      });
     }
   }
   return sent;

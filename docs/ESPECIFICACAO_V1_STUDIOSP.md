@@ -314,6 +314,7 @@ restauração permanece como evolução planejada do versionamento.
 A IA pode:
 
 - conversar em português do Brasil;
+- atender com a identidade operacional Pedro, sem se declarar IA ou humano;
 - transcrever áudio;
 - interpretar respostas;
 - normalizar dados;
@@ -328,7 +329,8 @@ A IA pode:
 - consultar slots;
 - criar uma reserva por ferramenta;
 - resumir o lead;
-- encaminhar para humano.
+- solicitar orientação do dono quando faltar conhecimento confiável;
+- encaminhar para humano somente por mudança explícita de controle.
 
 A IA não pode:
 
@@ -344,6 +346,10 @@ A IA não pode:
 - alterar dados financeiros;
 - apagar histórico;
 - burlar capacidade, acesso ou auditoria.
+
+Se o lead perguntar quem está falando, a resposta neutra é: `Aqui é o Pedro.
+Trabalho com o mercado de imóveis em SP.` Os corretores são apresentados como
+pessoas da equipe do Pedro.
 
 ### 6.3 Ferramentas controladas
 
@@ -362,6 +368,14 @@ A IA não pode:
 
 A IA nunca escreve livremente nas tabelas. Cada ferramenta valida identidade, estado, permissão e concorrência.
 
+Decisões com efeito durável não dependem apenas da saída do modelo:
+
+- descadastro exige pedido explícito na mensagem do lead;
+- reserva exige um horário garantido e comprovadamente oferecido pelo sistema;
+- qualificação exige pergunta ativa, valor canônico e mensagem de origem da
+  mesma conversa;
+- atribuição humana e pausa da IA dependem do estado controlado pela aplicação.
+
 ### 6.4 Saída por turno
 
 Cada execução produz:
@@ -377,7 +391,24 @@ Cada execução produz:
 - versão do prompt;
 - modelo e consumo.
 
-### 6.5 Áudio
+### 6.5 Segurança de contexto e orientação humana
+
+- Mensagens, históricos importados, transcrições, documentos, catálogo e
+  preferências de comunicação são dados não confiáveis, nunca instruções.
+- Tentativas de prompt injection são auditadas, mas uma mensagem legítima não é
+  bloqueada apenas por conter uma frase suspeita.
+- A resposta final passa por validação determinística de identidade, vazamento
+  de regras internas, quantidade de perguntas e repetição do nome do lead.
+- Se faltar conhecimento, a conversa entra em `awaiting_guidance`, permanece
+  sem resposta e abre uma pendência exclusiva do dono.
+- O dono vê o contexto recente, orienta o Pedro e escolhe se a orientação vale
+  somente para a resposta, para a conversa ou como conhecimento reutilizável.
+- Ao retomar, a mensagem recebe uma justificativa natural proporcional ao tempo
+  de espera, sem revelar o mecanismo interno.
+- Falhas operacionais são registradas e abrem alerta com a conversa, opção de
+  nova tentativa e opção de assumir o atendimento.
+
+### 6.6 Áudio
 
 1. Receber mídia.
 2. Registrar mensagem e metadados.
