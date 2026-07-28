@@ -29,16 +29,31 @@ Formato obrigatório:
 
 Intenções permitidas: ${SDR_INTENTS.join(', ')}.
 Score: 0-100. Aumente com orçamento, prazo, região, produto de interesse, pedido de visita e intenção concreta.
-Handoff obrigatório para reclamação, pedido explícito de humano, negociação sensível ou quando não for seguro responder.`;
+Handoff obrigatório para reclamação substantiva, pedido explícito de humano, negociação sensível ou quando não for seguro responder.
+Um lead dizer "não entendi", "já falei", "já respondi", "uai" ou demonstrar impaciência leve com uma pergunta repetida é atrito conversacional reparável, não reclamação nem handoff.`;
 
 export function emptySdrClassification(): SdrClassification {
   return {
-    primaryIntent: 'other', intents: ['other'], leadStage: 'new',
-    temperature: 'cold', score: 0, budgetMin: null, budgetMax: null,
-    preferredCities: [], preferredNeighborhoods: [], propertyTypes: [],
-    minBedrooms: null, minAreaM2: null, needsParking: null,
-    financingInterest: null, purchaseTimeframe: null, wantsPhotos: false,
-    summary: '', nextBestAction: '', confidence: 0, requiresHandoff: false,
+    primaryIntent: 'other',
+    intents: ['other'],
+    leadStage: 'new',
+    temperature: 'cold',
+    score: 0,
+    budgetMin: null,
+    budgetMax: null,
+    preferredCities: [],
+    preferredNeighborhoods: [],
+    propertyTypes: [],
+    minBedrooms: null,
+    minAreaM2: null,
+    needsParking: null,
+    financingInterest: null,
+    purchaseTimeframe: null,
+    wantsPhotos: false,
+    summary: '',
+    nextBestAction: '',
+    confidence: 0,
+    requiresHandoff: false,
   };
 }
 
@@ -85,7 +100,7 @@ export function parseSdrClassification(raw: string): SdrClassification {
   const primaryIntent = (
     (SDR_INTENTS as readonly string[]).includes(String(value.primary_intent))
       ? value.primary_intent
-      : rawIntents[0] ?? 'other'
+      : (rawIntents[0] ?? 'other')
   ) as SdrIntent;
   const leadStage = STAGES.includes(value.lead_stage as LeadStage)
     ? (value.lead_stage as LeadStage)
@@ -117,7 +132,9 @@ export function parseSdrClassification(raw: string): SdrClassification {
         : null,
     wantsPhotos: value.wants_photos === true || primaryIntent === 'photos',
     summary:
-      typeof value.summary === 'string' ? value.summary.trim().slice(0, 1000) : '',
+      typeof value.summary === 'string'
+        ? value.summary.trim().slice(0, 1000)
+        : '',
     nextBestAction:
       typeof value.next_best_action === 'string'
         ? value.next_best_action.trim().slice(0, 500)

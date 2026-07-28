@@ -6,6 +6,7 @@ import { processNextDocumentAnalysis } from '@/lib/document-analysis/worker';
 import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 import { processAiReplyQueue } from '@/lib/ai/reply-queue';
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
+import { generateContextualFollowup } from '@/lib/ai/followup';
 
 export const maxDuration = 300;
 
@@ -172,6 +173,30 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         .eq('id', followup.id);
       continue;
     }
+    const { data: conversation } = await db
+      .from('conversations')
+      .select('assigned_agent_id, ai_autoreply_disabled')
+      .eq('account_id', followup.account_id)
+      .eq('id', opportunity.primary_conversation_id)
+      .maybeSingle();
+    if (
+      !conversation ||
+      conversation.assigned_agent_id ||
+      conversation.ai_autoreply_disabled
+    ) {
+      await db
+        .from('followup_executions')
+        .update({
+          status: 'cancelled',
+          cancel_reason: !conversation
+            ? 'conversation_not_found'
+            : conversation.assigned_agent_id
+              ? 'assigned_to_human'
+              : 'conversation_paused',
+        })
+        .eq('id', followup.id);
+      continue;
+    }
     const { data: contactControl } = await db
       .from('contacts')
       .select('automation_status')
@@ -188,21 +213,37 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         .eq('id', followup.id);
       continue;
     }
-    const messages = [
-      'Oi! Passando para saber se você conseguiu ver minha última mensagem 😊',
-      'Posso continuar te ajudando a encontrar oportunidades que façam sentido para o seu momento?',
-      'Se ainda estiver buscando, me diga por aqui e retomamos de onde paramos.',
-      'Vou pausar por enquanto para não te incomodar. Quando quiser retomar, é só me chamar por aqui.',
-    ];
+    const { count: totalSteps } = await db
+      .from('followup_executions')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', followup.account_id)
+      .eq('opportunity_id', opportunity.id)
+      .eq('policy_id', followup.policy_id);
+    const followupText = await generateContextualFollowup({
+      db,
+      accountId: followup.account_id,
+      conversationId: opportunity.primary_conversation_id,
+      stepNumber: Number(followup.step_number),
+      totalSteps: Math.max(Number(followup.step_number), totalSteps ?? 1),
+      leadSummary: opportunity.lead_summary,
+    });
+    if (!followupText) {
+      await db
+        .from('followup_executions')
+        .update({
+          status: 'cancelled',
+          cancel_reason: 'lead_replied_before_send',
+        })
+        .eq('id', followup.id);
+      continue;
+    }
     try {
       await engineSendText({
         accountId: followup.account_id,
         userId: await configOwnerUserId(db, followup.account_id),
         conversationId: opportunity.primary_conversation_id,
         contactId: opportunity.contact_id,
-        text: messages[
-          Math.min(messages.length - 1, Number(followup.step_number) - 1)
-        ],
+        text: followupText,
         aiGenerated: true,
       });
       await db

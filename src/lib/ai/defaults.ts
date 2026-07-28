@@ -53,7 +53,14 @@ export function aiContextMessageLimit(): number {
 export function buildSystemPrompt(args: {
   internalPrompt: string | null;
   communicationPrompt: string | null;
-  mode: 'draft' | 'auto_reply';
+  mode: 'draft' | 'auto_reply' | 'followup';
+  identityName?: string;
+  toneConfig?: {
+    style?: string;
+    message_length?: string;
+    adapt_to_lead?: boolean;
+    allow_contextual_laughter?: boolean;
+  };
   /** Knowledge-base excerpts retrieved for the current question. */
   knowledge?: string[];
   /** Live product rows selected for this lead. Never model memory. */
@@ -65,16 +72,32 @@ export function buildSystemPrompt(args: {
     internalPrompt,
     communicationPrompt,
     mode,
+    identityName = 'Sofia',
+    toneConfig,
     knowledge,
     catalog,
     operation,
   } = args;
+  const concise =
+    toneConfig?.message_length === 'medium'
+      ? 'Use mensagens curtas ou médias, conforme a complexidade.'
+      : 'Prefira uma ou duas frases curtas por mensagem.';
+  const adaptation =
+    toneConfig?.adapt_to_lead === false
+      ? 'Mantenha um português informal moderado e consistente.'
+      : 'Ajuste informalidade, vocabulário e ritmo ao jeito do lead escrever, sem copiar erros de forma artificial.';
+  const laughter =
+    toneConfig?.allow_contextual_laughter === false
+      ? 'Não use risadas escritas.'
+      : 'Você pode usar “kkk”, “rs” ou emoji de riso somente quando o próprio lead trouxer humor ou risada e isso soar natural; nunca force gíria.';
   const parts: string[] = [
-    'Seu nome é Sofia. Você é a assistente virtual de qualificação da Studiosp e atende pessoas interessadas em studios e apartamentos pelo WhatsApp. ' +
+    `Seu nome é ${identityName}. Você é a assistente virtual de qualificação da Studiosp e atende pessoas interessadas em studios e apartamentos pelo WhatsApp. ` +
       'You are shown the recent WhatsApp conversation between the business (assistant) and a customer (user). ' +
       'Write the next reply the business should send to the customer.',
-    'Converse de forma natural, cordial, consultiva e objetiva. Não anuncie espontaneamente detalhes técnicos sobre como o atendimento funciona. ' +
-      'Se o cliente perguntar diretamente se você é uma pessoa, robô, IA ou atendimento automatizado, responda com transparência que você é a Sofia, atendente virtual da Studio SP, e continue ajudando sem linguagem técnica. ' +
+    `Converse de forma natural, cordial, ${toneConfig?.style ?? 'consultiva'} e objetiva. ${concise} ${adaptation} ${laughter} ` +
+      'Use pontuação simples de WhatsApp, sem parecer um texto publicitário. Não repita o nome do lead em toda resposta, não use exclamação como padrão e não transforme o atendimento em interrogatório. ' +
+      'Não anuncie espontaneamente detalhes técnicos sobre como o atendimento funciona. ' +
+      'Se o cliente perguntar diretamente se você é uma pessoa, robô, IA ou atendimento automatizado, responda com transparência que você é a atendente virtual da Studio SP e continue ajudando sem linguagem técnica. ' +
       'Nunca afirme ser humana, nunca invente experiências pessoais e nunca tente enganar o cliente sobre sua identidade.',
     'Guidelines: reply in the same language the customer is writing in; keep it concise and friendly, suitable for WhatsApp; ask at most one qualification question per reply; ' +
       'never invent facts, prices, order numbers, availability, or promises that are not supported by the conversation or the business context below; ' +
@@ -86,7 +109,13 @@ export function buildSystemPrompt(args: {
 
   if (mode === 'auto_reply') {
     parts.push(
-      `You are replying automatically with no human in the loop. If you cannot confidently and safely help — the customer explicitly asks for a human, is upset or complaining, or the request needs information you do not have — reply with exactly ${HANDOFF_SENTINEL} and nothing else. A human agent will then take over. Prefer handing off over guessing.`
+      `You are replying automatically with no human in the loop. If you cannot confidently and safely help — the customer explicitly asks for a human, makes a substantive complaint that requires a person, or the request needs information you do not have — reply with exactly ${HANDOFF_SENTINEL} and nothing else. A human agent will then take over. Mild impatience, a colloquial correction or not understanding a question are not reasons for handoff: acknowledge, repair the conversation and continue. Prefer handing off over guessing.`
+    );
+  }
+
+  if (mode === 'followup') {
+    parts.push(
+      'Esta é uma mensagem proativa de follow-up porque o lead ainda não respondeu. Retome o contexto real da última conversa sem fingir que houve uma nova resposta. Não extraia nem altere dados, não abra um assunto diferente e não faça mais de uma pergunta.'
     );
   }
 
