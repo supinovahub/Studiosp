@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  availabilityReply,
   appointmentConfirmation,
   appointmentReservationFailure,
   findExactRequestedSlot,
+  guardPrematureMeetingOffer,
+  isAvailabilityInquiry,
   opportunityInvitation,
+  qualificationQuestionPrompt,
   requestedStartFromExtraction,
 } from './scheduling-intent';
 
@@ -58,6 +62,51 @@ describe('scheduling intent', () => {
   it('uses a deterministic failure instead of claiming a reservation', () => {
     expect(appointmentReservationFailure()).not.toMatch(
       /confirmad|agendad|reservad/i
+    );
+  });
+
+  it('distinguishes an availability inquiry from an exact acceptance', () => {
+    expect(isAvailabilityInquiry('Hoje você tem quais horários?')).toBe(true);
+    expect(isAvailabilityInquiry('Tem horário disponível pra quando?')).toBe(
+      true
+    );
+    expect(isAvailabilityInquiry('Pode ser às 14h15')).toBe(false);
+  });
+
+  it('blocks a meeting offer while qualification is incomplete', () => {
+    const next =
+      qualificationQuestionPrompt({ key: 'monthly_installment_budget' })!;
+    expect(
+      guardPrematureMeetingOffer(
+        'Encontrei opções. Vamos agendar uma conversa rápida com o corretor?',
+        false,
+        next
+      )
+    ).toBe(next);
+    expect(
+      guardPrematureMeetingOffer(
+        'Encontrei opções. Vamos agendar uma conversa rápida com o corretor?',
+        true,
+        next
+      )
+    ).toContain('agendar');
+  });
+
+  it('answers availability but resumes qualification before reserving', () => {
+    expect(
+      availabilityReply({
+        latestMessage: 'Hoje você tem quais horários?',
+        nextQuestion:
+          'Qual faixa de parcela mensal ficaria confortável para você?',
+        now: new Date('2026-07-28T14:33:45.000Z'),
+        slots: [
+          { starts_at: '2026-07-28T16:45:00.000Z' },
+          { starts_at: '2026-07-28T17:00:00.000Z' },
+          { starts_at: '2026-07-28T17:15:00.000Z' },
+        ],
+      })
+    ).toBe(
+      'Tenho disponibilidade hoje às 13:45, 14:00 e 14:15. Antes de reservar, preciso concluir seu perfil. Qual faixa de parcela mensal ficaria confortável para você?'
     );
   });
 });

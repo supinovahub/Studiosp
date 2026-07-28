@@ -1808,3 +1808,16 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - mensagens automáticas podem ser divididas somente em limites semânticos
   completos; frases não podem ser cortadas no meio por limite arbitrário de
   caracteres.
+- o servidor, e não o texto livre do modelo, decide quando a qualificação está
+  completa; enquanto existir qualquer pergunta ativa pendente, uma tentativa
+  textual de ofertar reunião é substituída pela próxima pergunta;
+- consultas espontâneas de disponibilidade podem ser respondidas durante a
+  qualificação com horários reais, mas não autorizam reserva; depois de
+  responder ao desvio, a assistente retoma a próxima pergunta pendente;
+- consulta de disponibilidade, solicitação de horário específico, aceite de
+  horário e insistência em encaixe são intenções distintas; uma pergunta como
+  “quais horários têm hoje?” nunca pode inventar um horário solicitado;
+- valores extraídos pela IA são validados contra o tipo da pergunta antes da
+  persistência, impedindo, por exemplo, uma localização em um campo monetário;
+- a listagem de horários respeita a antecedência e o horizonte configurados e
+  considera somente corretores ativos, disponíveis e com WhatsApp confirmado.

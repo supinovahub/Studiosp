@@ -18,6 +18,7 @@ import {
 } from './studiosp-orchestrator';
 import { isInboundAiReplyAllowed } from './inbound-allowlist';
 import { splitAiMessage, waitBetweenAiMessages } from './message-parser';
+import { guardPrematureMeetingOffer } from './scheduling-intent';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -290,7 +291,13 @@ export async function dispatchInboundToAiReply(
       systemPrompt,
       messages,
     });
-    const responseText = studiosp.outboundOverride ?? text;
+    const responseText =
+      studiosp.outboundOverride ??
+      guardPrematureMeetingOffer(
+        text,
+        studiosp.qualificationComplete,
+        studiosp.nextQualificationPrompt
+      );
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
     // never adds latency to the customer-facing send: `logAiUsage`

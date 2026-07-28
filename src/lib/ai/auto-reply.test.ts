@@ -168,6 +168,8 @@ beforeEach(() => {
     grounding: [],
     reservedAppointment: null,
     outboundOverride: null,
+    qualificationComplete: true,
+    nextQualificationPrompt: null,
   });
   h.scheduleStudiospFollowups.mockResolvedValue(undefined);
   h.buildSdrTurnContext.mockResolvedValue({
@@ -241,6 +243,8 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       reservedAppointment: { id: 'appointment-1' },
       outboundOverride:
         'Sua conversa está confirmada para terça-feira, 28/07, 10:00.',
+      qualificationComplete: true,
+      nextQualificationPrompt: null,
     });
     h.generateReply.mockResolvedValue({
       text: 'Um corretor entrará em contato para confirmar.',
@@ -252,6 +256,30 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({
         text: 'Sua conversa está confirmada para terça-feira, 28/07, 10:00.',
+      })
+    );
+  });
+
+  it('replaces a premature meeting offer with the next qualification question', async () => {
+    h.prepareStudiospTurn.mockResolvedValue({
+      opportunityId: 'opp-1',
+      grounding: [],
+      reservedAppointment: null,
+      outboundOverride: null,
+      qualificationComplete: false,
+      nextQualificationPrompt:
+        'Antes de avançarmos, qual faixa de parcela mensal ficaria confortável para você?',
+    });
+    h.generateReply.mockResolvedValue({
+      text: 'Encontrei algumas oportunidades. Vamos agendar uma conversa rápida com um corretor?',
+      handoff: false,
+    });
+
+    await dispatchInboundToAiReply(ARGS);
+
+    expect(h.engineSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Antes de avançarmos, qual faixa de parcela mensal ficaria confortável para você?',
       })
     );
   });

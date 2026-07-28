@@ -1,12 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  availabilityReply,
   appointmentConfirmation,
   appointmentReservationFailure,
   findExactRequestedSlot,
+  isAvailabilityInquiry,
   opportunityInvitation,
+  qualificationQuestionPrompt,
   requestedStartFromExtraction,
 } from './scheduling-intent';
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
+import { isValidQualificationValue } from './qualification-validation';
 import { generateReply } from './generate';
 import type { AiConfig, ChatMessage } from './types';
 import { loadAiConfig } from './config';
@@ -229,6 +233,8 @@ export interface StudiospTurnContext {
   grounding: string[];
   reservedAppointment: Row | null;
   outboundOverride: string | null;
+  qualificationComplete: boolean;
+  nextQualificationPrompt: string | null;
 }
 
 export async function prepareStudiospTurn(args: {
@@ -245,6 +251,8 @@ export async function prepareStudiospTurn(args: {
     grounding: [],
     reservedAppointment: null,
     outboundOverride: null,
+    qualificationComplete: true,
+    nextQualificationPrompt: null,
   };
   const { data: opportunity } = await args.db
     .from('opportunities')
@@ -280,6 +288,8 @@ export async function prepareStudiospTurn(args: {
       ],
       reservedAppointment: existingReservation,
       outboundOverride: appointmentConfirmation(existingReservation),
+      qualificationComplete: true,
+      nextQualificationPrompt: null,
     };
   }
 
@@ -364,8 +374,7 @@ export async function prepareStudiospTurn(args: {
 
   const availableSlots = await loadAvailableSlots(
     args.db,
-    args.accountId,
-    opportunity
+    args.accountId
   );
   const startedAt = Date.now();
   const runInsert = await args.db
@@ -407,6 +416,14 @@ export async function prepareStudiospTurn(args: {
       messages: args.messages,
     });
     extraction = parseObject(generated.text);
+    const latestUserText =
+      args.messages.filter((message) => message.role === 'user').at(-1)
+        ?.content ?? '';
+    if (isAvailabilityInquiry(latestUserText)) {
+      extraction.accepted_slot_id = null;
+      extraction.requested_start_at = null;
+      extraction.insists_on_requested_time = false;
+    }
     const extractedAnswerRows = Array.isArray(extraction.answers)
       ? extraction.answers
       : [];
@@ -435,6 +452,22 @@ export async function prepareStudiospTurn(args: {
       const answer = candidate as Row;
       const question = questionMap.get(String(answer.question_id));
       if (!question || answer.normalized_value === undefined) continue;
+      const allowedOptions = (options as Row[])
+        .filter((option) => option.question_id === question.id)
+        .map((option) => String(option.value));
+      if (
+        !isValidQualificationValue(
+          question,
+          answer.normalized_value,
+          allowedOptions
+        )
+      ) {
+        console.warn(
+          '[Studiosp/IA] resposta incompatível com o tipo da pergunta:',
+          question.key
+        );
+        continue;
+      }
       const confidence = Math.max(
         0,
         Math.min(1, Number(answer.confidence ?? 0))
@@ -532,13 +565,24 @@ export async function prepareStudiospTurn(args: {
       finalization.error
     );
   }
-  const opportunityAfterQualification =
-    (finalization.data as Row | null) ?? opportunity;
   const reservableSlots = await loadAvailableSlots(
     args.db,
-    args.accountId,
-    opportunityAfterQualification
+    args.accountId
   );
+  const preReservationAnswers = await args.db
+    .from('qualification_answers')
+    .select('question_id')
+    .eq('account_id', args.accountId)
+    .eq('opportunity_id', opportunity.id)
+    .eq('is_current', true)
+    .eq('status', 'confirmed');
+  const preReservationConfirmedIds = new Set(
+    (preReservationAnswers.data ?? []).map((answer) => answer.question_id)
+  );
+  const qualificationCompleteBeforeReservation =
+    qualificationQuestionsRequiredBeforeMeeting(questions as Row[]).every(
+      (question) => preReservationConfirmedIds.has(question.id)
+    );
 
   let reservedAppointment: Row | null = null;
   let reservationFailed = false;
@@ -554,7 +598,7 @@ export async function prepareStudiospTurn(args: {
     requestedStartFromExtraction(extraction.requested_start_at)
   );
   const slotToReserve = explicitlyAcceptedSlot ?? requestedSlot;
-  if (slotToReserve?.id) {
+  if (qualificationCompleteBeforeReservation && slotToReserve?.id) {
     const reservation = await args.db.rpc('studiosp_reserve_guaranteed_slot', {
       p_opportunity_id: opportunity.id,
       p_slot_id: slotToReserve.id,
@@ -659,11 +703,17 @@ export async function prepareStudiospTurn(args: {
   const confirmedQuestionIds = new Set(
     (answerRefresh.data ?? []).map((answer) => answer.question_id)
   );
-  const missing = qualificationQuestionsRequiredBeforeMeeting(
+  const missingQuestions = qualificationQuestionsRequiredBeforeMeeting(
     questions as Row[]
-  )
-    .filter((question) => !confirmedQuestionIds.has(question.id))
-    .map((question) => question.label);
+  ).filter((question) => !confirmedQuestionIds.has(question.id));
+  const missing = missingQuestions.map((question) => question.label);
+  const nextQualificationPrompt = qualificationQuestionPrompt(
+    missingQuestions[0]
+  );
+  const latestUserText =
+    args.messages.filter((message) => message.role === 'user').at(-1)
+      ?.content ?? '';
+  const availabilityInquiry = isAvailabilityInquiry(latestUserText);
   const grounding = [
     reactivationSession
       ? `Este turno continua uma reativação de base. Não reinicie a apresentação nem repita perguntas já respondidas. Use os dados conhecidos apenas como contexto a confirmar; se o lead acabou de confirmar um dado, trate-o como confirmado e avance para a próxima lacuna. Contexto conhecido: ${JSON.stringify(reactivationSession.known_context ?? {}).slice(0, 1200)}.`
@@ -702,13 +752,21 @@ export async function prepareStudiospTurn(args: {
     opportunityId: opportunity.id,
     grounding,
     reservedAppointment,
-    outboundOverride: reservedAppointment
-      ? appointmentConfirmation(reservedAppointment)
-      : reservationFailed
-        ? appointmentReservationFailure()
-        : missing.length === 0 && reservableSlots[0]
-          ? opportunityInvitation(reservableSlots[0])
-          : null,
+    outboundOverride: availabilityInquiry
+      ? availabilityReply({
+          slots: reservableSlots,
+          latestMessage: latestUserText,
+          nextQuestion: nextQualificationPrompt,
+        })
+      : reservedAppointment
+        ? appointmentConfirmation(reservedAppointment)
+        : reservationFailed
+          ? appointmentReservationFailure()
+          : missing.length === 0 && reservableSlots[0]
+            ? opportunityInvitation(reservableSlots[0])
+            : null,
+    qualificationComplete: missing.length === 0,
+    nextQualificationPrompt,
   };
 }
 
@@ -783,17 +841,35 @@ export async function scheduleStudiospFollowups(args: {
 
 async function loadAvailableSlots(
   db: SupabaseClient,
-  accountId: string,
-  opportunity: Row
+  accountId: string
 ): Promise<Row[]> {
-  if (
-    !['qualified', 'awaiting_schedule', 'meeting_scheduled'].includes(
-      opportunity.stage
-    )
-  )
-    return [];
   const start = new Date();
-  const end = new Date(start.getTime() + 7 * 86_400_000);
+  const [{ data: policy }, { data: brokers }] = await Promise.all([
+    db
+      .from('scheduling_policies')
+      .select('minimum_notice_minutes, scheduling_horizon_days')
+      .eq('account_id', accountId)
+      .eq('status', 'active')
+      .maybeSingle(),
+    db
+      .from('broker_profiles')
+      .select('id')
+      .eq('account_id', accountId)
+      .eq('is_active', true)
+      .eq('is_available', true)
+      .not('whatsapp_verified_at', 'is', null),
+  ]);
+  const brokerIds = (brokers ?? []).map((broker) => broker.id);
+  if (!policy || !brokerIds.length) return [];
+  const horizonDays = Math.max(
+    1,
+    Math.min(90, Number(policy.scheduling_horizon_days ?? 7))
+  );
+  const minimumNoticeMinutes = Math.max(
+    0,
+    Number(policy.minimum_notice_minutes ?? 120)
+  );
+  const end = new Date(start.getTime() + horizonDays * 86_400_000);
   await db.rpc('studiosp_materialize_guaranteed_slots', {
     p_account_id: accountId,
     p_start_date: start.toISOString().slice(0, 10),
@@ -806,12 +882,16 @@ async function loadAvailableSlots(
     )
     .eq('account_id', accountId)
     .eq('status', 'available')
-    .gt('starts_at', new Date(Date.now() + 2 * 60 * 60_000).toISOString())
+    .in('broker_profile_id', brokerIds)
+    .gt(
+      'starts_at',
+      new Date(Date.now() + minimumNoticeMinutes * 60_000).toISOString()
+    )
     .order('starts_at')
-    .limit(8);
+    .limit(30);
   return ((data ?? []) as Row[]).filter(
     (slot) => Number(slot.reserved_count) < Number(slot.capacity)
-  );
+  ).slice(0, 8);
 }
 
 async function calculatePropertyMatches(
