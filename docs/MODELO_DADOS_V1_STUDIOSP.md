@@ -117,6 +117,36 @@ somente o onboarding bloqueante. A confirmação registra consentimento e
 auditoria; a restrição do banco impede `is_available = true` sem número
 confirmado.
 
+### 4.3 Link global de corretores
+
+`broker_invite_links` mantém no máximo um link global ativo por conta. O token
+em texto puro nunca é persistido: somente o SHA-256 fica em `token_hash`.
+
+| Campo                | Tipo e regra                                           |
+| -------------------- | ------------------------------------------------------ |
+| `id`                 | uuid, PK                                               |
+| `account_id`         | uuid, FK; único entre linhas ativas por índice parcial |
+| `token_hash`         | text SHA-256, único                                    |
+| `created_by_user_id` | uuid, FK para o Dono que gerou o link                  |
+| `is_active`          | boolean; somente uma linha ativa por conta             |
+| `revoked_at`         | timestamptz; obrigatório quando inativo                |
+| `created_at`         | timestamptz                                            |
+| `updated_at`         | timestamptz                                            |
+
+`broker_invite_redemptions` registra `link_id`, `profile_id`, `user_id` e
+`redeemed_at`. A combinação `(link_id, user_id)` é única, tornando retries
+idempotentes.
+
+As duas tabelas possuem RLS e leitura exclusiva do Dono. Escritas ocorrem
+somente pelos RPCs controlados:
+
+- `studiosp_rotate_global_broker_invite`: cria ou troca atomicamente o link;
+- `studiosp_disable_global_broker_invite`: desativa o link atual;
+- `peek_global_broker_invite`: expõe anonimamente apenas nome da operação,
+  papel e tipo do convite;
+- `redeem_global_broker_invite_with_whatsapp`: reaproveita o fluxo transacional
+  de convite individual e exige WhatsApp E.164.
+
 ## 5. Contato, conversa e oportunidade
 
 ### 5.1 Fontes herdadas

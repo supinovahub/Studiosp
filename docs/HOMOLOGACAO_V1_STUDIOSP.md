@@ -144,3 +144,25 @@ Para cada falha, envie:
 - resultado esperado;
 - captura de tela, quando houver diferença visual;
 - horário aproximado, quando envolver WhatsApp, IA ou tarefa agendada.
+
+## Complemento — link global de cadastro de corretores
+
+Executar no preview da branch `feature/global-broker-invite-link`, conectado ao
+Supabase Studiosp Staging:
+
+1. Entrar como Dono e abrir **Configurações → Membros da equipe**.
+2. Gerar o link global, copiar e abrir em uma janela anônima.
+3. Criar um corretor, informar WhatsApp com DDI e concluir o aceite.
+4. Reabrir o mesmo link em outra janela anônima e cadastrar um segundo
+   corretor.
+5. Confirmar que ambos aparecem como corretores e que o contador do link mostra
+   dois usos.
+6. Trocar o link; confirmar que o anterior falha e o novo permanece válido.
+7. Desativar o novo link; confirmar que novos cadastros são impedidos e os
+   corretores existentes continuam acessando normalmente.
+8. Entrar como Admin ou Corretor e confirmar que o card do link global não
+   aparece.
+
+Critério: nenhum cadastro aceita WhatsApp inválido, nenhum corretor entra duas
+vezes pelo mesmo retry e nenhum token em texto puro aparece nas tabelas do
+banco.

@@ -643,6 +643,12 @@ sequenceDiagram
 
 - usuário;
 - nome;
+- o Dono pode manter um único link global ativo e reutilizável para cadastro
+  de vários corretores;
+- somente o Dono pode criar, trocar ou desativar o link global;
+- trocar ou desativar impede novos cadastros pelo token anterior sem afetar
+  corretores que já ingressaram;
+- cada aceite do link global é individual, idempotente e auditado;
 - WhatsApp em formato E.164, obrigatório no aceite do convite de corretor;
 - confirmação autenticada de titularidade e consentimento operacional;
 - bloqueio do dashboard enquanto um corretor legado não concluir essa etapa;
@@ -1241,6 +1247,10 @@ O código não será removido até concluir migração e confirmar ausência de 
 
 ### Cenário 7 — Corretor pelo WhatsApp
 
+- Dono gera o link global na gestão da equipe e pode compartilhá-lo em grupos.
+- Vários corretores podem usar o mesmo link para criar acessos distintos.
+- O token global não expira automaticamente; permanece válido até ser trocado
+  ou desativado pelo Dono.
 - Aceite do convite exige o WhatsApp operacional com DDI.
 - Corretor antigo sem número confirmado não acessa o dashboard até concluir o
   cadastro.

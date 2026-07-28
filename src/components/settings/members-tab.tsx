@@ -73,6 +73,7 @@ import {
   PresenceDot,
 } from '@/components/presence/presence-dot';
 import { InviteMemberDialog } from './invite-member-dialog';
+import { GlobalBrokerInviteCard } from './global-broker-invite-card';
 import { SettingsPanelHead } from './settings-panel-head';
 import { ROLE_META } from './role-meta';
 
@@ -304,6 +305,8 @@ export function MembersTab() {
           </RequireRole>
         }
       />
+
+      <GlobalBrokerInviteCard />
 
       {/* Live presence summary across the roster. Updates without a
           full refresh as heartbeats and the local re-derive tick land. */}
