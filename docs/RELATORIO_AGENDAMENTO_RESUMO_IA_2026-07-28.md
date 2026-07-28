@@ -100,3 +100,14 @@ Referências:
 - resolver ou cancelar pendências `schedule_exception` abertas durante o
   rollout, sem apagar o histórico.
 
+## Promoção para produção
+
+- migration aplicada no Supabase Studiosp de produção;
+- política ativa validada com 15 minutos de duração e 10 minutos de intervalo;
+- chamada transacional em produção confirmou uma reunião de 15 minutos e foi
+  revertida sem deixar dados de teste;
+- branch homologada integrada por fast-forward à `main`;
+- commit promovido: `53a7074`;
+- deployment oficial validado após a conclusão da Vercel;
+- varredura de logs executada após o acesso ao frontend oficial.
+
