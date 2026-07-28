@@ -48,6 +48,22 @@ Especificação da importação segura de conversas antigas:
 - a próxima implementação cobre Visão geral, Central de atenção, Meu dia e
   pendências, após homologação visual do preview da fundação.
 
+### Link global de cadastro de corretores — 28 de julho de 2026
+
+#### Implementado em staging, aguardando homologação
+
+- o Dono possui um único link global ativo para compartilhar com vários
+  corretores;
+- o mesmo link cria acessos individuais e exige WhatsApp operacional com DDI;
+- somente o Dono pode criar, copiar, trocar ou desativar;
+- tokens são armazenados somente como SHA-256 e a URL copiável permanece no
+  navegador do Dono que a gerou;
+- a troca invalida o token anterior e preserva todos os corretores já
+  cadastrados;
+- cada resgate é idempotente, possui registro próprio e gera auditoria;
+- banco aplicado somente no Supabase Studiosp Staging; produção permanece sem
+  esta mudança.
+
 ### Robustez operacional da IA — decisão de 27 de julho de 2026
 
 #### Confirmado

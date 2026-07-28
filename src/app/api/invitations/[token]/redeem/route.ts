@@ -107,13 +107,35 @@ export async function POST(
     return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   }
 
-  const { data: accountId, error } = await supabase.rpc(
-    'redeem_invitation_with_broker_whatsapp',
-    {
-      p_token_hash: hashInviteToken(token),
-      p_whatsapp_e164: whatsappE164,
-    }
+  const tokenHash = hashInviteToken(token);
+  const { data: globalPeek, error: globalPeekError } = await supabase.rpc(
+    'peek_global_broker_invite',
+    { p_token_hash: tokenHash }
   );
+
+  if (globalPeekError) {
+    console.error('[redeem] global invite lookup error:', globalPeekError);
+    return NextResponse.json(
+      { error: 'Falha ao verificar o convite' },
+      { status: 500 }
+    );
+  }
+
+  const isGlobalBrokerInvite =
+    !!globalPeek &&
+    typeof globalPeek === 'object' &&
+    'ok' in globalPeek &&
+    globalPeek.ok === true;
+
+  const { data: accountId, error } = isGlobalBrokerInvite
+    ? await supabase.rpc('redeem_global_broker_invite_with_whatsapp', {
+        p_token_hash: tokenHash,
+        p_whatsapp_e164: whatsappE164,
+      })
+    : await supabase.rpc('redeem_invitation_with_broker_whatsapp', {
+        p_token_hash: tokenHash,
+        p_whatsapp_e164: whatsappE164,
+      });
 
   if (error) return rpcErrorToResponse(error);
 

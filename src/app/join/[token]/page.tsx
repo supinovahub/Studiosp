@@ -63,7 +63,8 @@ interface PeekOk {
   ok: true;
   account_name: string;
   role: 'admin' | 'agent' | 'viewer';
-  expires_at: string;
+  expires_at?: string;
+  kind?: 'global_broker';
 }
 interface PeekFail {
   ok: false;
@@ -334,13 +335,22 @@ export default function JoinPage() {
           <ShieldCheck className="text-primary size-3.5" />
           {ROLE_LABEL[peek.role]}
         </span>
-        . Link válido até{' '}
-        {new Date(peek.expires_at).toLocaleDateString('pt-BR', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        })}
-        .
+        {peek.kind === 'global_broker' ? (
+          <>
+            . Este é o link oficial e reutilizável da equipe para cadastro de
+            corretores.
+          </>
+        ) : (
+          <>
+            . Link válido até{' '}
+            {new Date(peek.expires_at!).toLocaleDateString('pt-BR', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })}
+            .
+          </>
+        )}
       </CardDescription>
     </CardHeader>
   );
@@ -467,8 +477,10 @@ export default function JoinPage() {
                   {peek.account_name}
                 </span>
                 , saia e inscreva-se novamente com um endereço de e-mail
-                diferente. O link de convite permanece válido enquanto não tiver
-                expirado.
+                diferente. O link de convite permanece válido{' '}
+                {peek.kind === 'global_broker'
+                  ? 'enquanto o dono não o trocar ou desativar.'
+                  : 'enquanto não tiver expirado.'}
               </p>
             </div>
             <DialogFooter className="bg-popover border-border">

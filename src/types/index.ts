@@ -96,6 +96,26 @@ export interface AccountInvitation {
   accepted_by_user_id: string | null;
 }
 
+/** Link reutilizável que somente o dono pode criar, trocar ou desativar. */
+export interface BrokerInviteLink {
+  id: string;
+  account_id: string;
+  created_by_user_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  revoked_at: string | null;
+}
+
+/** Registro de um corretor que ingressou usando um link global. */
+export interface BrokerInviteRedemption {
+  id: string;
+  link_id: string;
+  profile_id: string;
+  user_id: string;
+  redeemed_at: string;
+}
+
 export interface Contact {
   id: string;
   user_id: string;
