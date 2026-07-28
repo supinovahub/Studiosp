@@ -38,7 +38,9 @@ export function IntelligencePage() {
     text: string;
   } | null>(null);
   useEffect(() => {
-    if (window.location.hash === '#credenciais') setTab('credentials');
+    if (window.location.hash !== '#credenciais') return;
+    const frame = window.requestAnimationFrame(() => setTab('credentials'));
+    return () => window.cancelAnimationFrame(frame);
   }, []);
   if (loading)
     return <LoadingState label="Carregando inteligência da operação..." />;
@@ -274,6 +276,8 @@ function BehaviorForm({
       completionMessage: form.get('completionMessage'),
       tone: form.get('tone'),
       messageLength: form.get('messageLength'),
+      adaptToLead: form.get('adaptToLead') === 'on',
+      allowContextualLaughter: form.get('allowContextualLaughter') === 'on',
     });
   }
   const tone =
@@ -301,7 +305,7 @@ function BehaviorForm({
         <Field label="Nome da assistente">
           <Input
             name="identityName"
-            defaultValue={String(config.identity_name ?? 'Assistente Studiosp')}
+            defaultValue={String(config.identity_name ?? 'Sofia')}
             disabled={disabled}
           />
         </Field>
@@ -334,6 +338,42 @@ function BehaviorForm({
             Não vende, não promete unidade e não confirma fatos humanos.
           </p>
         </div>
+        <label className="border-border bg-background flex cursor-pointer items-start justify-between gap-4 rounded-lg border p-3">
+          <span>
+            <span className="text-foreground block text-sm font-medium">
+              Adaptar ao jeito do lead
+            </span>
+            <span className="text-muted-foreground mt-1 block text-xs leading-5">
+              Ajusta vocabulário e informalidade sem copiar erros ou perder
+              clareza.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            name="adaptToLead"
+            defaultChecked={tone.adapt_to_lead !== false}
+            disabled={disabled}
+            className="accent-primary mt-0.5 size-4 shrink-0"
+          />
+        </label>
+        <label className="border-border bg-background flex cursor-pointer items-start justify-between gap-4 rounded-lg border p-3">
+          <span>
+            <span className="text-foreground block text-sm font-medium">
+              Acompanhar humor com moderação
+            </span>
+            <span className="text-muted-foreground mt-1 block text-xs leading-5">
+              Permite “kkk”, “rs” ou emoji apenas quando o próprio lead já
+              estiver nesse clima.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            name="allowContextualLaughter"
+            defaultChecked={tone.allow_contextual_laughter !== false}
+            disabled={disabled}
+            className="accent-primary mt-0.5 size-4 shrink-0"
+          />
+        </label>
         <Field label="Instruções de comunicação" wide>
           <Textarea
             name="communicationPrompt"

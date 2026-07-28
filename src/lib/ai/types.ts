@@ -6,7 +6,7 @@
 // whether the account is on OpenAI or Anthropic.
 // ============================================================
 
-export type AiProvider = 'openai' | 'anthropic'
+export type AiProvider = 'openai' | 'anthropic';
 
 /**
  * Account AI setup, decrypted and ready to use. Produced by
@@ -14,32 +14,44 @@ export type AiProvider = 'openai' | 'anthropic'
  * (stored AES-256-GCM-encrypted at rest).
  */
 export interface AiConfig {
-  provider: AiProvider
-  model: string
-  apiKey: string
+  provider: AiProvider;
+  model: string;
+  apiKey: string;
   /** Trusted operational instructions. Never exposed to the dashboard. */
-  internalPrompt: string | null
+  internalPrompt: string | null;
   /** Dashboard-editable preferences limited to tone and wording. */
-  communicationPrompt: string | null
-  isActive: boolean
-  autoReplyEnabled: boolean
-  autoReplyMaxPerConversation: number
+  communicationPrompt: string | null;
+  isActive: boolean;
+  autoReplyEnabled: boolean;
+  autoReplyMaxPerConversation: number;
   /** Empty means unrestricted; otherwise only these E.164 numbers may reply. */
-  autoReplyAllowedNumbers: string[]
+  autoReplyAllowedNumbers: string[];
   /** Where auto-reply hands a conversation off when the model bails: an
    *  agent's `auth.users.id`, or null to leave it unassigned (drop into
    *  the shared queue). */
-  handoffAgentId: string | null
+  handoffAgentId: string | null;
+  /** Published Studiosp behavior version. Credentials still come from
+   *  `ai_configs`; identity, tone and wording come from this version. */
+  behaviorVersionId?: string | null;
+  identityName?: string;
+  toneConfig?: {
+    language?: string;
+    style?: string;
+    message_length?: string;
+    adapt_to_lead?: boolean;
+    allow_contextual_laughter?: boolean;
+  };
+  completionMessage?: string | null;
   /** Optional OpenAI-compatible key for embeddings. When set, the
    *  knowledge base is embedded and semantic retrieval turns on; when
    *  null, retrieval falls back to lexical full-text search. */
-  embeddingsApiKey: string | null
+  embeddingsApiKey: string | null;
 }
 
 /** A single conversation turn in the shape both providers accept. */
 export interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
+  role: 'user' | 'assistant';
+  content: string;
 }
 
 /**
@@ -48,25 +60,25 @@ export interface ChatMessage {
  * the provider didn't return usage. Logged to `ai_usage_log`.
  */
 export interface AiUsage {
-  promptTokens: number
-  completionTokens: number
-  totalTokens: number
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 /** Raw text + usage a provider adapter returns before handoff parsing. */
 export interface ProviderResult {
-  text: string
-  usage: AiUsage | null
+  text: string;
+  usage: AiUsage | null;
 }
 
 /** Outcome of a generation call. */
 export interface GenerateResult {
   /** The reply text, with any handoff sentinel stripped. */
-  text: string
+  text: string;
   /** True when the model asked to hand off to a human (auto-reply mode). */
-  handoff: boolean
+  handoff: boolean;
   /** Provider token usage for this call, or null when unavailable. */
-  usage: AiUsage | null
+  usage: AiUsage | null;
 }
 
 /**
@@ -75,12 +87,12 @@ export interface GenerateResult {
  * (invalid_key vs rate_limited vs timeout, etc.).
  */
 export class AiError extends Error {
-  readonly code: string
-  readonly status: number
+  readonly code: string;
+  readonly status: number;
   constructor(message: string, opts: { code?: string; status?: number } = {}) {
-    super(message)
-    this.name = 'AiError'
-    this.code = opts.code ?? 'ai_error'
-    this.status = opts.status ?? 502
+    super(message);
+    this.name = 'AiError';
+    this.code = opts.code ?? 'ai_error';
+    this.status = opts.status ?? 502;
   }
 }

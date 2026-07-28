@@ -50,10 +50,13 @@ export function appointmentConfirmation(value: {
   return `Sua conversa de 10 a 15 minutos está confirmada para ${formatted}. Agora faremos a distribuição interna para um dos nossos corretores. Você receberá um lembrete antes da reunião.`;
 }
 
-export function opportunityInvitation(value: {
-  starts_at?: unknown;
-  timezone?: unknown;
-}) {
+export function opportunityInvitation(
+  value: {
+    starts_at?: unknown;
+    timezone?: unknown;
+  },
+  configuredCompletion?: string | null
+) {
   if (typeof value.starts_at !== 'string') return null;
   const startsAt = new Date(value.starts_at);
   if (!Number.isFinite(startsAt.getTime())) return null;
@@ -67,7 +70,17 @@ export function opportunityInvitation(value: {
     minute: '2-digit',
     timeZone: timezone,
   }).format(startsAt);
-  return `Encontrei algumas oportunidades de acordo com o seu perfil. Posso agendar uma conversa de 10 a 15 minutos com um corretor para apresentar os detalhes? Tenho disponibilidade para ${formatted}. Esse horário funciona para você?`;
+  const safeConfiguredCompletion =
+    configuredCompletion?.trim() &&
+    !/\b(confirmad[ao]|marcad[ao]|agendad[ao]|reservad[ao]|desconto|unidade garantida)\b/i.test(
+      configuredCompletion
+    )
+      ? configuredCompletion.trim().replace(/\s+/g, ' ')
+      : null;
+  const introduction =
+    safeConfiguredCompletion ??
+    'Boa, já entendi melhor o que você busca. Tenho algumas oportunidades que podem fazer sentido. Posso marcar uma conversa de 10 a 15 minutos com um corretor pra te explicar os detalhes?';
+  return `${introduction} Tenho disponibilidade para ${formatted}. Esse horário funciona pra você?`;
 }
 
 export function appointmentReservationFailure() {
@@ -101,24 +114,24 @@ export function qualificationQuestionPrompt(question?: {
   if (!question) return null;
   const prompts: Record<string, string> = {
     purchase_objective:
-      'Antes de avançarmos, você procura o imóvel para morar, investir ou combinar os dois objetivos?',
+      'Você está buscando esse imóvel pra morar, investir ou um pouco dos dois?',
     preferred_locations:
-      'Antes de avançarmos, qual bairro ou região de São Paulo você prefere?',
+      'Tem algum bairro ou região de São Paulo que você prefere? Se ainda não souber, tudo bem.',
     entry_budget:
-      'Antes de avançarmos, qual faixa de entrada você pretende utilizar?',
+      'Hoje, mais ou menos quanto você conseguiria usar de entrada?',
     monthly_installment_budget:
-      'Antes de avançarmos, qual faixa de parcela mensal ficaria confortável para você?',
+      'E qual valor de parcela por mês ficaria confortável pra você?',
     total_price_budget:
-      'Antes de avançarmos, qual faixa de preço total você está considerando?',
-    property_timing:
-      'Antes de avançarmos, você prefere imóvel na planta, pronto ou é indiferente?',
-    purchase_urgency:
-      'Antes de avançarmos, em quanto tempo você pretende realizar a compra?',
+      'Você já tem um valor total de compra em mente? Se não tiver, sem problema.',
+    property_timing: 'Você prefere algo na planta, pronto ou tanto faz?',
+    purchase_urgency: 'Você pretende comprar em quanto tempo, mais ou menos?',
   };
   const key = String(question.key ?? '');
   if (prompts[key]) return prompts[key];
   const label = String(question.label ?? '').trim();
-  return label ? `Antes de avançarmos, pode me informar: ${label}?` : null;
+  return label
+    ? `Me conta uma coisa: ${label.toLocaleLowerCase('pt-BR')}?`
+    : null;
 }
 
 export function availabilityReply(args: {

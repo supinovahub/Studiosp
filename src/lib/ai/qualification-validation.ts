@@ -2,7 +2,8 @@ type Row = Record<string, unknown>;
 
 function finiteNonNegative(value: unknown) {
   return (
-    (value === null || value === undefined) ||
+    value === null ||
+    value === undefined ||
     (typeof value === 'number' && Number.isFinite(value) && value >= 0)
   );
 }
@@ -30,10 +31,11 @@ export function isValidQualificationValue(
       return (
         Boolean(value) &&
         Array.isArray(value?.values) &&
-        value.values.length > 0 &&
-        value.values.every(
-          (item) => typeof item === 'string' && item.trim().length > 0
-        )
+        ((value.unknown === true && value.values.length === 0) ||
+          (value.values.length > 0 &&
+            value.values.every(
+              (item) => typeof item === 'string' && item.trim().length > 0
+            )))
       );
     case 'single_choice':
       return (

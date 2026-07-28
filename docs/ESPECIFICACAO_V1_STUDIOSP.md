@@ -204,7 +204,8 @@ flowchart LR
 ### 5.1 Campos obrigatórios
 
 - Objetivo: morar, investir, ambos ou não definido.
-- Localização: ao menos um bairro ou região normalizada.
+- Localização: ao menos um bairro ou região normalizada, ou registro explícito
+  de que o lead ainda não definiu a região. Nesse caso o matching começa amplo.
 - Referência financeira: entrada disponível ou parcela mensal.
 - Situação do imóvel: na planta, pronto ou indiferente.
 - Urgência de compra.
@@ -300,6 +301,7 @@ A IA pode:
 - transcrever áudio;
 - interpretar respostas;
 - normalizar dados;
+- vincular cada extração à mensagem atual e à pergunta imediatamente anterior;
 - pedir esclarecimento;
 - escolher a próxima pergunta;
 - responder dúvidas cobertas pela base;
@@ -394,6 +396,9 @@ Falha de transcrição não bloqueia o atendimento: a IA pede que o lead repita 
 - Opt-out bloqueia mensagens futuras.
 - Uma execução possui chave idempotente para não duplicar envio.
 - O dono pode configurar tempos, limite, textos e canais.
+- Cada tentativa usa o histórico recente e o comportamento publicado para
+  retomar a última lacuna de forma contextual. Texto fixo é apenas contingência
+  quando o provedor de IA não está disponível.
 
 ## 8. Empreendimentos
 
