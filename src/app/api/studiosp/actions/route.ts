@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
       const developerName = text(body.developerName);
       const neighborhoodName = text(body.neighborhoodName);
 
-      if (!developerId && developerName) {
+      if (developerName) {
         const normalized = normalizedName(developerName);
         const existing = await supabase
           .from('developers')
@@ -348,7 +348,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (!neighborhoodId && neighborhoodName) {
+      if (neighborhoodName) {
         const normalized = normalizedName(neighborhoodName);
         const existing = await supabase
           .from('neighborhoods')
