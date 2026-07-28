@@ -220,10 +220,10 @@ export function LeadDetailPage({ id }: { id: string }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <Link
         href="/leads"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium"
+        className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors"
       >
         <ArrowLeft className="size-3" /> Voltar para leads
       </Link>
@@ -266,10 +266,10 @@ export function LeadDetailPage({ id }: { id: string }) {
       />
       <LeadStatusBar lead={lead} />
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-5">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_23rem]">
+        <div className="min-w-0 space-y-5">
           <div
-            className="border-border bg-card flex gap-1 overflow-x-auto rounded-lg border p-1"
+            className="border-border/70 bg-card/80 sticky top-[4.5rem] z-10 flex gap-1 overflow-x-auto rounded-xl border p-1 shadow-sm backdrop-blur-md"
             role="tablist"
             aria-label="Contexto do lead"
           >
@@ -289,9 +289,9 @@ export function LeadDetailPage({ id }: { id: string }) {
                     value as 'summary' | 'qualification' | 'matches' | 'history'
                   )
                 }
-                className={`min-w-fit rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                className={`min-h-9 min-w-fit rounded-lg px-3 text-xs font-semibold transition-colors ${
                   activeTab === value
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
@@ -303,8 +303,8 @@ export function LeadDetailPage({ id }: { id: string }) {
           {activeTab === 'summary' ? <CallBriefSection lead={lead} /> : null}
 
           {activeTab === 'qualification' ? (
-            <section className="border-border bg-card rounded-lg border">
-              <div className="border-border flex items-center justify-between border-b px-4 py-3">
+            <section className="border-border/70 bg-card overflow-hidden rounded-2xl border">
+              <div className="border-border/65 flex items-center justify-between border-b px-4 py-4 sm:px-5">
                 <div>
                   <h3 className="text-foreground text-sm font-semibold">
                     Qualificação
@@ -323,11 +323,11 @@ export function LeadDetailPage({ id }: { id: string }) {
                   }
                 />
               </div>
-              <div className="divide-border divide-y">
+              <div className="divide-border/60 divide-y">
                 {qualificationRows.map(({ question, answer }) => (
                   <div
                     key={String(question.id)}
-                    className="grid gap-1 px-4 py-3 sm:grid-cols-[0.9fr_1.1fr] sm:gap-4"
+                    className="grid gap-1 px-4 py-3.5 sm:grid-cols-[0.9fr_1.1fr] sm:gap-4 sm:px-5"
                   >
                     <p className="text-muted-foreground text-xs font-medium">
                       {String(question.label)}
@@ -358,8 +358,8 @@ export function LeadDetailPage({ id }: { id: string }) {
           ) : null}
 
           {activeTab === 'matches' ? (
-            <section className="border-border bg-card rounded-lg border">
-              <div className="border-border border-b px-4 py-3">
+            <section className="border-border/70 bg-card overflow-hidden rounded-2xl border">
+              <div className="border-border/65 border-b px-4 py-4 sm:px-5">
                 <h3 className="text-foreground text-sm font-semibold">
                   Empreendimentos compatíveis
                 </h3>
@@ -379,10 +379,10 @@ export function LeadDetailPage({ id }: { id: string }) {
                     return (
                       <article
                         key={String(match.id)}
-                        className="border-border bg-muted/20 rounded-lg border p-3"
+                        className="border-border/70 bg-muted/20 rounded-xl border p-4"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div className="border-primary/20 bg-primary/10 flex size-9 items-center justify-center rounded-lg border">
+                          <div className="border-primary/20 bg-primary-soft flex size-9 items-center justify-center rounded-xl border">
                             <Building2 className="text-primary size-4" />
                           </div>
                           <StatusBadge
@@ -433,8 +433,8 @@ export function LeadDetailPage({ id }: { id: string }) {
           ) : null}
 
           {activeTab === 'history' ? (
-            <section className="border-border bg-card rounded-lg border">
-              <div className="border-border border-b px-4 py-3">
+            <section className="border-border/70 bg-card overflow-hidden rounded-2xl border">
+              <div className="border-border/65 border-b px-4 py-4 sm:px-5">
                 <h3 className="text-foreground text-sm font-semibold">
                   Histórico imutável
                 </h3>
@@ -443,11 +443,11 @@ export function LeadDetailPage({ id }: { id: string }) {
                 </p>
               </div>
               {(data.events ?? []).length ? (
-                <div className="divide-border divide-y">
+                <div className="divide-border/60 divide-y">
                   {(data.events ?? []).map((event) => (
                     <div
                       key={String(event.id)}
-                      className="flex gap-3 px-4 py-3"
+                      className="flex gap-3 px-4 py-3.5 sm:px-5"
                     >
                       <div className="border-border bg-muted/50 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border">
                         <CheckCircle2 className="text-primary size-3.5" />
@@ -476,10 +476,10 @@ export function LeadDetailPage({ id }: { id: string }) {
           ) : null}
         </div>
 
-        <aside className="space-y-4">
-          <section className="border-primary/25 bg-primary/5 rounded-lg border p-4">
+        <aside className="space-y-4 xl:sticky xl:top-[4.5rem] xl:self-start">
+          <section className="border-primary/20 bg-primary-soft/45 rounded-2xl border p-4">
             <div className="flex items-start gap-3">
-              <div className="border-primary/25 bg-primary/10 flex size-9 shrink-0 items-center justify-center rounded-lg border">
+              <div className="border-primary/20 bg-primary-soft flex size-9 shrink-0 items-center justify-center rounded-xl border">
                 <ClipboardCheck className="text-primary size-4" />
               </div>
               <div>
