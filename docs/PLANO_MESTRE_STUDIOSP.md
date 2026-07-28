@@ -1856,3 +1856,19 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   persistência, impedindo, por exemplo, uma localização em um campo monetário;
 - a listagem de horários respeita a antecedência e o horizonte configurados e
   considera somente corretores ativos, disponíveis e com WhatsApp confirmado.
+
+## 23. Reforma integral da interface
+
+### Fase 2 implementada em branch isolada em 28/07/2026
+
+- a reforma continua exclusivamente na branch `redesign/full-ui-refresh`, sem
+  alterar a interface em produção;
+- `/visao-geral` e `/meu-dia` foram reorganizadas como centros de comando,
+  começando por prioridades, próxima reunião e indicadores operacionais;
+- `/atencao` passou a explicitar volume, criticidade e vencimento, com filtros
+  locais e uma fila responsiva orientada à decisão;
+- o mesmo componente mantém conteúdo contextual para Dono e Corretor;
+- contratos de dados, ações, permissões, rotas e regras de negócio foram
+  preservados;
+- nenhuma migration ou alteração de banco foi necessária;
+- a fase foi validada com TypeScript, lint, build e 791 testes automatizados.
