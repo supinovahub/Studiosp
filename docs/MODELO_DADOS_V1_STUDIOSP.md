@@ -329,10 +329,6 @@ Perguntas canônicas semeadas:
 
 O preço total é desejável, mas não bloqueia a conclusão quando entrada ou parcela está confirmada.
 
-Uma localização ainda indefinida é persistida como
-`{"values":[],"unknown":true}`. Isso registra que a pergunta foi respondida sem
-inventar bairro e mantém o matching sem filtro geográfico.
-
 ## 7. Configuração e execução da IA
 
 ### 7.1 `ai_config_versions`

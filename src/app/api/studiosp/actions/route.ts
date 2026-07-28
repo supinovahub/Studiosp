@@ -493,15 +493,13 @@ export async function POST(request: NextRequest) {
       const result = await supabase
         .from('ai_config_versions')
         .update({
-          identity_name: text(body.identityName, 'Sofia'),
+          identity_name: text(body.identityName, 'Assistente Studiosp'),
           communication_prompt: text(body.communicationPrompt),
           completion_message: text(body.completionMessage) || null,
           tone_config: {
             language: 'pt-BR',
             style: text(body.tone, 'consultivo'),
             message_length: text(body.messageLength, 'short'),
-            adapt_to_lead: body.adaptToLead !== false,
-            allow_contextual_laughter: body.allowContextualLaughter !== false,
           },
         })
         .eq('account_id', accountId)

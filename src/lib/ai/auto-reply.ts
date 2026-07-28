@@ -19,7 +19,6 @@ import {
 import { isInboundAiReplyAllowed } from './inbound-allowlist';
 import { splitAiMessage, waitBetweenAiMessages } from './message-parser';
 import { guardPrematureMeetingOffer } from './scheduling-intent';
-import { isSoftConversationFriction } from './conversation-behavior';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -79,7 +78,9 @@ export async function dispatchInboundToAiReply(
     if (!config || !config.autoReplyEnabled)
       return { outcome: 'skipped', reason: 'ai_config_disabled' };
     // Block before loading conversation context or calling the provider.
-    if (!isInboundAiReplyAllowed(senderPhone, config.autoReplyAllowedNumbers))
+    if (
+      !isInboundAiReplyAllowed(senderPhone, config.autoReplyAllowedNumbers)
+    )
       return { outcome: 'skipped', reason: 'sender_not_allowed' };
 
     // Deterministic, user-configured responders win over the LLM — the
@@ -280,8 +281,6 @@ export async function dispatchInboundToAiReply(
     const systemPrompt = buildSystemPrompt({
       internalPrompt: config.internalPrompt,
       communicationPrompt: config.communicationPrompt,
-      identityName: config.identityName,
-      toneConfig: config.toneConfig,
       mode: 'auto_reply',
       knowledge,
       operation: studiosp.grounding,
@@ -314,14 +313,9 @@ export async function dispatchInboundToAiReply(
       usage,
     });
 
-    const repairableFriction =
-      classification.primaryIntent === 'complaint' &&
-      isSoftConversationFriction(latestUserMessage(messages));
     if (
       !studiosp.outboundOverride &&
-      (handoff ||
-        (classification.requiresHandoff && !repairableFriction) ||
-        !responseText)
+      (handoff || classification.requiresHandoff || !responseText)
     ) {
       // The model can't (or shouldn't) answer — stop auto-replying on
       // this thread and hand it to a human. We (a) pause the bot here
@@ -540,8 +534,7 @@ export async function dispatchInboundToAiReply(
     return { outcome: 'completed' };
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err);
-    const reason =
-      err instanceof Error ? err.message : 'unknown_dispatch_error';
+    const reason = err instanceof Error ? err.message : 'unknown_dispatch_error';
     return {
       outcome: 'failed',
       reason,

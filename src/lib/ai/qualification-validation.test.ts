@@ -42,19 +42,4 @@ describe('qualification value validation', () => {
       )
     ).toBe(false);
   });
-
-  it('accepts an explicit unknown location without inventing a region', () => {
-    expect(
-      isValidQualificationValue(
-        { data_type: 'location' },
-        { values: [], unknown: true }
-      )
-    ).toBe(true);
-    expect(
-      isValidQualificationValue(
-        { data_type: 'location' },
-        { values: [], unknown: false }
-      )
-    ).toBe(false);
-  });
 });

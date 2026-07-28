@@ -137,8 +137,6 @@ export async function POST(request: Request) {
     const systemPrompt = buildSystemPrompt({
       internalPrompt: config.internalPrompt,
       communicationPrompt: config.communicationPrompt,
-      identityName: config.identityName,
-      toneConfig: config.toneConfig,
       mode: 'draft',
       knowledge,
       catalog: sdr.grounding,
