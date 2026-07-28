@@ -321,7 +321,7 @@ export default function JoinPage() {
   // ----- Peek OK -----
   const inviteHeader = (
     <CardHeader className="items-center text-center">
-      <div className="bg-primary/10 mb-2 flex h-12 w-12 items-center justify-center rounded-xl">
+      <div className="bg-primary-soft mb-2 flex size-12 items-center justify-center rounded-2xl">
         <UsersRound className="text-primary h-6 w-6" />
       </div>
       <CardTitle className="text-foreground text-xl">
@@ -349,13 +349,13 @@ export default function JoinPage() {
   if (authedUserId) {
     return (
       <>
-        <Card className="border-border bg-card w-full max-w-md">
+        <Card className="border-border/70 bg-card/95 relative w-full max-w-md rounded-3xl shadow-2xl backdrop-blur-xl">
           {inviteHeader}
           <CardContent className="flex flex-col gap-3">
             {peek.role === 'agent' ? (
               <div className="border-border bg-muted/25 space-y-3 rounded-lg border p-3">
                 <div className="flex items-start gap-2.5">
-                  <div className="border-primary/20 bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg border">
+                  <div className="border-primary/20 bg-primary-soft text-primary flex size-9 shrink-0 items-center justify-center rounded-xl border">
                     <MessageCircle className="size-4" />
                   </div>
                   <div className="min-w-0">
@@ -502,7 +502,7 @@ export default function JoinPage() {
 
   // ----- Not authed: prompt to sign up or sign in -----
   return (
-    <Card className="border-border bg-card w-full max-w-md">
+    <Card className="border-border/70 bg-card/95 relative w-full max-w-md rounded-3xl shadow-2xl backdrop-blur-xl">
       {inviteHeader}
       <CardContent className="flex flex-col gap-2">
         <Link href={`/signup?invite=${encodeURIComponent(token!)}`}>

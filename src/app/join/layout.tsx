@@ -37,7 +37,9 @@ export const metadata: Metadata = {
 
 export default function JoinLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="bg-background relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      <div className="bg-primary/10 pointer-events-none absolute -top-32 -left-24 size-96 rounded-full blur-3xl" />
+      <div className="bg-primary/8 pointer-events-none absolute -right-24 -bottom-40 size-[28rem] rounded-full blur-3xl" />
       {children}
     </div>
   );

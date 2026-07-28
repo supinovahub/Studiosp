@@ -72,7 +72,7 @@ export function TeamPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         eyebrow={
           isManager ? 'Distribuição e cobertura' : 'Meu perfil operacional'
@@ -99,14 +99,14 @@ export function TeamPage() {
       {message ? (
         <p
           role="status"
-          className={`rounded-lg border px-3 py-2 text-sm ${message.type === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}
+          className={`rounded-xl border px-3 py-2.5 text-sm ${message.type === 'success' ? 'border-success/25 bg-success-soft text-success' : 'border-red-500/25 bg-red-500/10 text-red-400'}`}
         >
           {message.text}
         </p>
       ) : null}
 
       {!isManager && currentBroker ? (
-        <section className="border-primary/25 bg-primary/5 flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <section className="border-primary/20 bg-primary-soft/50 flex flex-col gap-4 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-foreground text-sm font-semibold">
               Disponibilidade para novos agendamentos
@@ -157,10 +157,10 @@ export function TeamPage() {
               return (
                 <article
                   key={String(broker.id)}
-                  className="border-border bg-card overflow-hidden rounded-lg border"
+                  className="border-border/70 bg-card overflow-hidden rounded-2xl border"
                 >
-                  <div className="border-border flex items-start gap-3 border-b p-4">
-                    <div className="border-primary/20 bg-primary/10 flex size-10 shrink-0 items-center justify-center rounded-lg border">
+                  <div className="border-border/65 flex items-start gap-3 border-b p-4 sm:p-5">
+                    <div className="border-primary/20 bg-primary-soft flex size-10 shrink-0 items-center justify-center rounded-xl border">
                       <UserRoundCheck className="text-primary size-5" />
                     </div>
                     <div className="min-w-0 flex-1">

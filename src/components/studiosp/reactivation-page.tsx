@@ -356,7 +356,7 @@ export function ReactivationPage() {
       <form
         ref={formRef}
         onSubmit={(event) => event.preventDefault()}
-        className="border-border bg-card grid gap-4 rounded-xl border p-5 lg:grid-cols-2"
+        className="border-border/70 bg-card grid gap-4 rounded-2xl border p-4 sm:p-5 lg:grid-cols-2"
       >
         <div className="lg:col-span-2">
           <h3 className="font-semibold">1. Arquivo e segmentação</h3>
@@ -434,13 +434,13 @@ export function ReactivationPage() {
 
       <div ref={feedbackRef} aria-live="polite">
         {error ? (
-          <div className="border-destructive/40 bg-destructive/5 text-destructive rounded-lg border p-4 text-sm">
+          <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-xl border p-4 text-sm">
             <p className="font-medium">A importação não foi concluída.</p>
             <p>{error}</p>
           </div>
         ) : null}
         {success ? (
-          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm text-emerald-700">
+          <div className="border-success/25 bg-success-soft text-success rounded-xl border p-4 text-sm">
             <p className="font-medium">Operação concluída.</p>
             <p>{success}</p>
           </div>
@@ -448,7 +448,7 @@ export function ReactivationPage() {
       </div>
 
       {preview && summary ? (
-        <section className="border-border bg-card space-y-4 rounded-xl border p-5">
+        <section className="border-border/70 bg-card space-y-4 rounded-2xl border p-4 sm:p-5">
           <div>
             <h3 className="font-semibold">2. Revisar importação</h3>
             <p className="text-muted-foreground text-sm">
@@ -461,7 +461,7 @@ export function ReactivationPage() {
             <Summary label="Linhas inválidas" value={summary.invalid} />
             <Summary label="Dados incompletos" value={summary.incomplete} />
           </div>
-          <div className="border-border max-h-96 overflow-auto rounded-lg border">
+          <div className="border-border/70 max-h-96 overflow-auto rounded-xl border">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-muted sticky top-0">
                 <tr>
@@ -536,7 +536,7 @@ export function ReactivationPage() {
           campaigns.map((campaign) => (
             <article
               key={campaign.id}
-              className="border-border bg-card flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="border-border/70 bg-card flex flex-col gap-3 rounded-2xl border p-4 transition-colors sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0 flex-1">
                 {editingId === campaign.id ? (

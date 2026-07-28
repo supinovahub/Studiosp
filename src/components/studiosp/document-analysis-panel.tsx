@@ -397,7 +397,7 @@ export function DocumentAnalysisPanel({
       aria-modal="true"
       aria-labelledby="document-analysis-title"
     >
-      <section className="bg-background m-auto flex h-full w-full min-w-0 flex-col overflow-hidden shadow-2xl sm:h-[calc(100dvh-2rem)] sm:max-w-7xl sm:rounded-xl sm:border">
+      <section className="bg-background m-auto flex h-full w-full min-w-0 flex-col overflow-hidden shadow-2xl sm:h-[calc(100dvh-2rem)] sm:max-w-7xl sm:rounded-2xl sm:border">
         <header className="border-border flex shrink-0 items-start justify-between gap-4 border-b p-4">
           <div>
             <h3
@@ -427,7 +427,7 @@ export function DocumentAnalysisPanel({
 
         <div className="grid min-h-0 min-w-0 flex-1 gap-4 overflow-y-auto overscroll-contain p-4 xl:grid-cols-[320px_minmax(0,1fr)]">
           <aside className="min-w-0 space-y-4">
-            <div className="border-border space-y-3 rounded-lg border p-3">
+            <div className="border-border/70 space-y-3 rounded-xl border p-3">
               <p className="text-foreground text-sm font-medium">1. Fontes</p>
               <Input
                 ref={inputRef}
@@ -461,7 +461,7 @@ export function DocumentAnalysisPanel({
               </Button>
             </div>
 
-            <div className="border-border rounded-lg border">
+            <div className="border-border/70 rounded-xl border">
               <p className="border-border border-b px-3 py-2 text-sm font-medium">
                 Lotes recentes
               </p>
@@ -494,12 +494,12 @@ export function DocumentAnalysisPanel({
 
           <div className="min-w-0 space-y-4">
             {error ? (
-              <div className="border-destructive/40 bg-destructive/5 text-destructive rounded-lg border p-3 text-sm">
+              <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-xl border p-3 text-sm">
                 {error}
               </div>
             ) : null}
             {success ? (
-              <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-600">
+              <div className="border-success/25 bg-success-soft text-success rounded-xl border p-3 text-sm">
                 {success}
               </div>
             ) : null}

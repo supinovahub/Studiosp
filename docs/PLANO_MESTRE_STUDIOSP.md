@@ -1872,3 +1872,19 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   preservados;
 - nenhuma migration ou alteração de banco foi necessária;
 - a fase foi validada com TypeScript, lint, build e 791 testes automatizados.
+
+### Fases 3 e 4 implementadas em branch isolada em 28/07/2026
+
+- Leads, detalhe, Pipeline, Inbox, Agenda e Follow-ups foram alinhados ao novo
+  sistema visual sem alterar contratos funcionais;
+- Reativação, Empreendimentos, importador documental, Equipe, Inteligência,
+  Relatórios e Configurações receberam a mesma hierarquia, densidade e
+  responsividade;
+- Login, cadastro, recuperação de senha, convites, notificações, importação de
+  histórico e onboarding do corretor foram incluídos na reforma;
+- realtime, deep links, deduplicação, ações comerciais, campanhas, IA,
+  uploads, permissões e integrações permanecem no código operacional original;
+- as rotas herdadas ocultas da V1 não foram reintroduzidas;
+- não houve alteração de banco, migrations, RLS, APIs ou produção;
+- a branch completa foi validada com TypeScript, lint, build e 791 testes
+  automatizados antes da homologação visual.

@@ -77,7 +77,7 @@ export function IntelligencePage() {
         title="Inteligência da operação"
         description="O dono define comportamento, perguntas, cadência e regras de agenda. Esses dados ficam versionados no banco e formam o contexto que a IA consulta em cada atendimento."
       />
-      <div className="border-border bg-card flex gap-1 overflow-x-auto rounded-lg border p-1">
+      <div className="border-border/70 bg-card/80 sticky top-[4.5rem] z-10 flex gap-1 overflow-x-auto rounded-xl border p-1 shadow-sm backdrop-blur-md">
         {(
           [
             ['behavior', 'Comportamento'],
@@ -93,7 +93,7 @@ export function IntelligencePage() {
             key={value}
             type="button"
             onClick={() => setTab(value)}
-            className={`min-h-9 shrink-0 rounded-lg px-3 text-xs font-medium ${tab === value ? 'bg-primary/12 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+            className={`min-h-9 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors ${tab === value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           >
             {label}
           </button>
@@ -102,13 +102,13 @@ export function IntelligencePage() {
       {message ? (
         <p
           role="status"
-          className={`rounded-lg border px-3 py-2 text-sm ${message.type === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}
+          className={`rounded-xl border px-3 py-2.5 text-sm ${message.type === 'success' ? 'border-success/25 bg-success-soft text-success' : 'border-red-500/25 bg-red-500/10 text-red-400'}`}
         >
           {message.text}
         </p>
       ) : null}
       {!canManage ? (
-        <p className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-sm text-amber-200">
+        <p className="border-warning/20 bg-warning-soft text-warning rounded-xl border px-3 py-2.5 text-sm">
           Esta área é somente leitura para o seu perfil.
         </p>
       ) : null}
@@ -210,9 +210,12 @@ function AiTestingForm({
   }
 
   return (
-    <form onSubmit={submit} className="border-border bg-card rounded-lg border">
+    <form
+      onSubmit={submit}
+      className="border-border/70 bg-card overflow-hidden rounded-2xl border"
+    >
       <div className="border-border flex items-start gap-3 border-b p-4">
-        <div className="border-primary/20 bg-primary/10 flex size-10 items-center justify-center rounded-lg border">
+        <div className="border-primary/20 bg-primary-soft flex size-10 items-center justify-center rounded-xl border">
           <ShieldCheck className="text-primary size-5" />
         </div>
         <div>
@@ -276,9 +279,12 @@ function BehaviorForm({
   const tone =
     (config.tone_config as Record<string, unknown> | undefined) ?? {};
   return (
-    <form onSubmit={submit} className="border-border bg-card rounded-lg border">
+    <form
+      onSubmit={submit}
+      className="border-border/70 bg-card overflow-hidden rounded-2xl border"
+    >
       <div className="border-border flex items-start gap-3 border-b p-4">
-        <div className="border-primary/20 bg-primary/10 flex size-10 items-center justify-center rounded-lg border">
+        <div className="border-primary/20 bg-primary-soft flex size-10 items-center justify-center rounded-xl border">
           <Bot className="text-primary size-5" />
         </div>
         <div>
@@ -381,7 +387,7 @@ function QuestionsPanel({
   }
   return (
     <div className="space-y-4">
-      <div className="border-border bg-card rounded-lg border">
+      <div className="border-border/70 bg-card overflow-hidden rounded-2xl border">
         <div className="border-border border-b px-4 py-3">
           <h3 className="text-foreground text-sm font-semibold">
             Perguntas ativas
@@ -513,9 +519,12 @@ function FollowupForm({ policy, saving, disabled, onSave }: ConfigFormProps) {
     });
   }
   return (
-    <form onSubmit={submit} className="border-border bg-card rounded-lg border">
+    <form
+      onSubmit={submit}
+      className="border-border/70 bg-card overflow-hidden rounded-2xl border"
+    >
       <div className="border-border flex gap-3 border-b p-4">
-        <div className="border-primary/20 bg-primary/10 flex size-10 items-center justify-center rounded-lg border">
+        <div className="border-primary/20 bg-primary-soft flex size-10 items-center justify-center rounded-xl border">
           <MessageSquareText className="text-primary size-5" />
         </div>
         <div>
@@ -579,9 +588,12 @@ function ScheduleForm({ policy, saving, disabled, onSave }: ConfigFormProps) {
     onSave(Object.fromEntries(form.entries()));
   }
   return (
-    <form onSubmit={submit} className="border-border bg-card rounded-lg border">
+    <form
+      onSubmit={submit}
+      className="border-border/70 bg-card overflow-hidden rounded-2xl border"
+    >
       <div className="border-border flex gap-3 border-b p-4">
-        <div className="border-primary/20 bg-primary/10 flex size-10 items-center justify-center rounded-lg border">
+        <div className="border-primary/20 bg-primary-soft flex size-10 items-center justify-center rounded-xl border">
           <Clock3 className="text-primary size-5" />
         </div>
         <div>
@@ -660,7 +672,7 @@ function ScheduleForm({ policy, saving, disabled, onSave }: ConfigFormProps) {
 
 function RunsPanel({ runs }: { runs: Record<string, unknown>[] }) {
   return (
-    <div className="border-border bg-card overflow-hidden rounded-lg border">
+    <div className="border-border/70 bg-card overflow-hidden rounded-2xl border">
       <div className="border-border border-b px-4 py-3">
         <h3 className="text-foreground text-sm font-semibold">
           Execuções recentes da IA

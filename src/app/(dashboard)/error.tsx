@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardError({
@@ -24,8 +25,13 @@ export default function DashboardError({
   }, [error]);
 
   return (
-    <div className="flex min-h-72 flex-col items-center justify-center gap-3 text-center">
-      <h2 className="text-lg font-semibold">Não foi possível abrir esta tela</h2>
+    <div className="border-border/70 bg-card flex min-h-72 flex-col items-center justify-center gap-3 rounded-2xl border p-6 text-center">
+      <div className="flex size-12 items-center justify-center rounded-2xl bg-red-500/10 text-red-400">
+        <AlertTriangle className="size-5" />
+      </div>
+      <h2 className="text-lg font-semibold">
+        Não foi possível abrir esta tela
+      </h2>
       <p className="text-muted-foreground max-w-md text-sm">
         O erro foi registrado para análise. Você pode tentar carregar novamente.
       </p>
@@ -33,4 +39,3 @@ export default function DashboardError({
     </div>
   );
 }
-

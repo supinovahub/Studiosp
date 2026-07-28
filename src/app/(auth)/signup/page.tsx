@@ -95,10 +95,11 @@ function SignupPageInner() {
 
   if (success) {
     return (
-      <div className="bg-background flex min-h-screen items-center justify-center px-4">
-        <Card className="border-border bg-card w-full max-w-md">
+      <div className="bg-background relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+        <div className="bg-primary/10 pointer-events-none absolute -top-32 -left-24 size-96 rounded-full blur-3xl" />
+        <Card className="border-border/70 bg-card/95 relative w-full max-w-md rounded-3xl shadow-2xl backdrop-blur-xl">
           <CardHeader className="items-center text-center">
-            <div className="bg-primary/10 mb-2 flex h-12 w-12 items-center justify-center rounded-xl">
+            <div className="bg-primary-soft mb-2 flex size-12 items-center justify-center rounded-2xl">
               <CheckCircle className="text-primary h-6 w-6" />
             </div>
             <CardTitle className="text-foreground text-xl">
@@ -132,10 +133,12 @@ function SignupPageInner() {
   }
 
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center px-4">
-      <Card className="border-border bg-card w-full max-w-md">
+    <div className="bg-background relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
+      <div className="bg-primary/10 pointer-events-none absolute -top-32 -left-24 size-96 rounded-full blur-3xl" />
+      <div className="bg-primary/8 pointer-events-none absolute -right-24 -bottom-40 size-[28rem] rounded-full blur-3xl" />
+      <Card className="border-border/70 bg-card/95 relative w-full max-w-md rounded-3xl shadow-2xl backdrop-blur-xl">
         <CardHeader className="items-center text-center">
-          <div className="bg-primary/10 mb-2 flex h-12 w-12 items-center justify-center rounded-xl">
+          <div className="bg-primary-soft mb-2 flex size-12 items-center justify-center rounded-2xl">
             {inviteToken ? (
               <UsersRound className="text-primary h-6 w-6" />
             ) : (

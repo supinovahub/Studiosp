@@ -85,15 +85,15 @@ export function SettingsHubPage() {
     return <ErrorState error={error ?? 'Resposta vazia.'} onRetry={reload} />;
   const manager = data.role === 'owner' || data.role === 'admin';
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Administração"
         title="Configurações"
         description="Atalhos para tudo que controla a operação. As regras de negócio ficam separadas das credenciais e preferências pessoais."
       />
-      <div className="border-border bg-card flex items-center justify-between rounded-lg border p-4">
+      <div className="border-border/70 bg-card flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="border-primary/20 bg-primary/10 flex size-10 items-center justify-center rounded-lg border">
+          <div className="border-primary/20 bg-primary-soft flex size-10 items-center justify-center rounded-xl border">
             <Settings className="text-primary size-5" />
           </div>
           <div>
@@ -127,9 +127,9 @@ export function SettingsHubPage() {
             <Link
               key={item.title}
               href={item.href}
-              className="group border-border bg-card hover:border-primary/30 hover:bg-muted/25 flex items-center gap-3 rounded-lg border p-4"
+              className="group border-border/70 bg-card hover:border-primary/30 hover:bg-muted/25 flex min-h-24 items-center gap-3 rounded-2xl border p-4 transition-colors"
             >
-              <div className="border-border bg-muted/50 text-muted-foreground group-hover:text-primary flex size-10 shrink-0 items-center justify-center rounded-lg border">
+              <div className="border-border/70 bg-muted/50 text-muted-foreground group-hover:bg-primary-soft group-hover:text-primary flex size-10 shrink-0 items-center justify-center rounded-xl border transition-colors">
                 <item.icon className="size-5" />
               </div>
               <div className="min-w-0 flex-1">

@@ -105,7 +105,7 @@ export function DevelopmentsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Base de contexto"
         title="Empreendimentos e condições comerciais"
@@ -134,7 +134,7 @@ export function DevelopmentsPage() {
       {message ? (
         <p
           role="status"
-          className={`rounded-lg border px-3 py-2 text-sm ${message.type === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'}`}
+          className={`rounded-xl border px-3 py-2.5 text-sm ${message.type === 'success' ? 'border-success/25 bg-success-soft text-success' : 'border-red-500/25 bg-red-500/10 text-red-400'}`}
         >
           {message.text}
         </p>
@@ -153,8 +153,8 @@ export function DevelopmentsPage() {
       ) : null}
 
       {canManage && showForm ? (
-        <section className="border-primary/30 bg-card rounded-lg border">
-          <div className="border-border flex items-center justify-between border-b px-4 py-3">
+        <section className="border-primary/25 bg-card overflow-hidden rounded-2xl border">
+          <div className="border-border/65 flex items-center justify-between border-b px-4 py-4 sm:px-5">
             <div>
               <h3 className="text-foreground text-sm font-semibold">
                 {editing ? 'Editar empreendimento' : 'Novo empreendimento'}
@@ -286,7 +286,7 @@ export function DevelopmentsPage() {
         </section>
       ) : null}
 
-      <div className="border-border bg-card flex items-center gap-2 rounded-lg border p-3">
+      <div className="border-border/70 bg-card flex items-center gap-2 rounded-2xl border p-3">
         <Search className="text-muted-foreground size-4" />
         <Input
           value={search}
@@ -318,12 +318,12 @@ export function DevelopmentsPage() {
             return (
               <article
                 key={String(development.id)}
-                className="border-border bg-card overflow-hidden rounded-lg border"
+                className="border-border/70 bg-card overflow-hidden rounded-2xl border"
               >
-                <div className="border-border border-b p-4">
+                <div className="border-border/65 border-b p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 gap-3">
-                      <div className="border-primary/20 bg-primary/10 flex size-10 shrink-0 items-center justify-center rounded-lg border">
+                      <div className="border-primary/20 bg-primary-soft flex size-10 shrink-0 items-center justify-center rounded-xl border">
                         <Building2 className="text-primary size-5" />
                       </div>
                       <div className="min-w-0">
