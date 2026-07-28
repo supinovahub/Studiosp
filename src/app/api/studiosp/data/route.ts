@@ -202,36 +202,56 @@ export async function GET(request: NextRequest) {
     }
 
     if (view === 'lead' && id) {
-      const [questionResult, answerResult, matchRunResult, reasonResult] =
-        await Promise.all([
-          supabase
-            .from('qualification_questions')
-            .select('*')
-            .eq('account_id', accountId)
-            .eq('is_active', true)
-            .order('display_order'),
-          supabase
-            .from('qualification_answers')
-            .select('*')
-            .eq('account_id', accountId)
-            .eq('opportunity_id', id)
-            .eq('is_current', true),
-          supabase
-            .from('property_match_runs')
-            .select('*')
-            .eq('account_id', accountId)
-            .eq('opportunity_id', id)
-            .eq('status', 'completed')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-          supabase
-            .from('reason_definitions')
-            .select('*')
-            .eq('account_id', accountId)
-            .eq('is_active', true)
-            .order('display_order'),
-        ]);
+      const [
+        questionResult,
+        answerResult,
+        matchRunResult,
+        reasonResult,
+        hostProfileResult,
+        schedulingPolicyResult,
+      ] = await Promise.all([
+        supabase
+          .from('qualification_questions')
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('is_active', true)
+          .order('display_order'),
+        supabase
+          .from('qualification_answers')
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('opportunity_id', id)
+          .eq('is_current', true),
+        supabase
+          .from('property_match_runs')
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('opportunity_id', id)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('reason_definitions')
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('is_active', true)
+          .order('display_order'),
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, account_role')
+          .eq('account_id', accountId)
+          .in('account_role', ['owner', 'admin', 'agent'])
+          .order('full_name'),
+        supabase
+          .from('scheduling_policies')
+          .select('*')
+          .eq('account_id', accountId)
+          .eq('status', 'active')
+          .order('version', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
       response.questions = assertQuery<Row[]>(
         questionResult,
         'perguntas de qualificação'
@@ -244,6 +264,12 @@ export async function GET(request: NextRequest) {
         reasonResult,
         'motivos operacionais'
       );
+      response.schedulingHosts = assertQuery<Row[]>(
+        hostProfileResult,
+        'responsáveis pela agenda'
+      );
+      if (schedulingPolicyResult.error) throw schedulingPolicyResult.error;
+      response.schedulingPolicy = schedulingPolicyResult.data ?? null;
       if (matchRunResult.error) throw matchRunResult.error;
       if (matchRunResult.data) {
         const matchResult = await supabase

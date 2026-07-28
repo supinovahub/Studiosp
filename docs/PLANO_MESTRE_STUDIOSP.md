@@ -317,7 +317,7 @@ O corretor só pode marcar uma reunião como realizada depois do horário agenda
 ### Confirmado
 
 - pode ser uma videoconferência ou ligação;
-- duração comunicada ao lead: aproximadamente 5 a 10 minutos;
+- duração comunicada ao lead: aproximadamente 10 a 15 minutos;
 - a primeira versão precisa controlar uma reunião principal por oportunidade;
 - deve registrar agendamento, comparecimento, cancelamento, ausência e reagendamento;
 - o histórico precisa permanecer no banco mesmo quando a reunião for reagendada;
@@ -421,6 +421,34 @@ Políticas comerciais e operacionais serão configuráveis pelo dono. Regras de 
 - na reativação, uma confirmação simples do cenário conhecido confirma também
   o objetivo e a entrada importados, salvo quando o lead indicar alteração;
   isso permite concluir a qualificação por fatos antes do agendamento.
+
+### Agenda, linguagem e preparação da call — decisão de 28 de julho de 2026
+
+#### Confirmado
+
+- a call será comunicada como uma conversa de **10 a 15 minutos**;
+- a duração reservada será configurável entre 10 e 15 minutos, com intervalo
+  padrão de 10 minutos entre compromissos do mesmo responsável;
+- o lead não recebe contagem exata de matches: quando houver aderência, a IA
+  fala em “algumas oportunidades”; quando o catálogo atual não retornar
+  resultado, informa que a equipe pode ampliar a busca sem afirmar que já
+  encontrou disponibilidade;
+- quando o lead pedir outro horário, a IA pergunta o dia e a hora desejados e
+  procura primeiro o horário exato, depois as alternativas mais próximas no
+  mesmo dia;
+- se o lead recusar as alternativas e mantiver sua preferência, a IA informa
+  que o encaixe será validado e abre uma pendência crítica para o dono; não
+  existe confirmação sem uma reserva persistida;
+- o dono pode agendar diretamente pela página do lead para um corretor ou para
+  si, com verificação de conflito, intervalo, auditoria e confirmação opcional
+  pelo WhatsApp;
+- o dono fica fora da distribuição automática por padrão, mesmo quando passa a
+  possuir agenda própria para assumir calls manualmente;
+- a página do lead possui a aba **Resumo**, com preparação orientativa gerada
+  pela IA, fatos a confirmar, necessidades, objeções, pontos de conversa e
+  próximo resultado esperado;
+- o roteiro é apoio ao corretor, não uma etapa obrigatória nem uma autorização
+  para inventar condições, estoque ou características.
 
 ## 6. Distribuição para corretores
 
@@ -782,7 +810,7 @@ A IA:
 
 Mensagem conceitual ao final da qualificação:
 
-> Encontrei algumas oportunidades que combinam com o seu perfil. Para explicar as especificações e confirmar os detalhes, vou organizar uma conversa rápida de 5 a 10 minutos com um dos nossos corretores.
+> Encontrei algumas oportunidades que podem combinar com o seu perfil. Para explicar as especificações e confirmar os detalhes, vou organizar uma conversa rápida de 10 a 15 minutos com um dos nossos corretores.
 
 O texto exato será configurável e ajustado ao tom da empresa.
 
@@ -983,7 +1011,8 @@ A transcrição não deve ser tratada como verdade absoluta. Informações ambí
 ### Confirmado
 
 - a IA consulta o catálogo para encontrar aderência;
-- para o lead, comunica a existência e a quantidade de oportunidades compatíveis;
+- para o lead, comunica de forma geral que há algumas oportunidades compatíveis,
+  sem revelar contagem;
 - não recomenda uma unidade ou empreendimento específico;
 - para o corretor, apresenta os empreendimentos compatíveis e um resumo de cada um;
 - nem a IA nem o corretor precisam visualizar ou selecionar unidades específicas;
@@ -1006,7 +1035,7 @@ O item comercial principal será o **empreendimento**. Cada empreendimento terá
 
 As opções de metragem e condição comercial devem ser registros relacionados ao empreendimento, e não colunas fixas como `preco_30m2` e `preco_50m2`. Assim, o dono poderá adicionar 25 m², 30 m², 50 m² ou qualquer nova configuração pelo painel sem alterar o esquema do banco.
 
-O matching compara o perfil financeiro, a localização, a preferência por imóvel na planta ou pronto e outras perguntas estruturadas com essas opções comerciais. O lead recebe apenas a quantidade de oportunidades aderentes; o corretor recebe os empreendimentos, metragens e referências comerciais relevantes.
+O matching compara o perfil financeiro, a localização, a preferência por imóvel na planta ou pronto e outras perguntas estruturadas com essas opções comerciais. O lead recebe apenas uma indicação geral de que existem algumas oportunidades aderentes; o corretor recebe os empreendimentos, metragens e referências comerciais relevantes.
 
 ### Variação das mensagens de reativação
 

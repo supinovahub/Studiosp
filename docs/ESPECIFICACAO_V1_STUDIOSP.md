@@ -576,7 +576,8 @@ Pontuação mínima inicial: 60 de 100.
 - Localização exata vale mais que região próxima.
 - Entrada, parcela e preço são avaliados separadamente.
 - Matching só é apresentado ao lead após qualificação mínima.
-- Lead recebe apenas a quantidade de oportunidades.
+- Lead recebe apenas uma indicação geral de que existem algumas oportunidades,
+  sem contagem exata.
 - Corretor recebe lista, pontuação, critérios e resumo.
 - Cada execução registra versão do algoritmo e condições usadas.
 

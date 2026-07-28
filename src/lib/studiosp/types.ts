@@ -11,6 +11,15 @@ export interface StudiospLead {
   source_type: string;
   source_metadata?: Record<string, unknown>;
   lead_summary?: string | null;
+  call_brief?: {
+    opening?: string;
+    confirm?: string[];
+    explore?: string[];
+    objections?: string[];
+    talking_points?: string[];
+    next_step?: string;
+  } | null;
+  call_brief_updated_at?: string | null;
   won_gross_value?: number | null;
   last_lead_message_at?: string | null;
   next_action_at?: string | null;
@@ -85,6 +94,7 @@ export interface StudiospData {
   aiReplyAllowedNumbers?: string[];
   aiRuns?: Record<string, unknown>[];
   schedulingPolicy?: Record<string, unknown> | null;
+  schedulingHosts?: Record<string, unknown>[];
   reasons?: Record<string, unknown>[];
   audit?: Record<string, unknown>[];
   report?: {

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { existingReservationForTrigger } from './studiosp-orchestrator';
+import {
+  existingReservationForTrigger,
+  nearestCompatibleSlots,
+} from './studiosp-orchestrator';
 
 function terminal(data: unknown) {
   const chain: Record<string, unknown> = {};
@@ -53,5 +56,22 @@ describe('existingReservationForTrigger', () => {
         triggerMessageId: 'message-2',
       })
     ).resolves.toBeNull();
+  });
+});
+
+describe('nearestCompatibleSlots', () => {
+  it('prioriza os horários mais próximos no mesmo dia de São Paulo', () => {
+    const result = nearestCompatibleSlots(
+      [
+        { id: 'next-day', starts_at: '2026-07-29T12:00:00.000Z' },
+        { id: 'late', starts_at: '2026-07-28T15:00:00.000Z' },
+        { id: 'closest', starts_at: '2026-07-28T13:15:00.000Z' },
+        { id: 'early', starts_at: '2026-07-28T12:00:00.000Z' },
+      ],
+      new Date('2026-07-28T10:00:00-03:00'),
+      2
+    );
+
+    expect(result.map((slot) => slot.id)).toEqual(['closest', 'early']);
   });
 });

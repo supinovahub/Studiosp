@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   Building2,
+  CalendarPlus,
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
@@ -32,6 +33,7 @@ import {
   labelFor,
   sourceLabels,
 } from '@/lib/studiosp/labels';
+import type { StudiospLead } from '@/lib/studiosp/types';
 import { LeadStatusBar } from './lead-status-bar';
 import { PageHeader } from './page-header';
 import { EmptyState, ErrorState, LoadingState } from './operational-state';
@@ -60,6 +62,16 @@ export function LeadDetailPage({ id }: { id: string }) {
   const [callOutcome, setCallOutcome] = useState('follow_up');
   const [callNotes, setCallNotes] = useState('');
   const [callReasonId, setCallReasonId] = useState('');
+  const [activeTab, setActiveTab] = useState<
+    'summary' | 'qualification' | 'matches' | 'history'
+  >('summary');
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [scheduleHostId, setScheduleHostId] = useState('');
+  const [scheduleStartsAt, setScheduleStartsAt] = useState('');
+  const [scheduleDuration, setScheduleDuration] = useState('15');
+  const [scheduleChannel, setScheduleChannel] = useState('phone');
+  const [scheduleNotes, setScheduleNotes] = useState('');
+  const [notifyLead, setNotifyLead] = useState(true);
   const [actionMessage, setActionMessage] = useState<{
     type: 'error' | 'success';
     text: string;
@@ -169,6 +181,44 @@ export function LeadDetailPage({ id }: { id: string }) {
     }
   }
 
+  async function scheduleManualCall() {
+    setSaving(true);
+    setActionMessage(null);
+    try {
+      if (!scheduleHostId || !scheduleStartsAt) {
+        throw new Error('Escolha o responsável, a data e o horário.');
+      }
+      const response = (await runStudiospAction('schedule_manual_appointment', {
+        opportunityId: lead!.id,
+        hostProfileId: scheduleHostId,
+        startsAt: new Date(scheduleStartsAt).toISOString(),
+        durationMinutes: Number(scheduleDuration),
+        channel: scheduleChannel,
+        notes: scheduleNotes || null,
+        notifyLead,
+      })) as { notificationWarning?: string | null };
+      setScheduleDialogOpen(false);
+      setScheduleNotes('');
+      setActionMessage({
+        type: response.notificationWarning ? 'error' : 'success',
+        text:
+          response.notificationWarning ??
+          'Call agendada e confirmação enviada ao lead.',
+      });
+      await reload();
+    } catch (actionError) {
+      setActionMessage({
+        type: 'error',
+        text:
+          actionError instanceof Error
+            ? actionError.message
+            : 'Não foi possível agendar a call.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <Link
@@ -186,6 +236,11 @@ export function LeadDetailPage({ id }: { id: string }) {
         }
         actions={
           <>
+            {data.role !== 'agent' ? (
+              <Button onClick={() => setScheduleDialogOpen(true)}>
+                <CalendarPlus /> Agendar call
+              </Button>
+            ) : null}
             {lead.primary_conversation_id ? (
               <Button
                 variant="outline"
@@ -213,169 +268,212 @@ export function LeadDetailPage({ id }: { id: string }) {
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
         <div className="space-y-5">
-          <section className="border-border bg-card rounded-lg border">
-            <div className="border-border flex items-center justify-between border-b px-4 py-3">
-              <div>
-                <h3 className="text-foreground text-sm font-semibold">
-                  Qualificação
-                </h3>
-                <p className="text-muted-foreground text-xs">
-                  Respostas normalizadas e confirmadas no contexto da
-                  oportunidade
-                </p>
-              </div>
-              <StatusBadge
-                label={`${qualificationRows.filter((row) => row.answer).length}/${qualificationRows.length} respondidas`}
-                tone={
-                  lead.qualification_status === 'completed'
-                    ? 'success'
-                    : 'primary'
+          <div
+            className="border-border bg-card flex gap-1 overflow-x-auto rounded-lg border p-1"
+            role="tablist"
+            aria-label="Contexto do lead"
+          >
+            {[
+              ['summary', 'Resumo'],
+              ['qualification', 'Qualificação'],
+              ['matches', 'Oportunidades'],
+              ['history', 'Histórico'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === value}
+                onClick={() =>
+                  setActiveTab(
+                    value as 'summary' | 'qualification' | 'matches' | 'history'
+                  )
                 }
-              />
-            </div>
-            <div className="divide-border divide-y">
-              {qualificationRows.map(({ question, answer }) => (
-                <div
-                  key={String(question.id)}
-                  className="grid gap-1 px-4 py-3 sm:grid-cols-[0.9fr_1.1fr] sm:gap-4"
-                >
-                  <p className="text-muted-foreground text-xs font-medium">
-                    {String(question.label)}
-                  </p>
-                  <div>
-                    <p className="text-foreground text-sm">
-                      {answer
-                        ? readableValue(
-                            answer.normalized_value,
-                            answer.raw_text
-                          )
-                        : 'Ainda não respondida'}
-                    </p>
-                    {answer ? (
-                      <p className="text-muted-foreground mt-0.5 text-[10px]">
-                        Confiança:{' '}
-                        {Math.round(Number(answer.confidence ?? 0) * 100)}% ·{' '}
-                        {String(answer.status) === 'confirmed'
-                          ? 'confirmada'
-                          : 'provisória'}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                className={`min-w-fit rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                  activeTab === value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-          <section className="border-border bg-card rounded-lg border">
-            <div className="border-border border-b px-4 py-3">
-              <h3 className="text-foreground text-sm font-semibold">
-                Empreendimentos compatíveis
-              </h3>
-              <p className="text-muted-foreground text-xs">
-                Visível para a equipe; o lead recebe somente a quantidade de
-                oportunidades encontradas
-              </p>
-            </div>
-            {(data.matches ?? []).length ? (
-              <div className="grid gap-3 p-4 md:grid-cols-2">
-                {(data.matches ?? []).map((match) => {
-                  const development = match.development as Record<
-                    string,
-                    unknown
-                  > | null;
-                  const offer = match.offer as Record<string, unknown> | null;
-                  return (
-                    <article
-                      key={String(match.id)}
-                      className="border-border bg-muted/20 rounded-lg border p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="border-primary/20 bg-primary/10 flex size-9 items-center justify-center rounded-lg border">
-                          <Building2 className="text-primary size-4" />
-                        </div>
-                        <StatusBadge
-                          compact
-                          label={`${Math.round(Number(match.score))}% compatível`}
-                          tone="success"
-                        />
-                      </div>
-                      <h4 className="text-foreground mt-3 text-sm font-semibold">
-                        {String(development?.name ?? 'Empreendimento')}
-                      </h4>
-                      <p className="text-muted-foreground mt-1 line-clamp-2 text-xs leading-5">
-                        {String(
-                          development?.description ??
-                            'Descrição disponível no catálogo.'
-                        )}
-                      </p>
-                      {offer ? (
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <p className="text-muted-foreground">Metragem</p>
-                            <p className="text-foreground font-medium">
-                              A partir de {String(offer.area_min_sqm)} m²
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Preço</p>
-                            <p className="text-foreground font-medium">
-                              {formatCurrencyBRL(offer.price_from as number)}
-                            </p>
-                          </div>
-                        </div>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="p-4">
-                <EmptyState
-                  icon={Building2}
-                  title="Matching ainda não calculado"
-                  description="O cruzamento será executado quando a qualificação tiver dados suficientes."
+          {activeTab === 'summary' ? <CallBriefSection lead={lead} /> : null}
+
+          {activeTab === 'qualification' ? (
+            <section className="border-border bg-card rounded-lg border">
+              <div className="border-border flex items-center justify-between border-b px-4 py-3">
+                <div>
+                  <h3 className="text-foreground text-sm font-semibold">
+                    Qualificação
+                  </h3>
+                  <p className="text-muted-foreground text-xs">
+                    Respostas normalizadas e confirmadas no contexto da
+                    oportunidade
+                  </p>
+                </div>
+                <StatusBadge
+                  label={`${qualificationRows.filter((row) => row.answer).length}/${qualificationRows.length} respondidas`}
+                  tone={
+                    lead.qualification_status === 'completed'
+                      ? 'success'
+                      : 'primary'
+                  }
                 />
               </div>
-            )}
-          </section>
-
-          <section className="border-border bg-card rounded-lg border">
-            <div className="border-border border-b px-4 py-3">
-              <h3 className="text-foreground text-sm font-semibold">
-                Histórico imutável
-              </h3>
-              <p className="text-muted-foreground text-xs">
-                Linha do tempo de fatos da oportunidade
-              </p>
-            </div>
-            {(data.events ?? []).length ? (
               <div className="divide-border divide-y">
-                {(data.events ?? []).map((event) => (
-                  <div key={String(event.id)} className="flex gap-3 px-4 py-3">
-                    <div className="border-border bg-muted/50 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border">
-                      <CheckCircle2 className="text-primary size-3.5" />
-                    </div>
+                {qualificationRows.map(({ question, answer }) => (
+                  <div
+                    key={String(question.id)}
+                    className="grid gap-1 px-4 py-3 sm:grid-cols-[0.9fr_1.1fr] sm:gap-4"
+                  >
+                    <p className="text-muted-foreground text-xs font-medium">
+                      {String(question.label)}
+                    </p>
                     <div>
                       <p className="text-foreground text-sm">
-                        {labelFor(eventLabels, String(event.event_type))}
+                        {answer
+                          ? readableValue(
+                              answer.normalized_value,
+                              answer.raw_text
+                            )
+                          : 'Ainda não respondida'}
                       </p>
-                      <p className="text-muted-foreground mt-0.5 text-[11px]">
-                        {formatDateTime(String(event.occurred_at))} ·{' '}
-                        {actorLabel(String(event.actor_type))}
-                      </p>
+                      {answer ? (
+                        <p className="text-muted-foreground mt-0.5 text-[10px]">
+                          Confiança:{' '}
+                          {Math.round(Number(answer.confidence ?? 0) * 100)}% ·{' '}
+                          {String(answer.status) === 'confirmed'
+                            ? 'confirmada'
+                            : 'provisória'}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="p-4">
-                <EmptyState
-                  title="Sem eventos registrados"
-                  description="Os próximos fatos aparecerão nesta linha do tempo."
-                />
+            </section>
+          ) : null}
+
+          {activeTab === 'matches' ? (
+            <section className="border-border bg-card rounded-lg border">
+              <div className="border-border border-b px-4 py-3">
+                <h3 className="text-foreground text-sm font-semibold">
+                  Empreendimentos compatíveis
+                </h3>
+                <p className="text-muted-foreground text-xs">
+                  Visível para a equipe; o lead recebe apenas uma abordagem
+                  geral sobre algumas oportunidades
+                </p>
               </div>
-            )}
-          </section>
+              {(data.matches ?? []).length ? (
+                <div className="grid gap-3 p-4 md:grid-cols-2">
+                  {(data.matches ?? []).map((match) => {
+                    const development = match.development as Record<
+                      string,
+                      unknown
+                    > | null;
+                    const offer = match.offer as Record<string, unknown> | null;
+                    return (
+                      <article
+                        key={String(match.id)}
+                        className="border-border bg-muted/20 rounded-lg border p-3"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="border-primary/20 bg-primary/10 flex size-9 items-center justify-center rounded-lg border">
+                            <Building2 className="text-primary size-4" />
+                          </div>
+                          <StatusBadge
+                            compact
+                            label={`${Math.round(Number(match.score))}% compatível`}
+                            tone="success"
+                          />
+                        </div>
+                        <h4 className="text-foreground mt-3 text-sm font-semibold">
+                          {String(development?.name ?? 'Empreendimento')}
+                        </h4>
+                        <p className="text-muted-foreground mt-1 line-clamp-2 text-xs leading-5">
+                          {String(
+                            development?.description ??
+                              'Descrição disponível no catálogo.'
+                          )}
+                        </p>
+                        {offer ? (
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <p className="text-muted-foreground">Metragem</p>
+                              <p className="text-foreground font-medium">
+                                A partir de {String(offer.area_min_sqm)} m²
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Preço</p>
+                              <p className="text-foreground font-medium">
+                                {formatCurrencyBRL(offer.price_from as number)}
+                              </p>
+                            </div>
+                          </div>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-4">
+                  <EmptyState
+                    icon={Building2}
+                    title="Matching ainda não calculado"
+                    description="O cruzamento será executado quando a qualificação tiver dados suficientes."
+                  />
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {activeTab === 'history' ? (
+            <section className="border-border bg-card rounded-lg border">
+              <div className="border-border border-b px-4 py-3">
+                <h3 className="text-foreground text-sm font-semibold">
+                  Histórico imutável
+                </h3>
+                <p className="text-muted-foreground text-xs">
+                  Linha do tempo de fatos da oportunidade
+                </p>
+              </div>
+              {(data.events ?? []).length ? (
+                <div className="divide-border divide-y">
+                  {(data.events ?? []).map((event) => (
+                    <div
+                      key={String(event.id)}
+                      className="flex gap-3 px-4 py-3"
+                    >
+                      <div className="border-border bg-muted/50 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border">
+                        <CheckCircle2 className="text-primary size-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-foreground text-sm">
+                          {labelFor(eventLabels, String(event.event_type))}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5 text-[11px]">
+                          {formatDateTime(String(event.occurred_at))} ·{' '}
+                          {actorLabel(String(event.actor_type))}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4">
+                  <EmptyState
+                    title="Sem eventos registrados"
+                    description="Os próximos fatos aparecerão nesta linha do tempo."
+                  />
+                </div>
+              )}
+            </section>
+          ) : null}
         </div>
 
         <aside className="space-y-4">
@@ -499,7 +597,8 @@ export function LeadDetailPage({ id }: { id: string }) {
                   </a>
                 ) : null}
                 {activeAppointment.status === 'broker_confirmed' &&
-                new Date(activeAppointment.starts_at).getTime() <= Date.now() ? (
+                new Date(activeAppointment.starts_at).getTime() <=
+                  Date.now() ? (
                   <Button
                     className="mt-3 w-full"
                     onClick={() => setCallDialogOpen(true)}
@@ -591,6 +690,99 @@ export function LeadDetailPage({ id }: { id: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Agendar call</DialogTitle>
+            <DialogDescription>
+              Escolha o responsável e confirme uma conversa de 10 a 15 minutos.
+              O sistema impede conflitos e preserva 10 minutos de intervalo.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="space-y-1">
+            <span className="text-xs font-medium">Responsável</span>
+            <select
+              value={scheduleHostId}
+              onChange={(event) => setScheduleHostId(event.target.value)}
+              className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm"
+            >
+              <option value="">Selecione...</option>
+              {(data.schedulingHosts ?? []).map((host) => (
+                <option key={String(host.id)} value={String(host.id)}>
+                  {String(host.full_name ?? host.email ?? 'Responsável')}
+                  {String(host.id) === data.profileId ? ' (você)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs font-medium">Data e horário</span>
+              <Input
+                type="datetime-local"
+                value={scheduleStartsAt}
+                onChange={(event) => setScheduleStartsAt(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-medium">Duração</span>
+              <select
+                value={scheduleDuration}
+                onChange={(event) => setScheduleDuration(event.target.value)}
+                className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm"
+              >
+                <option value="10">10 minutos</option>
+                <option value="15">15 minutos</option>
+              </select>
+            </label>
+          </div>
+          <label className="space-y-1">
+            <span className="text-xs font-medium">Canal</span>
+            <select
+              value={scheduleChannel}
+              onChange={(event) => setScheduleChannel(event.target.value)}
+              className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm"
+            >
+              <option value="phone">Ligação</option>
+              <option value="video">Vídeo</option>
+              <option value="undefined">Definir depois</option>
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-medium">Observação</span>
+            <Textarea
+              value={scheduleNotes}
+              onChange={(event) => setScheduleNotes(event.target.value)}
+              rows={3}
+              placeholder="Contexto ou motivo de um encaixe excepcional"
+            />
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={notifyLead}
+              onChange={(event) => setNotifyLead(event.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              Enviar a confirmação ao lead pelo WhatsApp depois que a reserva
+              for persistida.
+            </span>
+          </label>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setScheduleDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button disabled={saving} onClick={() => void scheduleManualCall()}>
+              {saving ? 'Agendando...' : 'Confirmar agendamento'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -622,6 +814,99 @@ function readableValue(value: unknown, raw: unknown) {
     );
   }
   return String(value);
+}
+
+function CallBriefSection({ lead }: { lead: StudiospLead }) {
+  const brief = lead.call_brief;
+  const sections = [
+    {
+      title: 'Confirme estas informações',
+      items: brief?.confirm ?? [],
+    },
+    {
+      title: 'Explore durante a conversa',
+      items: brief?.explore ?? [],
+    },
+    {
+      title: 'Objeções já mencionadas',
+      items: brief?.objections ?? [],
+    },
+    {
+      title: 'Pontos orientativos',
+      items: brief?.talking_points ?? [],
+    },
+  ];
+  return (
+    <section className="border-border bg-card rounded-lg border">
+      <div className="border-border border-b px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="text-primary size-4" />
+          <h3 className="text-foreground text-sm font-semibold">
+            Preparação orientativa da call
+          </h3>
+        </div>
+        <p className="text-muted-foreground mt-1 text-xs">
+          Síntese da IA baseada na conversa e nos dados confirmados. Valide as
+          informações durante a call.
+        </p>
+      </div>
+      <div className="space-y-4 p-4">
+        <div className="border-primary/20 bg-primary/5 rounded-lg border p-3">
+          <p className="text-muted-foreground text-[11px] font-medium uppercase">
+            Como começar
+          </p>
+          <p className="text-foreground mt-1 text-sm leading-6">
+            {brief?.opening ??
+              lead.lead_summary ??
+              'Retome o objetivo principal do lead e confirme o cenário antes de apresentar oportunidades.'}
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {sections.map((section) => (
+            <div
+              key={section.title}
+              className="border-border bg-muted/20 rounded-lg border p-3"
+            >
+              <h4 className="text-foreground text-xs font-semibold">
+                {section.title}
+              </h4>
+              {section.items.length ? (
+                <ul className="text-muted-foreground mt-2 space-y-1.5 text-xs leading-5">
+                  {section.items.map((item, index) => (
+                    <li
+                      key={`${section.title}-${index}`}
+                      className="flex gap-2"
+                    >
+                      <span className="text-primary">•</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Nenhum ponto registrado até agora.
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="border-border rounded-lg border p-3">
+          <p className="text-muted-foreground text-[11px] font-medium uppercase">
+            Próximo resultado esperado
+          </p>
+          <p className="text-foreground mt-1 text-sm">
+            {brief?.next_step ??
+              'Confirmar aderência, esclarecer dúvidas e combinar o próximo passo comercial.'}
+          </p>
+        </div>
+        {lead.call_brief_updated_at ? (
+          <p className="text-muted-foreground text-right text-[10px]">
+            Atualizado em {formatDateTime(lead.call_brief_updated_at)}
+          </p>
+        ) : null}
+      </div>
+    </section>
+  );
 }
 
 function actorLabel(actor: string) {

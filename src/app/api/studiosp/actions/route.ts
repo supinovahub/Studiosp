@@ -9,6 +9,10 @@ import {
   isValidBrokerWhatsApp,
   normalizeBrokerWhatsApp,
 } from '@/lib/studiosp/broker-phone';
+import {
+  SendMessageError,
+  sendMessageToConversation,
+} from '@/lib/whatsapp/send-message';
 
 function text(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
@@ -147,6 +151,108 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError(
         'Somente o dono pode alterar esta configuração.'
       );
+    }
+
+    if (action === 'schedule_manual_appointment') {
+      const opportunityId = text(body.opportunityId);
+      const hostProfileId = text(body.hostProfileId);
+      const startsAt = text(body.startsAt);
+      const durationMinutes = Number(body.durationMinutes ?? 15);
+      if (!opportunityId || !hostProfileId || !startsAt) {
+        return NextResponse.json(
+          { error: 'Informe lead, responsável, data e horário.' },
+          { status: 400 }
+        );
+      }
+      if (durationMinutes < 10 || durationMinutes > 15) {
+        return NextResponse.json(
+          { error: 'A duração deve estar entre 10 e 15 minutos.' },
+          { status: 400 }
+        );
+      }
+      const idempotencyKey = crypto.randomUUID();
+      const result = await supabase.rpc(
+        'studiosp_schedule_manual_appointment',
+        {
+          p_opportunity_id: opportunityId,
+          p_host_profile_id: hostProfileId,
+          p_starts_at: startsAt,
+          p_duration_minutes: durationMinutes,
+          p_channel: text(body.channel, 'phone'),
+          p_notes: text(body.notes) || null,
+          p_idempotency_key: idempotencyKey,
+        }
+      );
+      actionError(result.error);
+
+      let notificationWarning: string | null = null;
+      if (body.notifyLead === true) {
+        const opportunityResult = await supabase
+          .from('opportunities')
+          .select('primary_conversation_id')
+          .eq('account_id', accountId)
+          .eq('id', opportunityId)
+          .single();
+        actionError(opportunityResult.error);
+        const conversationId =
+          opportunityResult.data?.primary_conversation_id ?? null;
+        if (!conversationId) {
+          notificationWarning =
+            'A call foi agendada, mas o lead não possui conversa ativa para receber a confirmação.';
+        } else {
+          const appointment = result.data as {
+            starts_at?: string;
+            timezone?: string;
+          };
+          const starts = new Date(String(appointment.starts_at));
+          const formatted = new Intl.DateTimeFormat('pt-BR', {
+            weekday: 'long',
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: appointment.timezone ?? 'America/Sao_Paulo',
+          }).format(starts);
+          try {
+            await sendMessageToConversation(supabase, accountId, {
+              conversationId,
+              messageType: 'text',
+              contentText: `Sua conversa de 10 a 15 minutos está confirmada para ${formatted}.`,
+            });
+          } catch (error) {
+            notificationWarning =
+              'A call foi agendada, mas a confirmação não chegou ao WhatsApp. Revise a conversa.';
+            console.error(
+              '[Studiosp/actions] falha ao notificar agendamento manual:',
+              error instanceof SendMessageError ? error.code : error
+            );
+            await supabase.from('attention_items').upsert(
+              {
+                account_id: accountId,
+                opportunity_id: opportunityId,
+                assigned_role: 'owner',
+                kind: 'manual_schedule_notification_failed',
+                severity: 'critical',
+                title: 'Confirmação de call não enviada ao lead',
+                context: {
+                  appointment_id: (result.data as { id?: string })?.id ?? null,
+                  conversation_id: conversationId,
+                },
+                due_at: new Date().toISOString(),
+                deduplication_key: `manual-schedule-notification:${(result.data as { id?: string })?.id ?? opportunityId}`,
+              },
+              {
+                onConflict: 'account_id,deduplication_key',
+                ignoreDuplicates: true,
+              }
+            );
+          }
+        }
+      }
+      return NextResponse.json({
+        appointment: result.data,
+        notificationWarning,
+      });
     }
 
     if (action === 'save_developer') {

@@ -32,9 +32,7 @@ export function appointmentConfirmation(value: {
   const startsAt = new Date(value.starts_at);
   if (!Number.isFinite(startsAt.getTime())) return null;
   const timezone =
-    typeof value.timezone === 'string'
-      ? value.timezone
-      : 'America/Sao_Paulo';
+    typeof value.timezone === 'string' ? value.timezone : 'America/Sao_Paulo';
   const formatted = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'long',
     day: '2-digit',
@@ -43,5 +41,5 @@ export function appointmentConfirmation(value: {
     minute: '2-digit',
     timeZone: timezone,
   }).format(startsAt);
-  return `Sua conversa está confirmada para ${formatted}. Agora faremos a distribuição interna para um dos nossos corretores. Você receberá um lembrete antes da reunião.`;
+  return `Sua conversa de 10 a 15 minutos está confirmada para ${formatted}. Agora faremos a distribuição interna para um dos nossos corretores. Você receberá um lembrete antes da reunião.`;
 }

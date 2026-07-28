@@ -19,16 +19,10 @@ describe('scheduling intent', () => {
       { id: '10', starts_at: '2026-07-28T13:00:00.000Z' },
     ];
     expect(
-      findExactRequestedSlot(
-        slots,
-        new Date('2026-07-28T10:00:00-03:00')
-      )?.id
+      findExactRequestedSlot(slots, new Date('2026-07-28T10:00:00-03:00'))?.id
     ).toBe('10');
     expect(
-      findExactRequestedSlot(
-        slots,
-        new Date('2026-07-28T10:30:00-03:00')
-      )
+      findExactRequestedSlot(slots, new Date('2026-07-28T10:30:00-03:00'))
     ).toBeNull();
   });
 
@@ -39,6 +33,12 @@ describe('scheduling intent', () => {
         timezone: 'America/Sao_Paulo',
       })
     ).toContain('terça-feira, 28/07, 10:00');
+    expect(
+      appointmentConfirmation({
+        starts_at: '2026-07-28T13:00:00.000Z',
+        timezone: 'America/Sao_Paulo',
+      })
+    ).toContain('10 a 15 minutos');
     expect(appointmentConfirmation({ starts_at: null })).toBeNull();
   });
 });
