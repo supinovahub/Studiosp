@@ -116,7 +116,7 @@ export async function POST(request: Request) {
     if (conversationIdInput) {
       const { data, error: convError } = await supabase
         .from('conversations')
-        .select('id')
+        .select('id, status')
         .eq('id', conversationIdInput)
         .eq('account_id', accountId)
         .single();
@@ -125,6 +125,16 @@ export async function POST(request: Request) {
         return NextResponse.json(
           { error: 'Conversa não encontrada' },
           { status: 404 }
+        );
+      }
+      if (data.status === 'closed') {
+        return NextResponse.json(
+          {
+            error:
+              'Atendimento encerrado após a finalização da call. Reabra a conversa antes de enviar uma nova mensagem.',
+            code: 'conversation_closed',
+          },
+          { status: 409 }
         );
       }
       conversationId = data.id;

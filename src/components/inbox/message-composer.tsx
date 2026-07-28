@@ -106,6 +106,7 @@ interface MediaDraft {
 interface MessageComposerProps {
   conversationId: string;
   sessionExpired: boolean;
+  conversationClosed?: boolean;
   onSend: (text: string, replyToId?: string) => void;
   onSendMedia: (payload: SendMediaPayload) => void;
   onSendInteractive: (
@@ -131,6 +132,7 @@ const OPUS_ENCODER_PATH = '/opus/encoderWorker.min.js';
 export function MessageComposer({
   conversationId,
   sessionExpired,
+  conversationClosed = false,
   onSend,
   onSendMedia,
   onSendInteractive,
@@ -187,7 +189,7 @@ export function MessageComposer({
   const canSend = useCan('send-messages');
   const readOnly = !canSend;
   // Media (like free-form text) is only allowed inside the 24h window.
-  const inputsDisabled = readOnly || sessionExpired;
+  const inputsDisabled = readOnly || sessionExpired || conversationClosed;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -585,6 +587,14 @@ export function MessageComposer({
           </Button>
         </div>
       )}
+      {conversationClosed && (
+        <div className="mb-2 rounded-lg border border-slate-500/30 bg-slate-500/10 px-3 py-2">
+          <p className="text-xs text-slate-300">
+            Atendimento encerrado após a finalização da call. Novas mensagens
+            pelo corretor estão bloqueadas.
+          </p>
+        </div>
+      )}
 
       {/* Hidden file inputs driven by the attach menu. */}
       <input
@@ -734,7 +744,7 @@ export function MessageComposer({
           <GatedButton
             variant="ghost"
             size="sm"
-            canAct={!readOnly}
+            canAct={!readOnly && !conversationClosed}
             gateReason="send messages"
             title={readOnly ? undefined : t('sendTemplate')}
             className="text-muted-foreground hover:text-foreground h-9 w-9 shrink-0 p-0"
@@ -746,7 +756,7 @@ export function MessageComposer({
           <GatedButton
             variant="ghost"
             size="sm"
-            canAct={!readOnly}
+            canAct={!readOnly && !conversationClosed}
             gateReason="send messages"
             disabled={drafting}
             title={readOnly ? undefined : t('draftWithAI')}
@@ -768,11 +778,13 @@ export function MessageComposer({
             placeholder={
               readOnly
                 ? t('readOnlyPlaceholder')
+                : conversationClosed
+                  ? 'Atendimento encerrado — envio bloqueado'
                 : sessionExpired
                   ? t('sessionExpiredPlaceholder')
                   : t('typeMessagePlaceholder')
             }
-            disabled={sessionExpired || readOnly}
+            disabled={inputsDisabled}
             rows={1}
             // Textarea keeps its own inline title — the GatedButton
             // wrapping pattern doesn't apply to non-button inputs.
@@ -780,15 +792,15 @@ export function MessageComposer({
             title={readOnly ? t('readOnlyTitle') : undefined}
             className={cn(
               'border-border bg-muted text-foreground placeholder-muted-foreground focus:border-primary/50 flex-1 resize-none rounded-xl border px-4 py-2.5 text-sm transition-colors outline-none',
-              (sessionExpired || readOnly) && 'cursor-not-allowed opacity-50'
+              inputsDisabled && 'cursor-not-allowed opacity-50'
             )}
           />
 
           <GatedButton
             size="sm"
-            canAct={!readOnly}
+            canAct={!readOnly && !conversationClosed}
             gateReason="send messages"
-            disabled={!text.trim() || sessionExpired || sending}
+            disabled={!text.trim() || inputsDisabled || sending}
             onClick={handleSend}
             className="bg-primary hover:bg-primary/90 h-9 w-9 shrink-0 p-0 disabled:opacity-40"
           >

@@ -183,6 +183,20 @@ function postContactTemplate(overrides: Record<string, unknown> = {}) {
   );
 }
 
+function postConversationText(conversationId: string) {
+  return POST(
+    new Request('http://localhost/api/whatsapp/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        message_type: 'text',
+        content_text: 'Mensagem de teste',
+      }),
+    })
+  );
+}
+
 describe('POST /api/whatsapp/send — contact_id template path', () => {
   beforeEach(() => {
     vi.stubEnv('OUTBOUND_MESSAGING_ENABLED', 'true');
@@ -272,5 +286,23 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
       })
     );
     expect(res.status).toBe(400);
+  });
+
+  it('blocks a manual inbox send after the call closed the conversation', async () => {
+    existingConversation = {
+      id: 'conv-closed',
+      account_id: 'acct-1',
+      contact_id: 'contact-1',
+      contact: CONTACT,
+      status: 'closed',
+    };
+
+    const res = await postConversationText('conv-closed');
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.code).toBe('conversation_closed');
+    expect(sendTemplateMessage).not.toHaveBeenCalled();
+    expect(messageInserts).toHaveLength(0);
   });
 });

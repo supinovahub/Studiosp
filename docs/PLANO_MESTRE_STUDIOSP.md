@@ -382,6 +382,13 @@ Políticas comerciais e operacionais serão configuráveis pelo dono. Regras de 
 
 #### Confirmado
 
+- registrar um fato humano isolado movimenta o pipeline, mas não encerra a
+  conversa;
+- o bloqueio de novas mensagens manuais no Inbox acontece exclusivamente após
+  o corretor concluir a ação **Call finalizada** e registrar o status do lead;
+- conversas encerradas devem bloquear o compositor na interface e rejeitar
+  tentativas de envio também no servidor;
+
 - uma resposta da IA nunca constitui confirmação de reunião por si só;
 - a reunião só pode ser apresentada como marcada ou confirmada após a criação
   atômica de um registro em `appointments`;
