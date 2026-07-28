@@ -87,7 +87,7 @@ export function BrokerWhatsappOnboarding({
     <div className="bg-background flex min-h-screen items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-lg space-y-4">
         <div className="flex items-center justify-center gap-2.5">
-          <div className="border-primary/30 bg-primary/10 text-primary flex size-9 items-center justify-center rounded-lg border">
+          <div className="border-primary/20 bg-primary-soft text-primary flex size-9 items-center justify-center rounded-xl border">
             <Building2 className="size-4" />
           </div>
           <div>
@@ -102,7 +102,7 @@ export function BrokerWhatsappOnboarding({
 
         <Card className="border-border">
           <CardHeader className="border-border border-b">
-            <div className="border-primary/20 bg-primary/10 text-primary mb-2 flex size-11 items-center justify-center rounded-lg border">
+            <div className="border-primary/20 bg-primary-soft text-primary mb-2 flex size-11 items-center justify-center rounded-xl border">
               <MessageCircle className="size-5" />
             </div>
             <CardTitle>Confirme seu WhatsApp operacional</CardTitle>
@@ -152,7 +152,7 @@ export function BrokerWhatsappOnboarding({
                 </p>
               </div>
 
-              <label className="border-border bg-muted/25 flex min-h-11 items-start gap-3 rounded-lg border p-3">
+              <label className="border-border/70 bg-muted/25 flex min-h-11 items-start gap-3 rounded-xl border p-3">
                 <input
                   type="checkbox"
                   checked={consent}
@@ -168,7 +168,7 @@ export function BrokerWhatsappOnboarding({
               {error ? (
                 <div
                   role="alert"
-                  className="border-destructive/35 bg-destructive/10 text-destructive rounded-lg border px-3 py-2.5 text-sm"
+                  className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border px-3 py-2.5 text-sm"
                 >
                   {error}
                 </div>

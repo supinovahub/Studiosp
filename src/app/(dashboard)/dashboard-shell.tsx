@@ -159,16 +159,29 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="bg-background flex h-screen overflow-hidden">
+    <div className="bg-background flex h-dvh min-h-0 overflow-hidden">
+      <a
+        href="#conteudo-principal"
+        className="bg-primary text-primary-foreground fixed top-3 left-3 z-[60] -translate-y-20 rounded-lg px-4 py-2 text-sm font-semibold shadow-lg transition-transform focus:translate-y-0"
+      >
+        Ir para o conteúdo principal
+      </a>
       {/* Reports this tab's online/away presence once we know a user is
           signed in. Headless — renders nothing. */}
       <PresenceHeartbeat />
       <ReactivationQueueHeartbeat enabled={isManager} />
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Header onOpenSidebar={() => setSidebarOpen(true)} />
-        {/* Thinner horizontal padding on mobile so cards have room to breathe. */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+        <main
+          id="conteudo-principal"
+          tabIndex={-1}
+          className="dashboard-canvas flex-1 overflow-x-hidden overflow-y-auto"
+        >
+          <div className="mx-auto w-full max-w-[112rem] p-4 sm:p-6 lg:p-7 xl:p-8">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   );

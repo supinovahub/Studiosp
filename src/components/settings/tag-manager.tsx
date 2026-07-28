@@ -33,7 +33,7 @@ const PRESET_COLORS = [
   { name: 'emerald', value: '#10b981' },
   { name: 'cyan', value: '#06b6d4' },
   { name: 'blue', value: '#3b82f6' },
-  { name: 'violet', value: '#8b5cf6' },
+  { name: 'terra', value: '#795548' },
   { name: 'pink', value: '#ec4899' },
 ];
 

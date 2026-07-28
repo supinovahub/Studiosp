@@ -13,6 +13,41 @@ Especificação da importação segura de conversas antigas:
 
 ## Estado da implementação
 
+### Redesign integral da interface — decisão de 28 de julho de 2026
+
+#### Confirmado
+
+- o redesign de todas as telas será desenvolvido isoladamente na branch
+  `redesign/full-ui-refresh`;
+- a operação atual, seus contratos de API, dados, permissões, realtime,
+  automações e integrações não podem ser alterados por uma fase exclusivamente
+  visual;
+- o trabalho será guiado pela skill versionada
+  `.agents/skills/studiosp-ui-redesign`;
+- a skill externa `redesign-existing-projects` será usada como referência de
+  auditoria visual, não como autoridade automática;
+- a skill externa `apple-design` será usada seletivamente para feedback,
+  movimento, gestos e acessibilidade;
+- as referências externas ficam fixadas em commits auditados e não recebem
+  atualização automática;
+- o redesign será incremental, rota por rota, com validação de owner, corretor,
+  desktop, celular e estados de exceção antes de qualquer promoção;
+- o inventário inicial de rotas, perfis, riscos e fases está registrado em
+  [Inventário visual do Studiosp](./INVENTARIO_VISUAL_STUDIOSP_2026-07-28.md);
+- nenhuma implementação visual começa antes da aprovação da direção e do
+  congelamento dos cenários funcionais da Fase 0.
+
+#### Implementado, aguardando homologação visual
+
+- Fase 0 concluída com contratos congelados em
+  [Contratos do redesign](./CONTRATOS_REDESIGN_FASE_0_2026-07-28.md);
+- Fase 1 implementada na branch de redesign com tokens semânticos, shell,
+  navegação, estados operacionais e primitives compartilhadas;
+- testes, typecheck, lint e build aprovados conforme
+  [Relatório das Fases 0 e 1](./RELATORIO_REDESIGN_FASE_0_1_2026-07-28.md);
+- a próxima implementação cobre Visão geral, Central de atenção, Meu dia e
+  pendências, após homologação visual do preview da fundação.
+
 ### Link global de cadastro de corretores — 28 de julho de 2026
 
 #### Implementado em staging, aguardando homologação
@@ -1837,3 +1872,35 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   persistência, impedindo, por exemplo, uma localização em um campo monetário;
 - a listagem de horários respeita a antecedência e o horizonte configurados e
   considera somente corretores ativos, disponíveis e com WhatsApp confirmado.
+
+## 23. Reforma integral da interface
+
+### Fase 2 implementada em branch isolada em 28/07/2026
+
+- a reforma continua exclusivamente na branch `redesign/full-ui-refresh`, sem
+  alterar a interface em produção;
+- `/visao-geral` e `/meu-dia` foram reorganizadas como centros de comando,
+  começando por prioridades, próxima reunião e indicadores operacionais;
+- `/atencao` passou a explicitar volume, criticidade e vencimento, com filtros
+  locais e uma fila responsiva orientada à decisão;
+- o mesmo componente mantém conteúdo contextual para Dono e Corretor;
+- contratos de dados, ações, permissões, rotas e regras de negócio foram
+  preservados;
+- nenhuma migration ou alteração de banco foi necessária;
+- a fase foi validada com TypeScript, lint, build e 791 testes automatizados.
+
+### Fases 3 e 4 implementadas em branch isolada em 28/07/2026
+
+- Leads, detalhe, Pipeline, Inbox, Agenda e Follow-ups foram alinhados ao novo
+  sistema visual sem alterar contratos funcionais;
+- Reativação, Empreendimentos, importador documental, Equipe, Inteligência,
+  Relatórios e Configurações receberam a mesma hierarquia, densidade e
+  responsividade;
+- Login, cadastro, recuperação de senha, convites, notificações, importação de
+  histórico e onboarding do corretor foram incluídos na reforma;
+- realtime, deep links, deduplicação, ações comerciais, campanhas, IA,
+  uploads, permissões e integrações permanecem no código operacional original;
+- as rotas herdadas ocultas da V1 não foram reintroduzidas;
+- não houve alteração de banco, migrations, RLS, APIs ou produção;
+- a branch completa foi validada com TypeScript, lint, build e 791 testes
+  automatizados antes da homologação visual.

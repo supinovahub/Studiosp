@@ -1,9 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { Clock3, MessageSquareText } from 'lucide-react';
+import {
+  CheckCircle2,
+  Clock3,
+  MessageSquareText,
+  ShieldCheck,
+} from 'lucide-react';
+import { Card } from '@/components/ui/card';
 import { useStudiospData } from '@/hooks/use-studiosp-data';
 import { formatDateTime } from '@/lib/studiosp/labels';
+import { MetricStrip } from './metric-strip';
 import { PageHeader } from './page-header';
 import { EmptyState, ErrorState, LoadingState } from './operational-state';
 import { StatusBadge } from './status-badge';
@@ -20,43 +27,77 @@ export function FollowupsPage() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Recuperação"
         title="Esteira de follow-up"
-        description="A cadência pausa quando o lead responde, avança com controle de horário e cria atenção humana se a sequência não resolver."
+        description="Acompanhe a próxima tentativa e as exceções. A cadência pausa assim que o lead responde."
       />
       {activePolicy ? (
-        <div className="border-primary/25 bg-primary/5 flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-foreground text-sm font-medium">
-              {String(activePolicy.name)}
-            </p>
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              Janela de envio: {String(activePolicy.window_start).slice(0, 5)}{' '}
-              às {String(activePolicy.window_end).slice(0, 5)} · fuso de São
-              Paulo
-            </p>
+        <div className="border-primary/20 bg-primary-soft/50 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="bg-primary-soft text-primary flex size-9 shrink-0 items-center justify-center rounded-xl">
+              <ShieldCheck className="size-4" />
+            </div>
+            <div>
+              <p className="text-foreground text-sm font-semibold">
+                {String(activePolicy.name)}
+              </p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Janela de envio: {String(activePolicy.window_start).slice(0, 5)}{' '}
+                às {String(activePolicy.window_end).slice(0, 5)} · fuso de São
+                Paulo
+              </p>
+            </div>
           </div>
           <StatusBadge label="Cadência ativa" tone="success" />
         </div>
       ) : null}
+      <MetricStrip
+        items={[
+          {
+            label: 'Programados',
+            value: followups.filter(
+              (item) => String(item.status) === 'scheduled'
+            ).length,
+            detail: 'Próximas tentativas',
+            icon: Clock3,
+            tone: 'primary',
+          },
+          {
+            label: 'Enviados',
+            value: followups.filter((item) => String(item.status) === 'sent')
+              .length,
+            detail: 'Execuções concluídas',
+            icon: CheckCircle2,
+            tone: 'success',
+          },
+          {
+            label: 'Com falha',
+            value: followups.filter((item) => String(item.status) === 'failed')
+              .length,
+            detail: 'Precisam de revisão',
+            icon: MessageSquareText,
+            tone: 'warning',
+          },
+        ]}
+      />
       {followups.length ? (
-        <div className="border-border bg-card overflow-hidden rounded-lg border">
-          <div className="divide-border divide-y">
+        <Card className="gap-0 overflow-hidden py-0">
+          <div className="divide-border/60 divide-y">
             {followups.map((followup) => {
               const lead = leadMap.get(String(followup.opportunity_id));
               return (
                 <Link
                   key={String(followup.id)}
                   href={`/leads/${String(followup.opportunity_id)}`}
-                  className="hover:bg-muted/35 grid gap-3 px-4 py-3 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center"
+                  className="hover:bg-muted/35 grid min-h-[4.75rem] gap-3 px-4 py-3.5 transition-colors sm:grid-cols-[auto_1fr_auto_auto] sm:items-center sm:px-5"
                 >
                   <div className="border-border bg-muted/50 flex size-9 items-center justify-center rounded-lg border">
                     <MessageSquareText className="text-primary size-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-foreground truncate text-sm font-medium">
+                    <p className="text-foreground truncate text-sm font-semibold">
                       {lead?.contact?.name ?? lead?.contact?.phone ?? 'Lead'}
                     </p>
                     <p className="text-muted-foreground text-xs">
@@ -90,7 +131,7 @@ export function FollowupsPage() {
               );
             })}
           </div>
-        </div>
+        </Card>
       ) : (
         <EmptyState
           icon={Clock3}

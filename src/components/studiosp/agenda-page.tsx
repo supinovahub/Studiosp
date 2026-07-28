@@ -1,9 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { CalendarDays, Clock3, Video } from 'lucide-react';
+import {
+  CalendarCheck2,
+  CalendarDays,
+  Clock3,
+  History,
+  Video,
+} from 'lucide-react';
+import { Card } from '@/components/ui/card';
 import { useStudiospData } from '@/hooks/use-studiosp-data';
 import { formatDateTime } from '@/lib/studiosp/labels';
+import { MetricStrip } from './metric-strip';
 import { PageHeader } from './page-header';
 import { EmptyState, ErrorState, LoadingState } from './operational-state';
 import { StatusBadge } from './status-badge';
@@ -22,11 +30,36 @@ export function AgendaPage() {
     .reverse();
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Agenda interna V1"
         title="Reuniões e cobertura garantida"
-        description="A IA oferece apenas horários com cobertura pré-configurada. O Google Agenda entra em uma versão posterior; esta agenda já registra reserva, aceite, cancelamento e comparecimento."
+        description="Acompanhe reservas, confirmações e histórico. A IA oferece somente horários cobertos pelas regras da operação."
+      />
+      <MetricStrip
+        items={[
+          {
+            label: 'Próximas',
+            value: upcoming.length,
+            detail: 'Reservadas ou confirmadas',
+            icon: CalendarCheck2,
+            tone: 'primary',
+          },
+          {
+            label: 'Aguardando corretor',
+            value: upcoming.filter((appointment) => !appointment.broker).length,
+            detail: 'Precisam de distribuição',
+            icon: Clock3,
+            tone: 'warning',
+          },
+          {
+            label: 'No histórico',
+            value: past.length,
+            detail: 'Compromissos anteriores',
+            icon: History,
+            tone: 'neutral',
+          },
+        ]}
       />
       <AppointmentSection
         title="Próximas reuniões"
@@ -60,24 +93,24 @@ function AppointmentSection({
 }) {
   const rows = appointments ?? [];
   return (
-    <section className="border-border bg-card overflow-hidden rounded-lg border">
-      <div className="border-border border-b px-4 py-3">
+    <Card className="gap-0 overflow-hidden py-0">
+      <div className="border-border/65 border-b px-4 py-4 sm:px-5">
         <h3 className="text-foreground text-sm font-semibold">{title}</h3>
         <p className="text-muted-foreground text-xs">{description}</p>
       </div>
       {rows.length ? (
-        <div className="divide-border divide-y">
+        <div className="divide-border/60 divide-y">
           {rows.map((appointment) => (
             <Link
               key={appointment.id}
               href={`/leads/${appointment.opportunity_id}`}
-              className={`hover:bg-muted/35 grid gap-3 px-4 py-3 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center ${muted ? 'opacity-70' : ''}`}
+              className={`hover:bg-muted/35 grid min-h-[4.75rem] gap-3 px-4 py-3.5 transition-colors sm:grid-cols-[auto_1fr_auto_auto] sm:items-center sm:px-5 ${muted ? 'opacity-70' : ''}`}
             >
               <div className="border-border bg-muted/50 text-primary flex size-10 items-center justify-center rounded-lg border">
                 <CalendarDays className="size-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-foreground truncate text-sm font-medium">
+                <p className="text-foreground truncate text-sm font-semibold">
                   {appointment.lead?.contact?.name ??
                     appointment.lead?.contact?.phone ??
                     'Lead'}
@@ -125,6 +158,6 @@ function AppointmentSection({
           />
         </div>
       )}
-    </section>
+    </Card>
   );
 }

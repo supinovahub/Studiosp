@@ -1,0 +1,4 @@
+interface:
+  display_name: "Studiosp UI Redesign"
+  short_description: "Redesenho seguro do CRM Studiosp"
+  default_prompt: "Use $studiosp-ui-redesign para redesenhar esta tela do Studiosp preservando todos os contratos funcionais."

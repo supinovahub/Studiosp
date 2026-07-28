@@ -11,6 +11,7 @@ import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/studiosp/page-header';
 
 // Icon per notification type. Only one type exists today
 // (conversation_assigned) but this keeps future types a one-line add.
@@ -167,32 +168,30 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-foreground text-2xl font-bold">Notificações</h1>
-          <p className="text-muted-foreground mt-1 text-sm">
-            As conversas que outros colegas de equipe atribuem a você aparecem
-            aqui.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={unreadIds.length === 0 || markingAll}
-          onClick={markAllRead}
-        >
-          {markingAll ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <CheckCheck className="h-4 w-4" />
-          )}
-          Marcar tudo como lido
-        </Button>
-      </div>
+      <PageHeader
+        eyebrow="Atualizações"
+        title="Notificações"
+        description="Atribuições e acontecimentos que pedem sua atenção aparecem aqui."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={unreadIds.length === 0 || markingAll}
+            onClick={markAllRead}
+          >
+            {markingAll ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <CheckCheck className="size-4" />
+            )}
+            Marcar tudo como lido
+          </Button>
+        }
+      />
 
       {notifications.length === 0 ? (
         <div className="border-border bg-muted/40 flex h-48 flex-col items-center justify-center rounded-xl border border-dashed">
-          <div className="bg-primary/10 flex h-12 w-12 items-center justify-center rounded-xl">
+          <div className="bg-primary-soft flex size-12 items-center justify-center rounded-2xl">
             <Bell className="text-primary h-6 w-6" />
           </div>
           <p className="text-foreground mt-3 text-sm font-medium">
@@ -213,16 +212,16 @@ export default function NotificationsPage() {
                   type="button"
                   onClick={() => handleClick(n)}
                   className={cn(
-                    'flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors',
+                    'flex min-h-20 w-full items-start gap-3 rounded-2xl border p-4 text-left transition-colors',
                     isUnread
-                      ? 'border-primary/30 bg-primary/5 hover:border-primary/50'
+                      ? 'border-primary/25 bg-primary-soft/50 hover:border-primary/45'
                       : 'border-border bg-card hover:border-border/70'
                   )}
                 >
                   <div
                     className={cn(
-                      'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg',
-                      isUnread ? 'bg-primary/15' : 'bg-muted'
+                      'flex size-10 flex-shrink-0 items-center justify-center rounded-xl',
+                      isUnread ? 'bg-primary-soft' : 'bg-muted'
                     )}
                     aria-hidden
                   >

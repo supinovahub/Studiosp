@@ -136,51 +136,54 @@ function InboxPageInner() {
   // conversations stuck on "No messages yet" until the user reloaded.
   // Also self-heals if a realtime event was missed: callers can invoke
   // this whenever they reference a conversation id they don't recognise.
-  const hydrateConversation = useCallback(async (convId: string) => {
-    if (!whatsappConnectionKey) return;
-    if (hydratingConvIdsRef.current.has(convId)) return;
-    hydratingConvIdsRef.current.add(convId);
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('conversations')
-        .select(CONVERSATION_SELECT)
-        .eq('id', convId)
-        .eq('whatsapp_connection_key', whatsappConnectionKey)
-        .maybeSingle();
-      if (error) {
-        // Supabase errors have non-enumerable properties — log fields
-        // explicitly so the console message isn't just `{}`.
-        console.error('Failed to hydrate conversation:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-        });
-        return;
-      }
-      if (!data) return;
-      const fetched = normalizeConversation(data);
-      setConversations((prev) => {
-        const existing = prev.find((c) => c.id === fetched.id);
-        if (existing) {
-          // Already in state — keep its fields (a realtime UPDATE may
-          // have landed while the fetch was in flight and patched
-          // last_message_text / unread_count to fresher values than
-          // the row we just read). Only backfill `contact`, which the
-          // realtime payloads never carry.
-          return prev.map((c) =>
-            c.id === fetched.id
-              ? { ...c, contact: c.contact ?? fetched.contact }
-              : c
-          );
+  const hydrateConversation = useCallback(
+    async (convId: string) => {
+      if (!whatsappConnectionKey) return;
+      if (hydratingConvIdsRef.current.has(convId)) return;
+      hydratingConvIdsRef.current.add(convId);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('conversations')
+          .select(CONVERSATION_SELECT)
+          .eq('id', convId)
+          .eq('whatsapp_connection_key', whatsappConnectionKey)
+          .maybeSingle();
+        if (error) {
+          // Supabase errors have non-enumerable properties — log fields
+          // explicitly so the console message isn't just `{}`.
+          console.error('Failed to hydrate conversation:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+          });
+          return;
         }
-        return [fetched, ...prev];
-      });
-    } finally {
-      hydratingConvIdsRef.current.delete(convId);
-    }
-  }, [whatsappConnectionKey]);
+        if (!data) return;
+        const fetched = normalizeConversation(data);
+        setConversations((prev) => {
+          const existing = prev.find((c) => c.id === fetched.id);
+          if (existing) {
+            // Already in state — keep its fields (a realtime UPDATE may
+            // have landed while the fetch was in flight and patched
+            // last_message_text / unread_count to fresher values than
+            // the row we just read). Only backfill `contact`, which the
+            // realtime payloads never carry.
+            return prev.map((c) =>
+              c.id === fetched.id
+                ? { ...c, contact: c.contact ?? fetched.contact }
+                : c
+            );
+          }
+          return [fetched, ...prev];
+        });
+      } finally {
+        hydratingConvIdsRef.current.delete(convId);
+      }
+    },
+    [whatsappConnectionKey]
+  );
 
   // Check WhatsApp connection status on mount
   useEffect(() => {
@@ -590,17 +593,17 @@ function InboxPageInner() {
   const hasActiveConv = !!activeConversation;
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden sm:-m-6">
+    <div className="-m-4 flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden bg-[var(--surface-app)] sm:-m-6">
       {/* WhatsApp connection banner — in the flex column, not absolute,
           so it pushes the panels down instead of overlapping them. */}
       {whatsappConnected === false && (
-        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
-          <WifiOff className="h-4 w-4 text-amber-400" />
-          <p className="text-xs text-amber-400">{t('whatsappNotConnected')}</p>
+        <div className="border-warning/20 bg-warning-soft text-warning flex shrink-0 items-center justify-center gap-2 border-b px-4 py-2.5">
+          <WifiOff className="size-4" />
+          <p className="text-xs font-medium">{t('whatsappNotConnected')}</p>
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="lg:bg-border/60 flex flex-1 overflow-hidden lg:gap-px">
         {/* Left panel: Conversation list.
             Hidden on mobile when a conversation is selected so the
             thread can occupy the full width. Always visible on lg+. */}

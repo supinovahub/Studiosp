@@ -49,22 +49,22 @@ export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
     'U';
 
   return (
-    <header className="border-border bg-background flex h-14 shrink-0 items-center justify-between gap-3 border-b px-3 sm:px-5">
+    <header className="border-border/80 bg-background/88 relative z-20 flex h-16 shrink-0 items-center justify-between gap-3 border-b px-3 backdrop-blur-xl sm:px-5 lg:px-6">
       <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
           onClick={onOpenSidebar}
           aria-label="Abrir menu"
-          className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-10 items-center justify-center rounded-lg lg:hidden"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground flex size-11 items-center justify-center rounded-xl transition-colors lg:hidden"
         >
           <Menu className="size-5" />
         </button>
         <div className="min-w-0">
-          <h1 className="text-foreground truncate text-sm font-semibold sm:text-base">
+          <h1 className="text-foreground truncate text-[15px] font-semibold tracking-[-0.01em] sm:text-base">
             {titleFor(pathname)}
           </h1>
-          <p className="text-muted-foreground hidden text-[10px] sm:block">
-            Operação em tempo real
+          <p className="text-muted-foreground hidden text-[11px] sm:block">
+            Central operacional
           </p>
         </div>
       </div>
@@ -73,7 +73,7 @@ export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
         <Link
           href="/atencao"
           aria-label="Abrir central de atenção"
-          className="text-muted-foreground hover:bg-muted hover:text-foreground relative flex size-9 items-center justify-center rounded-lg"
+          className="text-muted-foreground hover:bg-muted hover:text-foreground relative flex size-10 items-center justify-center rounded-xl transition-colors"
         >
           <Bell className="size-4" />
           {unread > 0 ? (
@@ -84,7 +84,7 @@ export function Header({ onOpenSidebar }: { onOpenSidebar?: () => void }) {
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label="Abrir menu da conta"
-            className="hover:bg-muted ml-1 flex items-center gap-2 rounded-lg p-1 focus:outline-none"
+            className="hover:bg-muted ml-1 flex min-h-10 items-center gap-2 rounded-xl p-1 transition-colors focus:outline-none"
           >
             <Avatar className="size-8">
               {profile?.avatar_url ? (

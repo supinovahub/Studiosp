@@ -346,7 +346,7 @@ export function WhatsAppHistoryImportPage() {
         }
       />
 
-      <div className="flex gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-4">
+      <div className="border-success/25 bg-success-soft text-success flex gap-3 rounded-xl border p-4">
         <ShieldCheck className="mt-0.5 size-5 shrink-0 text-emerald-300" />
         <div className="min-w-0">
           <p className="text-foreground text-sm font-semibold">
@@ -370,7 +370,7 @@ export function WhatsAppHistoryImportPage() {
 
       {busyLabel ? (
         <div
-          className="border-primary/30 bg-primary/5 flex items-center gap-3 rounded-lg border px-4 py-3"
+          className="border-primary/20 bg-primary-soft/50 flex items-center gap-3 rounded-xl border px-4 py-3"
           aria-live="polite"
         >
           <LoaderCircle className="text-primary size-4 animate-spin" />
@@ -378,7 +378,7 @@ export function WhatsAppHistoryImportPage() {
         </div>
       ) : null}
 
-      <section className="border-border bg-card overflow-hidden rounded-lg border">
+      <section className="border-border/70 bg-card overflow-hidden rounded-2xl border">
         <div className="border-border grid border-b sm:grid-cols-3">
           {[
             ['1', 'Arquivo privado'],
@@ -431,7 +431,7 @@ export function WhatsAppHistoryImportPage() {
                 </p>
                 <label
                   htmlFor="whatsapp-history-file"
-                  className="border-border bg-background hover:border-primary/40 hover:bg-muted/20 mt-4 flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-6 text-center"
+                  className="border-border/70 bg-background hover:border-primary/40 hover:bg-muted/20 mt-4 flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed p-6 text-center transition-colors"
                 >
                   <div className="border-border bg-muted/50 flex size-10 items-center justify-center rounded-lg border">
                     <Upload className="text-primary size-5" />
@@ -477,7 +477,7 @@ export function WhatsAppHistoryImportPage() {
                   ) : null}
                 </div>
               </div>
-              <aside className="border-border bg-card-2 rounded-lg border p-4">
+              <aside className="border-border/70 bg-card-2 rounded-xl border p-4">
                 <p className="text-foreground text-sm font-semibold">
                   O que será validado
                 </p>
@@ -522,7 +522,7 @@ export function WhatsAppHistoryImportPage() {
                 />
               </div>
 
-              <div className="border-border bg-background grid overflow-hidden rounded-lg border lg:grid-cols-[1.1fr_1fr]">
+              <div className="border-border/70 bg-background grid overflow-hidden rounded-xl border lg:grid-cols-[1.1fr_1fr]">
                 <div className="border-border p-5 lg:border-r">
                   <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                     Conversas identificadas

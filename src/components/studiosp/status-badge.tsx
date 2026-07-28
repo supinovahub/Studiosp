@@ -2,11 +2,11 @@ import { AlertTriangle, Check, Clock3, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const toneClasses = {
-  neutral: 'border-border bg-muted/50 text-muted-foreground',
-  primary: 'border-primary/35 bg-primary/10 text-primary',
-  warning: 'border-amber-500/35 bg-amber-500/10 text-amber-300',
-  success: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-300',
-  danger: 'border-red-500/35 bg-red-500/10 text-red-300',
+  neutral: 'border-border/80 bg-muted/55 text-muted-foreground',
+  primary: 'border-primary/20 bg-primary-soft text-primary',
+  warning: 'border-warning/20 bg-warning-soft text-warning',
+  success: 'border-success/20 bg-success-soft text-success',
+  danger: 'border-red-500/25 bg-red-500/10 text-red-400',
 };
 
 export function StatusBadge({

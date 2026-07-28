@@ -131,20 +131,20 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
       <aside
         aria-label="Navegação principal"
         className={cn(
-          'border-sidebar-border bg-sidebar fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col border-r transition-transform duration-200 lg:static lg:z-0 lg:w-60 lg:translate-x-0',
+          'border-sidebar-border/80 bg-sidebar fixed inset-y-0 left-0 z-40 flex h-full w-[17rem] flex-col border-r shadow-2xl transition-transform duration-200 lg:static lg:z-0 lg:w-64 lg:translate-x-0 lg:shadow-none',
           open ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <div className="border-sidebar-border flex h-14 shrink-0 items-center justify-between border-b px-4">
+        <div className="border-sidebar-border/80 flex h-16 shrink-0 items-center justify-between border-b px-4">
           <Link
             href={isManager ? '/visao-geral' : '/meu-dia'}
             className="flex items-center gap-2.5"
           >
-            <div className="border-primary/30 bg-primary/10 text-primary flex size-8 items-center justify-center rounded-lg border">
-              <Building2 className="size-4" />
+            <div className="border-primary/25 bg-primary-soft text-primary flex size-9 items-center justify-center rounded-xl border shadow-sm">
+              <Building2 className="size-[18px]" />
             </div>
             <div>
-              <p className="text-sidebar-foreground text-sm leading-none font-semibold">
+              <p className="text-sidebar-foreground text-[15px] leading-none font-semibold tracking-[-0.01em]">
                 Studiosp
               </p>
               <p className="text-muted-foreground mt-1 text-[10px] tracking-wider uppercase">
@@ -162,9 +162,9 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 [scrollbar-width:thin] overflow-y-auto px-3 py-4">
           {!profileLoading && account?.name ? (
-            <div className="border-sidebar-border bg-sidebar-accent/40 mb-4 rounded-lg border px-3 py-2">
+            <div className="border-sidebar-border/70 bg-sidebar-accent/45 mb-5 rounded-xl border px-3 py-2.5">
               <p className="text-sidebar-foreground truncate text-xs font-medium">
                 {account.name}
               </p>
@@ -182,7 +182,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           <div className="space-y-5">
             {sections.map((section) => (
               <section key={section.label}>
-                <p className="text-muted-foreground mb-1.5 px-3 text-[10px] font-semibold tracking-[0.14em] uppercase">
+                <p className="text-muted-foreground mb-1.5 px-3 text-[10px] font-semibold tracking-[0.16em] uppercase">
                   {section.label}
                 </p>
                 <ul className="space-y-0.5">
@@ -195,13 +195,13 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                         <Link
                           href={item.href}
                           className={cn(
-                            'flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors lg:min-h-9',
+                            'group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors lg:min-h-10',
                             active
-                              ? 'bg-primary/12 text-primary'
+                              ? 'bg-primary-soft text-primary shadow-[inset_0_0_0_1px_var(--primary-soft-2)]'
                               : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
                           )}
                         >
-                          <item.icon className="size-4" />
+                          <item.icon className="size-[17px] transition-transform group-hover:scale-[1.03]" />
                           <span className="flex-1">{item.label}</span>
                           {item.badge === 'inbox' && totalUnread > 0 ? (
                             <span className="bg-primary text-primary-foreground flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold">
@@ -218,8 +218,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           </div>
         </nav>
 
-        <div className="border-sidebar-border shrink-0 border-t p-3">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+        <div className="border-sidebar-border/80 shrink-0 border-t p-3">
+          <div className="hover:bg-sidebar-accent/70 flex items-center gap-3 rounded-xl px-2 py-2 transition-colors">
             <Avatar className="size-8 shrink-0">
               {profile?.avatar_url ? (
                 <AvatarImage

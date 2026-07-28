@@ -114,7 +114,7 @@ export function ReportsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Métricas auditáveis"
         title="Relatórios da operação"
@@ -157,7 +157,7 @@ export function ReportsPage() {
           },
         ]}
       />
-      <section className="border-border bg-card grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-6">
+      <section className="border-border/70 bg-card grid gap-3 rounded-2xl border p-4 sm:grid-cols-2 lg:grid-cols-6">
         <Input
           type="date"
           aria-label="Período inicial"
@@ -227,8 +227,8 @@ export function ReportsPage() {
         <BarList title="Distribuição por etapa" items={stages} max={maxStage} />
         <BarList title="Origem dos leads" items={sources} max={maxSource} />
       </div>
-      <section className="border-border bg-card overflow-hidden rounded-lg border">
-        <div className="border-border border-b px-4 py-3">
+      <section className="border-border/70 bg-card overflow-hidden rounded-2xl border">
+        <div className="border-border/65 border-b px-4 py-4 sm:px-5">
           <h3 className="text-foreground text-sm font-semibold">
             Auditoria recente
           </h3>
@@ -237,11 +237,11 @@ export function ReportsPage() {
           </p>
         </div>
         {(data.audit ?? []).length ? (
-          <div className="divide-border divide-y">
+          <div className="divide-border/60 divide-y">
             {(data.audit ?? []).slice(0, 100).map((item) => (
               <div
                 key={String(item.id)}
-                className="grid gap-2 px-4 py-3 sm:grid-cols-[1fr_auto_auto]"
+                className="grid gap-2 px-4 py-3.5 sm:grid-cols-[1fr_auto_auto] sm:px-5"
               >
                 <div>
                   <p className="text-foreground text-sm">
@@ -284,7 +284,7 @@ function BarList({
   max: number;
 }) {
   return (
-    <section className="border-border bg-card rounded-lg border p-4">
+    <section className="border-border/70 bg-card rounded-2xl border p-4 sm:p-5">
       <h3 className="text-foreground text-sm font-semibold">{title}</h3>
       <div className="mt-4 space-y-3">
         {items.filter((item) => item.count > 0).length ? (
@@ -334,7 +334,7 @@ function ReportSelect({
       aria-label={label}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="border-input bg-background text-foreground h-9 min-w-0 rounded-lg border px-2 text-sm"
+      className="border-input bg-background text-foreground h-9 min-w-0 rounded-xl border px-2 text-sm"
     >
       <option value="">{label}</option>
       {options.map((option) => (
