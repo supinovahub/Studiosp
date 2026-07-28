@@ -13,6 +13,26 @@ Especificação da importação segura de conversas antigas:
 
 ## Estado da implementação
 
+### Redesign integral da interface — decisão de 28 de julho de 2026
+
+#### Confirmado
+
+- o redesign de todas as telas será desenvolvido isoladamente na branch
+  `redesign/full-ui-refresh`;
+- a operação atual, seus contratos de API, dados, permissões, realtime,
+  automações e integrações não podem ser alterados por uma fase exclusivamente
+  visual;
+- o trabalho será guiado pela skill versionada
+  `.agents/skills/studiosp-ui-redesign`;
+- a skill externa `redesign-existing-projects` será usada como referência de
+  auditoria visual, não como autoridade automática;
+- a skill externa `apple-design` será usada seletivamente para feedback,
+  movimento, gestos e acessibilidade;
+- as referências externas ficam fixadas em commits auditados e não recebem
+  atualização automática;
+- o redesign será incremental, rota por rota, com validação de owner, corretor,
+  desktop, celular e estados de exceção antes de qualquer promoção.
+
 ### Robustez operacional da IA — decisão de 27 de julho de 2026
 
 #### Confirmado
