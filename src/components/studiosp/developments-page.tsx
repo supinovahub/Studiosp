@@ -40,6 +40,12 @@ export function DevelopmentsPage() {
     text: string;
   } | null>(null);
   const canManage = data?.role === 'owner' || data?.role === 'admin';
+  const editingOffer: Row | null = editing
+    ? (((data?.offers ?? []).find(
+        (offer) =>
+          offer.development_id === editing.id && offer.is_active !== false
+      ) as Row | undefined) ?? null)
+    : null;
   const developments = useMemo(() => {
     const query = search.toLocaleLowerCase('pt-BR');
     return (data?.developments ?? []).filter((item) =>
@@ -97,6 +103,7 @@ export function DevelopmentsPage() {
         highlights: form.get('highlights'),
         knowledgeNotes: form.get('knowledgeNotes'),
         internalNotes: form.get('internalNotes'),
+        offerId: editingOffer?.id,
         typology: form.get('typology'),
         unitCode: form.get('unitCode'),
         areaMin: form.get('areaMin'),
@@ -270,15 +277,17 @@ export function DevelopmentsPage() {
                 }
               />
             </Field>
-            {!editing ? (
-              <>
+            <>
                 <div className="border-border/70 bg-muted/25 rounded-xl border p-4 md:col-span-2">
                   <h4 className="text-foreground text-sm font-semibold">
-                    Primeira unidade ou tipologia
+                    {editing
+                      ? 'Unidade ou tipologia principal'
+                      : 'Primeira unidade ou tipologia'}
                   </h4>
                   <p className="text-muted-foreground mt-1 text-xs">
-                    Preencha conforme uma linha do tabelão. Outras unidades
-                    poderão ser adicionadas depois ao mesmo empreendimento.
+                    {editing
+                      ? 'Edite os dados comerciais vinculados a este empreendimento.'
+                      : 'Preencha conforme uma linha do tabelão. Outras unidades poderão ser adicionadas depois ao mesmo empreendimento.'}
                   </p>
                 </div>
                 <Field label="Tipologia">
@@ -286,10 +295,15 @@ export function DevelopmentsPage() {
                     name="typology"
                     required
                     placeholder="Studio, 1 dormitório, 2 suítes..."
+                    defaultValue={editingOffer?.typology ?? ''}
                   />
                 </Field>
                 <Field label="Unidade">
-                  <Input name="unitCode" placeholder="Ex.: 22B" />
+                  <Input
+                    name="unitCode"
+                    placeholder="Ex.: 22B"
+                    defaultValue={editingOffer?.unit_code ?? ''}
+                  />
                 </Field>
                 <Field label="Metragem (m²)">
                   <Input
@@ -298,10 +312,17 @@ export function DevelopmentsPage() {
                     min="1"
                     step="0.01"
                     required
+                    defaultValue={editingOffer?.area_min_sqm ?? ''}
                   />
                 </Field>
                 <Field label="Metragem máxima (opcional)">
-                  <Input name="areaMax" type="number" min="1" step="0.01" />
+                  <Input
+                    name="areaMax"
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    defaultValue={editingOffer?.area_max_sqm ?? ''}
+                  />
                 </Field>
                 <Field label="Vagas">
                   <Input
@@ -310,6 +331,7 @@ export function DevelopmentsPage() {
                     min="0"
                     step="1"
                     placeholder="0"
+                    defaultValue={editingOffer?.parking_spaces ?? ''}
                   />
                 </Field>
                 <Field label="Preço de (tabela)">
@@ -318,6 +340,7 @@ export function DevelopmentsPage() {
                     type="number"
                     min="0"
                     step="0.01"
+                    defaultValue={editingOffer?.original_price ?? ''}
                   />
                 </Field>
                 <Field label="Preço para (oferta)">
@@ -327,6 +350,7 @@ export function DevelopmentsPage() {
                     min="0"
                     step="0.01"
                     required
+                    defaultValue={editingOffer?.price_from ?? ''}
                   />
                 </Field>
                 <Field label="Preço por m²">
@@ -335,6 +359,7 @@ export function DevelopmentsPage() {
                     type="number"
                     min="0"
                     step="0.01"
+                    defaultValue={editingOffer?.price_per_sqm ?? ''}
                   />
                 </Field>
                 <Field label="Margem comercial (%)">
@@ -344,10 +369,10 @@ export function DevelopmentsPage() {
                     min="0"
                     max="100"
                     step="0.001"
+                    defaultValue={editingOffer?.margin_percent ?? ''}
                   />
                 </Field>
               </>
-            ) : null}
             <Field label="Descrição para o corretor" wide>
               <Textarea
                 name="description"

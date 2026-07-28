@@ -384,10 +384,9 @@ export async function POST(request: NextRequest) {
         );
       }
       if (
-        !body.id &&
-        (!text(body.typology) ||
-          !numberOrNull(body.areaMin) ||
-          numberOrNull(body.priceFrom) === null)
+        !text(body.typology) ||
+        !numberOrNull(body.areaMin) ||
+        numberOrNull(body.priceFrom) === null
       ) {
         return NextResponse.json(
           {
@@ -438,48 +437,60 @@ export async function POST(request: NextRequest) {
       if (!result.data?.id)
         throw new Error('Falha ao salvar o empreendimento.');
 
-      let initialOffer = null;
-      if (!body.id && body.areaMin) {
+      let savedOffer = null;
+      if (body.areaMin) {
         const typology = text(body.typology);
         const unitCode = text(body.unitCode);
-        const offerResult = await supabase
-          .from('development_offers')
-          .insert({
-            account_id: accountId,
-            development_id: result.data.id,
-            label:
-              [typology, unitCode ? `unidade ${unitCode}` : '']
-                .filter(Boolean)
-                .join(' · ') || `Opção inicial · ${name}`,
-            typology: typology || null,
-            unit_code: unitCode || null,
-            area_min_sqm: numberOrNull(body.areaMin),
-            area_max_sqm: numberOrNull(body.areaMax),
-            parking_spaces: numberOrNull(body.parkingSpaces),
-            original_price: numberOrNull(body.originalPrice),
-            price_from: numberOrNull(body.priceFrom),
-            price_per_sqm: numberOrNull(body.pricePerSqm),
-            margin_percent: numberOrNull(body.marginPercent),
-            property_timing: text(body.propertyTiming, 'off_plan'),
-            created_by: profileId,
-          })
-          .select()
-          .single();
+        const offerValues = {
+          account_id: accountId,
+          development_id: result.data.id,
+          label:
+            [typology, unitCode ? `unidade ${unitCode}` : '']
+              .filter(Boolean)
+              .join(' · ') || `Opção principal · ${name}`,
+          typology: typology || null,
+          unit_code: unitCode || null,
+          area_min_sqm: numberOrNull(body.areaMin),
+          area_max_sqm: numberOrNull(body.areaMax),
+          parking_spaces: numberOrNull(body.parkingSpaces),
+          original_price: numberOrNull(body.originalPrice),
+          price_from: numberOrNull(body.priceFrom),
+          price_per_sqm: numberOrNull(body.pricePerSqm),
+          margin_percent: numberOrNull(body.marginPercent),
+          property_timing: text(body.propertyTiming, 'off_plan'),
+          created_by: profileId,
+        };
+        const offerResult = body.offerId
+          ? await supabase
+              .from('development_offers')
+              .update(offerValues)
+              .eq('account_id', accountId)
+              .eq('development_id', result.data.id)
+              .eq('id', text(body.offerId))
+              .select()
+              .single()
+          : await supabase
+              .from('development_offers')
+              .insert(offerValues)
+              .select()
+              .single();
         if (offerResult.error) {
-          await supabase
-            .from('developments')
-            .delete()
-            .eq('account_id', accountId)
-            .eq('id', result.data.id)
-            .eq('status', 'draft');
+          if (!body.id) {
+            await supabase
+              .from('developments')
+              .delete()
+              .eq('account_id', accountId)
+              .eq('id', result.data.id)
+              .eq('status', 'draft');
+          }
           actionError(offerResult.error);
         }
-        initialOffer = offerResult.data;
+        savedOffer = offerResult.data;
       }
 
       return NextResponse.json({
         development: result.data,
-        offer: initialOffer,
+        offer: savedOffer,
       });
     }
 
