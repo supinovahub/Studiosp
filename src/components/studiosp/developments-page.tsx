@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   Send,
+  Trash2,
   WalletCards,
   X,
 } from 'lucide-react';
@@ -89,6 +90,7 @@ export function DevelopmentsPage() {
         neighborhoodId: form.get('neighborhoodId'),
         neighborhoodName: form.get('neighborhoodName'),
         internalCode: form.get('internalCode'),
+        addressLine: form.get('addressLine'),
         description: form.get('description'),
         propertyTiming: form.get('propertyTiming'),
         expectedDeliveryDate: form.get('expectedDeliveryDate'),
@@ -256,6 +258,18 @@ export function DevelopmentsPage() {
                 defaultValue={editing?.expected_delivery_date ?? ''}
               />
             </Field>
+            <Field label="Endereço completo" wide>
+              <Input
+                name="addressLine"
+                required
+                placeholder="Rua, número e complemento"
+                defaultValue={
+                  typeof editing?.address?.line === 'string'
+                    ? editing.address.line
+                    : ''
+                }
+              />
+            </Field>
             {!editing ? (
               <>
                 <div className="border-border/70 bg-muted/25 rounded-xl border p-4 md:col-span-2">
@@ -412,6 +426,12 @@ export function DevelopmentsPage() {
             const media = (data.media ?? []).filter(
               (item) => item.development_id === development.id
             );
+            const addressLine =
+              development.address &&
+              typeof development.address === 'object' &&
+              'line' in development.address
+                ? String(development.address.line ?? '')
+                : '';
             return (
               <article
                 key={String(development.id)}
@@ -432,6 +452,11 @@ export function DevelopmentsPage() {
                           {String(neighborhood?.name ?? 'Bairro não informado')}{' '}
                           · {String(developer?.name ?? 'Incorporadora')}
                         </p>
+                        {addressLine ? (
+                          <p className="text-muted-foreground mt-1 truncate text-xs">
+                            {addressLine}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <StatusBadge
@@ -582,6 +607,29 @@ export function DevelopmentsPage() {
                     >
                       <Archive /> Arquivar
                     </Button>
+                    {development.status === 'draft' ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Excluir definitivamente "${String(development.name)}"? Esta ação também remove suas condições e arquivos.`
+                            )
+                          ) {
+                            void run(
+                              'delete_development',
+                              { developmentId: development.id },
+                              'Empreendimento excluído.'
+                            );
+                          }
+                        }}
+                        disabled={saving}
+                      >
+                        <Trash2 /> Excluir
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </article>

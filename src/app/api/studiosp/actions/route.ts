@@ -404,6 +404,7 @@ export async function POST(request: NextRequest) {
         name,
         normalized_name: normalizedName(name),
         internal_code: text(body.internalCode) || null,
+        address: { line: text(body.addressLine) },
         description: text(body.description),
         property_timing: text(body.propertyTiming, 'off_plan'),
         expected_delivery_date: text(body.expectedDeliveryDate) || null,
@@ -549,6 +550,45 @@ export async function POST(request: NextRequest) {
         .single();
       actionError(result.error);
       return NextResponse.json({ development: result.data });
+    }
+
+    if (action === 'delete_development') {
+      const developmentId = text(body.developmentId);
+      if (!developmentId)
+        return NextResponse.json(
+          { error: 'Informe o empreendimento.' },
+          { status: 400 }
+        );
+      const existing = await supabase
+        .from('developments')
+        .select('id, status')
+        .eq('account_id', accountId)
+        .eq('id', developmentId)
+        .maybeSingle();
+      actionError(existing.error);
+      if (!existing.data)
+        return NextResponse.json(
+          { error: 'Empreendimento não encontrado.' },
+          { status: 404 }
+        );
+      if (existing.data.status !== 'draft')
+        return NextResponse.json(
+          {
+            error:
+              'Somente rascunhos podem ser excluídos. Arquive empreendimentos já publicados.',
+          },
+          { status: 409 }
+        );
+      const result = await supabase
+        .from('developments')
+        .delete()
+        .eq('account_id', accountId)
+        .eq('id', developmentId)
+        .eq('status', 'draft')
+        .select('id')
+        .single();
+      actionError(result.error);
+      return NextResponse.json({ deleted: result.data });
     }
 
     if (action === 'archive_media') {
