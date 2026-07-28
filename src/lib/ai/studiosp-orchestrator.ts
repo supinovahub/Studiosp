@@ -1158,9 +1158,7 @@ function sanitizeCallBrief(value: unknown): Row | null {
           .slice(0, 8)
       : [];
   const shortText = (candidate: unknown) =>
-    typeof candidate === 'string'
-      ? candidate.trim().slice(0, 1000)
-      : '';
+    typeof candidate === 'string' ? candidate.trim().slice(0, 1000) : '';
   return {
     opening: shortText(input.opening),
     confirm: list(input.confirm),
