@@ -4,6 +4,7 @@ export type ReactivationCadenceStep = {
 
 export type ReactivationMessage = {
   text: string;
+  parts: string[];
   variant: string;
 };
 
@@ -114,22 +115,64 @@ export function buildReactivationMessageWithVariant(
           'O valor de entrada ficou em aberto no nosso último contato.',
         ];
     const entry = pick(entryPhrases, seed >>> 3);
-    const templates = [
-      `${greeting} Retomando nosso contato sobre ${objective}: ${entry} Você ainda está avaliando essa possibilidade?`,
-      `${greeting} Vi que já conversamos sobre ${objective}. ${entry} Seu plano continua de pé ou mudou desde então?`,
-      `${greeting} Estou atualizando os atendimentos anteriores e encontrei seu interesse em ${objective}. ${entry} Posso confirmar se esse cenário ainda faz sentido?`,
-      `${greeting} Há algum tempo você avaliou ${objective} com a gente. ${entry} Quer retomar essa busca agora?`,
-      `${greeting} Seu contato ficou relacionado à busca por ${objective}. ${entry} Você chegou a comprar ou ainda está pesquisando?`,
-      `${greeting} Passando para atualizar uma conversa antiga sobre ${objective}. ${entry} Continuamos a partir dessas informações ou prefere revisar o cenário?`,
-      `${greeting} Encontrei aqui seu atendimento anterior sobre ${objective}. ${entry} Esse objetivo ainda é atual?`,
-      `${greeting} Queria confirmar uma informação do nosso último contato: o interesse era em ${objective}. ${entry} Isso permanece correto?`,
-      `${greeting} Estamos revisando oportunidades para quem já pesquisou ${objective}. ${entry} Faz sentido voltarmos a conversar?`,
-      `${greeting} Seu histórico indica interesse em ${objective}. ${entry} Posso atualizar seus dados e verificar o que existe hoje?`,
-      `${greeting} Lembrei da sua busca por ${objective} ao revisar nossos atendimentos. ${entry} Você ainda pretende seguir com essa compra?`,
-      `${greeting} Antes de encerrar seu atendimento anterior sobre ${objective}, queria checar uma coisa. ${entry} Ainda vale retomarmos o assunto?`,
+    const templates: Array<[string, string]> = [
+      [
+        `Retomando nosso contato, encontrei seu interesse em ${objective}.`,
+        'Você ainda está avaliando essa possibilidade?',
+      ],
+      [
+        `Vi que já conversamos sobre ${objective}.`,
+        'Seu plano continua de pé ou mudou desde então?',
+      ],
+      [
+        `Estou atualizando os atendimentos anteriores e encontrei seu interesse em ${objective}.`,
+        'Posso confirmar se esse cenário ainda faz sentido?',
+      ],
+      [
+        `Há algum tempo você avaliou ${objective} com a gente.`,
+        'Quer retomar essa busca agora?',
+      ],
+      [
+        `Seu contato ficou relacionado à busca por ${objective}.`,
+        'Você chegou a comprar ou ainda está pesquisando?',
+      ],
+      [
+        `Estou atualizando uma conversa anterior sobre ${objective}.`,
+        'Continuamos a partir dessas informações ou prefere revisar o cenário?',
+      ],
+      [
+        `Encontrei aqui seu atendimento anterior sobre ${objective}.`,
+        'Esse objetivo ainda é atual?',
+      ],
+      [
+        `No nosso último contato, o interesse era em ${objective}.`,
+        'Isso permanece correto?',
+      ],
+      [
+        `Estamos revisando oportunidades para quem já pesquisou ${objective}.`,
+        'Faz sentido voltarmos a conversar?',
+      ],
+      [
+        `Seu histórico indica interesse em ${objective}.`,
+        'Posso atualizar seus dados e verificar o que existe hoje?',
+      ],
+      [
+        `Lembrei da sua busca por ${objective} ao revisar nossos atendimentos.`,
+        'Você ainda pretende seguir com essa compra?',
+      ],
+      [
+        `Antes de encerrar seu atendimento anterior, revisei o interesse em ${objective}.`,
+        'Ainda vale retomarmos o assunto?',
+      ],
     ];
     const index = seed % templates.length;
-    return { text: templates[index], variant: `reactivation_d0_v${index + 1}` };
+    const [context, question] = templates[index];
+    const parts = [greeting, context, entry, question];
+    return {
+      text: parts.join(' '),
+      parts,
+      variant: `reactivation_d0_v${index + 1}`,
+    };
   }
 
   const followupsByStep = [
@@ -155,8 +198,10 @@ export function buildReactivationMessageWithVariant(
   const groupIndex = Math.min(stepNumber - 2, followupsByStep.length - 1);
   const variants = followupsByStep[groupIndex];
   const index = seed % variants.length;
+  const text = variants[index];
   return {
-    text: variants[index],
+    text,
+    parts: [text],
     variant: `reactivation_d${stepNumber - 1}_v${index + 1}`,
   };
 }

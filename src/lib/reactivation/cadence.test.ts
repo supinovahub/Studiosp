@@ -38,6 +38,25 @@ describe('buildReactivationMessage', () => {
     expect(followup).not.toContain('100.000');
   });
 
+  it('separa o D0 em saudação, contexto, dado conhecido e pergunta', () => {
+    const message = buildReactivationMessageWithVariant(
+      {
+        id: 'lead-semantic-parts',
+        name: 'Arthur Rocha',
+        objective: 'invest',
+        entry_value: 100000,
+      },
+      1
+    );
+
+    expect(message.parts).toHaveLength(4);
+    expect(message.parts[0]).toMatch(/Arthur/);
+    expect(message.parts[1]).toMatch(/studio|investimento/i);
+    expect(message.parts[2]).toContain('100.000');
+    expect(message.parts[3]).toMatch(/\?$/);
+    expect(message.text).toBe(message.parts.join(' '));
+  });
+
   it('distribui leads entre estruturas diferentes de forma determinística', () => {
     const messages = Array.from({ length: 12 }, (_, index) =>
       buildReactivationMessageWithVariant(

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { engineSendText } from '@/lib/flows/meta-send';
+import { waitBetweenAiMessages } from '@/lib/ai/message-parser';
 import { buildReactivationMessageWithVariant } from './cadence';
 import { waitForReactivationDelay } from './pacing';
 
@@ -77,6 +78,7 @@ export async function sendDueReactivationTouches(
       ]);
       continue;
     }
+    const sentMessageIds: string[] = [];
     try {
       if (outboundAttempts > 0) {
         await waitForReactivationDelay();
@@ -86,14 +88,19 @@ export async function sendDueReactivationTouches(
         lead,
         Number(touch.step_number)
       );
-      const result = await engineSendText({
-        accountId: String(touch.account_id),
-        userId: await ownerUserId(db, String(touch.account_id)),
-        conversationId: lead.conversation_id,
-        contactId: lead.contact_id,
-        text: message.text,
-        aiGenerated: false,
-      });
+      const userId = await ownerUserId(db, String(touch.account_id));
+      for (const [partIndex, part] of message.parts.entries()) {
+        if (partIndex > 0) await waitBetweenAiMessages();
+        const result = await engineSendText({
+          accountId: String(touch.account_id),
+          userId,
+          conversationId: lead.conversation_id,
+          contactId: lead.contact_id,
+          text: part,
+          aiGenerated: false,
+        });
+        sentMessageIds.push(result.whatsapp_message_id);
+      }
       const now = new Date().toISOString();
       await Promise.all([
         db
@@ -101,7 +108,7 @@ export async function sendDueReactivationTouches(
           .update({
             status: 'sent',
             sent_at: now,
-            message_id: result.whatsapp_message_id,
+            message_id: sentMessageIds.at(-1) ?? null,
             last_error: null,
           })
           .eq('id', touch.id),
@@ -116,7 +123,9 @@ export async function sendDueReactivationTouches(
           event_type: `touch_${touch.step_number}_sent`,
           actor_type: 'system',
           payload: {
-            message_id: result.whatsapp_message_id,
+            message_id: sentMessageIds.at(-1) ?? null,
+            message_ids: sentMessageIds,
+            message_parts: message.parts.length,
             message_variant: message.variant,
           },
         }),
@@ -130,9 +139,15 @@ export async function sendDueReactivationTouches(
       await db
         .from('reactivation_touches')
         .update({
-          status: Number(touch.attempt_count) >= 3 ? 'failed' : 'scheduled',
+          status:
+            sentMessageIds.length > 0 || Number(touch.attempt_count) >= 3
+              ? 'failed'
+              : 'scheduled',
           scheduled_for: new Date(Date.now() + 15 * 60_000).toISOString(),
-          last_error: message,
+          last_error:
+            sentMessageIds.length > 0
+              ? `partial_send_no_retry:${sentMessageIds.length}:${message}`
+              : message,
         })
         .eq('id', touch.id);
     }

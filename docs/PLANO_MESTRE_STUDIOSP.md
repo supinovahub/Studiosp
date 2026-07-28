@@ -1671,6 +1671,10 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   reprocessamentos, além do detalhe por lead e ID retornado pelo provedor;
 - tentativas consecutivas de envio da reativação usam um intervalo aleatório
   entre 30 e 50 segundos, sem alterar os demais fluxos de mensageria;
+- a abordagem D0 é enviada em quatro blocos semânticos independentes:
+  saudação, contexto do atendimento anterior, dado conhecido e pergunta de
+  confirmação; os blocos possuem um intervalo curto e não são repetidos em
+  caso de falha parcial;
 - toda conversa e mensagem originada pela reativação deve ser vinculada à
   conexão de WhatsApp ativa para permanecer visível no Inbox;
 - dados importados podem substituir nomes vazios ou nomes-placeholder iguais
