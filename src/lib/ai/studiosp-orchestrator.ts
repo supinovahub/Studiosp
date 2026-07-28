@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   appointmentConfirmation,
+  appointmentReservationFailure,
   findExactRequestedSlot,
+  opportunityInvitation,
   requestedStartFromExtraction,
 } from './scheduling-intent';
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
@@ -539,6 +541,7 @@ export async function prepareStudiospTurn(args: {
   );
 
   let reservedAppointment: Row | null = null;
+  let reservationFailed = false;
   const acceptedSlotId =
     typeof extraction.accepted_slot_id === 'string'
       ? extraction.accepted_slot_id
@@ -566,11 +569,34 @@ export async function prepareStudiospTurn(args: {
         appointmentId: String(reservedAppointment.id),
         limit: 1,
       });
-    } else
+    } else {
+      reservationFailed = true;
       console.error(
         '[Studiosp/IA] reserva de horário falhou:',
         reservation.error
       );
+      await args.db.from('attention_items').upsert(
+        {
+          account_id: args.accountId,
+          opportunity_id: opportunity.id,
+          assigned_role: 'owner',
+          kind: 'schedule_exception',
+          severity: 'critical',
+          title: 'Reserva automática de reunião falhou',
+          context: {
+            conversation_id: args.conversationId,
+            requested_slot_id: slotToReserve.id,
+            sanitized_error: String(reservation.error.message ?? '').slice(
+              0,
+              300
+            ),
+          },
+          due_at: new Date().toISOString(),
+          deduplication_key: `schedule-reservation-failed:${opportunity.id}`,
+        },
+        { onConflict: 'account_id,deduplication_key' }
+      );
+    }
   }
 
   const requestedStart = requestedStartFromExtraction(
@@ -638,16 +664,6 @@ export async function prepareStudiospTurn(args: {
   )
     .filter((question) => !confirmedQuestionIds.has(question.id))
     .map((question) => question.label);
-  const latestMatch = await args.db
-    .from('property_match_runs')
-    .select('result_count')
-    .eq('account_id', args.accountId)
-    .eq('opportunity_id', opportunity.id)
-    .eq('status', 'completed')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
   const grounding = [
     reactivationSession
       ? `Este turno continua uma reativação de base. Não reinicie a apresentação nem repita perguntas já respondidas. Use os dados conhecidos apenas como contexto a confirmar; se o lead acabou de confirmar um dado, trate-o como confirmado e avance para a próxima lacuna. Contexto conhecido: ${JSON.stringify(reactivationSession.known_context ?? {}).slice(0, 1200)}.`
@@ -662,9 +678,7 @@ export async function prepareStudiospTurn(args: {
     missing.length
       ? `Perguntas obrigatórias ainda sem resposta confirmada: ${missing.join('; ')}.`
       : 'Todas as perguntas obrigatórias foram respondidas.',
-    Number(latestMatch.data?.result_count ?? 0) > 0
-      ? 'Há oportunidades potencialmente compatíveis no catálogo atual. Diga apenas que encontrou algumas oportunidades que podem combinar com o perfil; nunca revele quantidade, nomes, preços ou uma unidade específica ao lead.'
-      : 'O catálogo atual não retornou uma oportunidade comprovada. Não diga que encontrou algo. Explique que a equipe pode ampliar a busca por algumas oportunidades fora da seleção atual e conduza para a call.',
+    'Independentemente do resultado do matching interno, diga ao lead que encontrou algumas oportunidades de acordo com o perfil dele. Nunca revele quantidade, nomes, preços ou uma unidade específica antes da conversa com o corretor.',
     reservableSlots.length
       ? `Horários garantidos que podem ser sugeridos: ${reservableSlots.map(slotLabel).join(' | ')}. Sugira um horário por vez. Nunca revele o ID.`
       : 'Não há horário garantido disponível agora. Não invente, não anote e não confirme horário. Informe apenas que não foi possível reservar e abra uma pendência humana.',
@@ -690,7 +704,11 @@ export async function prepareStudiospTurn(args: {
     reservedAppointment,
     outboundOverride: reservedAppointment
       ? appointmentConfirmation(reservedAppointment)
-      : null,
+      : reservationFailed
+        ? appointmentReservationFailure()
+        : missing.length === 0 && reservableSlots[0]
+          ? opportunityInvitation(reservableSlots[0])
+          : null,
   };
 }
 

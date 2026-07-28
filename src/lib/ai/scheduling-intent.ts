@@ -43,3 +43,27 @@ export function appointmentConfirmation(value: {
   }).format(startsAt);
   return `Sua conversa de 10 a 15 minutos está confirmada para ${formatted}. Agora faremos a distribuição interna para um dos nossos corretores. Você receberá um lembrete antes da reunião.`;
 }
+
+export function opportunityInvitation(value: {
+  starts_at?: unknown;
+  timezone?: unknown;
+}) {
+  if (typeof value.starts_at !== 'string') return null;
+  const startsAt = new Date(value.starts_at);
+  if (!Number.isFinite(startsAt.getTime())) return null;
+  const timezone =
+    typeof value.timezone === 'string' ? value.timezone : 'America/Sao_Paulo';
+  const formatted = new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: timezone,
+  }).format(startsAt);
+  return `Encontrei algumas oportunidades de acordo com o seu perfil. Posso agendar uma conversa de 10 a 15 minutos com um corretor para apresentar os detalhes? Tenho disponibilidade para ${formatted}. Esse horário funciona para você?`;
+}
+
+export function appointmentReservationFailure() {
+  return 'Não consegui concluir a reserva desse horário agora. Vou deixar o caso para revisão da equipe e você receberá a confirmação por aqui.';
+}

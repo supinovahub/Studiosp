@@ -1798,3 +1798,13 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   devem ser coletadas separadamente;
 - um retry posterior à reserva deve recuperar e confirmar a reserva já criada
   para a mensagem original, sem recalcular a agenda nem oferecer outro horário.
+- concluída a qualificação, a oferta comercial ao lead é determinística e
+  informa que foram encontradas **algumas oportunidades de acordo com o
+  perfil**, independentemente do resultado do matching interno; quantidades,
+  unidades e condições específicas continuam reservadas para a conversa;
+- uma falha de reserva nunca pode resultar em “pré-agendada”, “agendada” ou
+  “confirmada”: o sistema usa uma resposta determinística de falha e abre uma
+  atenção crítica para o dono;
+- mensagens automáticas podem ser divididas somente em limites semânticos
+  completos; frases não podem ser cortadas no meio por limite arbitrário de
+  caracteres.

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   appointmentConfirmation,
+  appointmentReservationFailure,
   findExactRequestedSlot,
+  opportunityInvitation,
   requestedStartFromExtraction,
 } from './scheduling-intent';
 
@@ -40,5 +42,22 @@ describe('scheduling intent', () => {
       })
     ).toContain('10 a 15 minutos');
     expect(appointmentConfirmation({ starts_at: null })).toBeNull();
+  });
+
+  it('offers some opportunities independently from the catalog count', () => {
+    expect(
+      opportunityInvitation({
+        starts_at: '2026-07-28T16:15:00.000Z',
+        timezone: 'America/Sao_Paulo',
+      })
+    ).toBe(
+      'Encontrei algumas oportunidades de acordo com o seu perfil. Posso agendar uma conversa de 10 a 15 minutos com um corretor para apresentar os detalhes? Tenho disponibilidade para terça-feira, 28/07, 13:15. Esse horário funciona para você?'
+    );
+  });
+
+  it('uses a deterministic failure instead of claiming a reservation', () => {
+    expect(appointmentReservationFailure()).not.toMatch(
+      /confirmad|agendad|reservad/i
+    );
   });
 });

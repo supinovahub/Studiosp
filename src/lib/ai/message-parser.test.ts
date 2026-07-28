@@ -31,8 +31,14 @@ describe('splitAiMessage', () => {
       ).join(' '),
     )
     expect(parts.length).toBeLessThanOrEqual(8)
-    expect(parts.every((part) => part.length <= 180)).toBe(true)
     expect(parts.at(-1)).toContain('número 30.')
+  })
+
+  it('never cuts a long sentence in the middle', () => {
+    const sentence =
+      'Considerando o seu perfil, encontramos algumas oportunidades que podem fazer sentido e gostaríamos de apresentar os detalhes em uma conversa rápida de 10 a 15 minutos com um dos nossos corretores para que você possa avaliar as possibilidades com calma.'
+
+    expect(splitAiMessage(sentence)).toEqual([sentence])
   })
 })
 

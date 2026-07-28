@@ -47,27 +47,9 @@ function splitParagraph(paragraph: string): string[] {
   )
 }
 
-function splitLongPart(value: string): string[] {
-  if (value.length <= TARGET_PART_LENGTH) return [value]
-  const words = value.split(/\s+/)
-  const chunks: string[] = []
-  let current = ''
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word
-    if (current && candidate.length > TARGET_PART_LENGTH) {
-      chunks.push(current)
-      current = word
-    } else {
-      current = candidate
-    }
-  }
-  if (current) chunks.push(current)
-  return chunks
-}
-
 function groupShortParts(parts: string[]): string[] {
   const grouped: string[] = []
-  for (const part of parts.flatMap(splitLongPart)) {
+  for (const part of parts) {
     const previous = grouped.at(-1)
     if (
       previous &&
@@ -83,8 +65,8 @@ function groupShortParts(parts: string[]): string[] {
 
 /**
  * Turns an AI answer into short WhatsApp-sized bubbles. Sentence boundaries,
- * paragraph breaks and semicolons become separate messages. Intl.Segmenter
- * keeps decimals, currency values, URLs and most abbreviations intact.
+ * paragraph breaks and semicolons become safe boundaries. A long sentence is
+ * deliberately kept whole instead of being cut at an arbitrary word.
  */
 export function splitAiMessage(text: string): string[] {
   const normalized = text.replace(/\r\n?/g, '\n').trim()
