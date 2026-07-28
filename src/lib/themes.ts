@@ -8,7 +8,7 @@
  *
  * Adding a new theme is a two-step change:
  *   1. Append the new `html[data-theme="<id>"]` block in globals.css
- *      with every token from an existing theme (use violet as the
+ *      with every token from an existing theme (use the default as the
  *      shape reference).
  *   2. Add an entry below. The order here drives the picker grid.
  */
@@ -70,9 +70,9 @@ export interface ThemeMeta {
 export const THEMES: ReadonlyArray<ThemeMeta> = [
   {
     id: 'violet',
-    name: 'Violeta',
-    tagline: 'O padrão: confiante e levemente descontraído.',
-    swatch: 'oklch(0.526 0.247 293)',
+    name: 'Ébano',
+    tagline: 'Preto sofisticado com uma base de neutros terrosos.',
+    swatch: 'oklch(0.205 0.018 55)',
   },
   {
     id: 'emerald',

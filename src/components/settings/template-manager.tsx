@@ -64,7 +64,7 @@ const HEADER_FORMATS: HeaderFormat[] = [
 ];
 
 const categoryColors: Record<string, string> = {
-  Marketing: 'bg-purple-600/20 text-purple-400 border-purple-600/30',
+  Marketing: 'border-amber-700/30 bg-amber-800/15 text-amber-700 dark:text-amber-300',
   Utility: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
   Authentication: 'bg-amber-600/20 text-amber-400 border-amber-600/30',
 };
