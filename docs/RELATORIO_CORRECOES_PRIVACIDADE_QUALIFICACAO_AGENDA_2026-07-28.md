@@ -48,7 +48,12 @@ Banco alterado: Supabase Staging `vgmmfzdifjhpqaopxfbj`
   - conversa aberta: contato, conversa, gestão e oportunidade acessíveis;
   - conversa fechada: os quatro acessos retornaram `false`.
 - Testes automatizados direcionados: 4 aprovados.
-- TypeScript: aprovado.
+- Regressão completa: 98 arquivos e 780 testes aprovados.
+- TypeScript e build de produção: aprovados.
+- Lint: 0 erros e 37 avisos preexistentes.
+- Preview publicado com sucesso. A homologação visual autenticada ficou
+  pendente porque a credencial de corretor disponível não existe no Supabase
+  Staging.
 
 ## Estado
 
