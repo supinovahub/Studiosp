@@ -383,6 +383,20 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      if (
+        !body.id &&
+        (!text(body.typology) ||
+          !numberOrNull(body.areaMin) ||
+          numberOrNull(body.priceFrom) === null)
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'Informe tipologia, metragem e preço da primeira unidade.',
+          },
+          { status: 400 }
+        );
+      }
       const values = {
         account_id: accountId,
         developer_id: developerId,
@@ -420,7 +434,52 @@ export async function POST(request: NextRequest) {
             .select()
             .single();
       actionError(result.error);
-      return NextResponse.json({ development: result.data });
+      if (!result.data?.id)
+        throw new Error('Falha ao salvar o empreendimento.');
+
+      let initialOffer = null;
+      if (!body.id && body.areaMin) {
+        const typology = text(body.typology);
+        const unitCode = text(body.unitCode);
+        const offerResult = await supabase
+          .from('development_offers')
+          .insert({
+            account_id: accountId,
+            development_id: result.data.id,
+            label:
+              [typology, unitCode ? `unidade ${unitCode}` : '']
+                .filter(Boolean)
+                .join(' · ') || `Opção inicial · ${name}`,
+            typology: typology || null,
+            unit_code: unitCode || null,
+            area_min_sqm: numberOrNull(body.areaMin),
+            area_max_sqm: numberOrNull(body.areaMax),
+            parking_spaces: numberOrNull(body.parkingSpaces),
+            original_price: numberOrNull(body.originalPrice),
+            price_from: numberOrNull(body.priceFrom),
+            price_per_sqm: numberOrNull(body.pricePerSqm),
+            margin_percent: numberOrNull(body.marginPercent),
+            property_timing: text(body.propertyTiming, 'off_plan'),
+            created_by: profileId,
+          })
+          .select()
+          .single();
+        if (offerResult.error) {
+          await supabase
+            .from('developments')
+            .delete()
+            .eq('account_id', accountId)
+            .eq('id', result.data.id)
+            .eq('status', 'draft');
+          actionError(offerResult.error);
+        }
+        initialOffer = offerResult.data;
+      }
+
+      return NextResponse.json({
+        development: result.data,
+        offer: initialOffer,
+      });
     }
 
     if (action === 'save_offer') {

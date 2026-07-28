@@ -95,6 +95,15 @@ export function DevelopmentsPage() {
         highlights: form.get('highlights'),
         knowledgeNotes: form.get('knowledgeNotes'),
         internalNotes: form.get('internalNotes'),
+        typology: form.get('typology'),
+        unitCode: form.get('unitCode'),
+        areaMin: form.get('areaMin'),
+        areaMax: form.get('areaMax'),
+        parkingSpaces: form.get('parkingSpaces'),
+        originalPrice: form.get('originalPrice'),
+        priceFrom: form.get('priceFrom'),
+        pricePerSqm: form.get('pricePerSqm'),
+        marginPercent: form.get('marginPercent'),
       },
       editing
         ? 'Empreendimento atualizado.'
@@ -247,6 +256,84 @@ export function DevelopmentsPage() {
                 defaultValue={editing?.expected_delivery_date ?? ''}
               />
             </Field>
+            {!editing ? (
+              <>
+                <div className="border-border/70 bg-muted/25 rounded-xl border p-4 md:col-span-2">
+                  <h4 className="text-foreground text-sm font-semibold">
+                    Primeira unidade ou tipologia
+                  </h4>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Preencha conforme uma linha do tabelão. Outras unidades
+                    poderão ser adicionadas depois ao mesmo empreendimento.
+                  </p>
+                </div>
+                <Field label="Tipologia">
+                  <Input
+                    name="typology"
+                    required
+                    placeholder="Studio, 1 dormitório, 2 suítes..."
+                  />
+                </Field>
+                <Field label="Unidade">
+                  <Input name="unitCode" placeholder="Ex.: 22B" />
+                </Field>
+                <Field label="Metragem (m²)">
+                  <Input
+                    name="areaMin"
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    required
+                  />
+                </Field>
+                <Field label="Metragem máxima (opcional)">
+                  <Input name="areaMax" type="number" min="1" step="0.01" />
+                </Field>
+                <Field label="Vagas">
+                  <Input
+                    name="parkingSpaces"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                  />
+                </Field>
+                <Field label="Preço de (tabela)">
+                  <Input
+                    name="originalPrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                  />
+                </Field>
+                <Field label="Preço para (oferta)">
+                  <Input
+                    name="priceFrom"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </Field>
+                <Field label="Preço por m²">
+                  <Input
+                    name="pricePerSqm"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                  />
+                </Field>
+                <Field label="Margem comercial (%)">
+                  <Input
+                    name="marginPercent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.001"
+                  />
+                </Field>
+              </>
+            ) : null}
             <Field label="Descrição para o corretor" wide>
               <Textarea
                 name="description"
