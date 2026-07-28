@@ -393,6 +393,9 @@ Políticas comerciais e operacionais serão configuráveis pelo dono. Regras de 
   qualificação, sem obrigar entrada ou parcela quando esses dados não existem;
 - a reserva confirma a reunião para o lead e cria, na mesma transação, a
   primeira oferta interna para um corretor;
+- a primeira oferta é enviada ao WhatsApp do corretor imediatamente após a
+  reserva; o processador agendado recupera notificações pendentes como
+  contingência;
 - o aceite do corretor define o responsável, mas não condiciona a confirmação
   já enviada ao lead;
 - a mensagem de confirmação é determinística e derivada do `appointment`

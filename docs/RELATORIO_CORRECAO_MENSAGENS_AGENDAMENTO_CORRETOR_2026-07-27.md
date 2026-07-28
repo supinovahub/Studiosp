@@ -21,7 +21,10 @@
 - se um bloco posterior falhar, a conversa entra em revisão humana sem retry
   automático, evitando repetir blocos já entregues;
 - a reserva e a oferta ao corretor continuam condicionadas a fatos persistidos
-  e a um horário garantido disponível.
+  e a um horário garantido disponível;
+- após a reserva, a primeira oferta é notificada imediatamente ao corretor; o
+  processador agendado permanece como contingência para ofertas ainda não
+  notificadas.
 
 ## Testes
 

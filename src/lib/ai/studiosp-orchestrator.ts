@@ -4,6 +4,7 @@ import {
   findExactRequestedSlot,
   requestedStartFromExtraction,
 } from './scheduling-intent';
+import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
 import { generateReply } from './generate';
 import type { AiConfig, ChatMessage } from './types';
 import { loadAiConfig } from './config';
@@ -517,7 +518,13 @@ export async function prepareStudiospTurn(args: {
         ? `slot:${args.triggerMessageId}`
         : crypto.randomUUID(),
     });
-    if (!reservation.error) reservedAppointment = reservation.data as Row;
+    if (!reservation.error) {
+      reservedAppointment = reservation.data as Row;
+      await notifyPendingBrokers(args.db, {
+        appointmentId: String(reservedAppointment.id),
+        limit: 1,
+      });
+    }
     else
       console.error(
         '[Studiosp/IA] reserva de horário falhou:',
