@@ -4,6 +4,11 @@ alter table public.opportunities
   add column if not exists call_brief jsonb,
   add column if not exists call_brief_updated_at timestamptz;
 
+update public.scheduling_policies
+set buffer_minutes = greatest(buffer_minutes, 10),
+    updated_at = now()
+where buffer_minutes < 10;
+
 alter table public.scheduling_policies
   drop constraint if exists scheduling_policies_buffer_minutes_check;
 alter table public.scheduling_policies
