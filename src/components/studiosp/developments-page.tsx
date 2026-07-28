@@ -85,7 +85,9 @@ export function DevelopmentsPage() {
         id: editing?.id,
         name: form.get('name'),
         developerId: form.get('developerId'),
+        developerName: form.get('developerName'),
         neighborhoodId: form.get('neighborhoodId'),
+        neighborhoodName: form.get('neighborhoodName'),
         internalCode: form.get('internalCode'),
         description: form.get('description'),
         propertyTiming: form.get('propertyTiming'),
@@ -192,7 +194,6 @@ export function DevelopmentsPage() {
             <Field label="Incorporadora">
               <select
                 name="developerId"
-                required
                 defaultValue={editing?.developer_id ?? ''}
                 className="border-input bg-background text-foreground h-9 w-full rounded-lg border px-2 text-sm"
               >
@@ -203,11 +204,15 @@ export function DevelopmentsPage() {
                   </option>
                 ))}
               </select>
+              <Input
+                name="developerName"
+                className="mt-2"
+                placeholder="Ou digite uma nova incorporadora"
+              />
             </Field>
             <Field label="Bairro">
               <select
                 name="neighborhoodId"
-                required
                 defaultValue={editing?.neighborhood_id ?? ''}
                 className="border-input bg-background text-foreground h-9 w-full rounded-lg border px-2 text-sm"
               >
@@ -218,6 +223,11 @@ export function DevelopmentsPage() {
                   </option>
                 ))}
               </select>
+              <Input
+                name="neighborhoodName"
+                className="mt-2"
+                placeholder="Ou digite um novo bairro"
+              />
             </Field>
             <Field label="Situação">
               <select
@@ -673,6 +683,15 @@ function CatalogFoundation({
             <Field label="Nome da opção">
               <Input name="label" required placeholder="Studio 30 m²" />
             </Field>
+            <Field label="Tipologia">
+              <Input
+                name="typology"
+                placeholder="Studio, 1 dormitório, 2 suítes..."
+              />
+            </Field>
+            <Field label="Unidade">
+              <Input name="unitCode" placeholder="Ex.: 22B" />
+            </Field>
             <Field label="Metragem mínima">
               <Input
                 name="areaMin"
@@ -685,8 +704,26 @@ function CatalogFoundation({
             <Field label="Metragem máxima">
               <Input name="areaMax" type="number" min="1" step="0.01" />
             </Field>
+            <Field label="Vagas">
+              <Input name="parkingSpaces" type="number" min="0" step="1" />
+            </Field>
+            <Field label="Preço de (tabela)">
+              <Input name="originalPrice" type="number" min="0" step="0.01" />
+            </Field>
             <Field label="Preço a partir de">
               <Input name="priceFrom" type="number" min="0" />
+            </Field>
+            <Field label="Preço por m²">
+              <Input name="pricePerSqm" type="number" min="0" step="0.01" />
+            </Field>
+            <Field label="Margem comercial (%)">
+              <Input
+                name="marginPercent"
+                type="number"
+                min="0"
+                max="100"
+                step="0.001"
+              />
             </Field>
             <Field label="Entrada a partir de">
               <Input name="entryFrom" type="number" min="0" />

@@ -316,7 +316,68 @@ export async function POST(request: NextRequest) {
 
     if (action === 'save_development') {
       const name = text(body.name);
-      if (!name || !body.developerId || !body.neighborhoodId) {
+      let developerId = text(body.developerId);
+      let neighborhoodId = text(body.neighborhoodId);
+      const developerName = text(body.developerName);
+      const neighborhoodName = text(body.neighborhoodName);
+
+      if (!developerId && developerName) {
+        const normalized = normalizedName(developerName);
+        const existing = await supabase
+          .from('developers')
+          .select('id')
+          .eq('account_id', accountId)
+          .eq('normalized_name', normalized)
+          .maybeSingle();
+        actionError(existing.error);
+        if (existing.data?.id) developerId = existing.data.id;
+        else {
+          const created = await supabase
+            .from('developers')
+            .insert({
+              account_id: accountId,
+              name: developerName,
+              normalized_name: normalized,
+              created_by: profileId,
+            })
+            .select('id')
+            .single();
+          actionError(created.error);
+          if (!created.data?.id) throw new Error('Falha ao criar incorporadora.');
+          developerId = created.data.id;
+        }
+      }
+
+      if (!neighborhoodId && neighborhoodName) {
+        const normalized = normalizedName(neighborhoodName);
+        const existing = await supabase
+          .from('neighborhoods')
+          .select('id')
+          .eq('account_id', accountId)
+          .eq('normalized_name', normalized)
+          .maybeSingle();
+        actionError(existing.error);
+        if (existing.data?.id) neighborhoodId = existing.data.id;
+        else {
+          const created = await supabase
+            .from('neighborhoods')
+            .insert({
+              account_id: accountId,
+              name: neighborhoodName,
+              normalized_name: normalized,
+              city: text(body.city, 'São Paulo'),
+              state_code: text(body.stateCode, 'SP').toUpperCase(),
+              created_by: profileId,
+            })
+            .select('id')
+            .single();
+          actionError(created.error);
+          if (!created.data?.id) throw new Error('Falha ao criar bairro.');
+          neighborhoodId = created.data.id;
+        }
+      }
+
+      if (!name || !developerId || !neighborhoodId) {
         return NextResponse.json(
           { error: 'Informe nome, incorporadora e bairro.' },
           { status: 400 }
@@ -324,8 +385,8 @@ export async function POST(request: NextRequest) {
       }
       const values = {
         account_id: accountId,
-        developer_id: text(body.developerId),
-        neighborhood_id: text(body.neighborhoodId),
+        developer_id: developerId,
+        neighborhood_id: neighborhoodId,
         name,
         normalized_name: normalizedName(name),
         internal_code: text(body.internalCode) || null,
@@ -383,6 +444,12 @@ export async function POST(request: NextRequest) {
         entry_to: numberOrNull(body.entryTo),
         installment_from: numberOrNull(body.installmentFrom),
         installment_to: numberOrNull(body.installmentTo),
+        unit_code: text(body.unitCode) || null,
+        typology: text(body.typology) || null,
+        parking_spaces: numberOrNull(body.parkingSpaces),
+        original_price: numberOrNull(body.originalPrice),
+        price_per_sqm: numberOrNull(body.pricePerSqm),
+        margin_percent: numberOrNull(body.marginPercent),
         terms_summary: text(body.termsSummary) || null,
         property_timing: text(body.propertyTiming, 'off_plan'),
         valid_until: text(body.validUntil) || null,
