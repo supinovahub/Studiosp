@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assessPromptInjection } from './response-policy';
+import { upsertOwnerAttention } from '@/lib/studiosp/attention';
 
 type Row = Record<string, unknown>;
 
@@ -35,34 +36,58 @@ export async function loadTrustedGuidance(args: {
   accountId: string;
   conversationId: string;
 }) {
-  const [conversationRules, knowledgeRules] = await Promise.all([
-    args.db
-      .from('ai_guidance_rules')
-      .select('scope, content, created_at')
-      .eq('account_id', args.accountId)
-      .eq('is_active', true)
-      .eq('scope', 'conversation')
-      .eq('conversation_id', args.conversationId)
-      .order('created_at', { ascending: false })
-      .limit(10),
-    args.db
-      .from('ai_guidance_rules')
-      .select('scope, content, created_at')
-      .eq('account_id', args.accountId)
-      .eq('is_active', true)
-      .eq('scope', 'knowledge')
-      .is('conversation_id', null)
-      .order('created_at', { ascending: false })
-      .limit(10),
-  ]);
-  if (conversationRules.error || knowledgeRules.error) {
+  const [conversationRules, knowledgeRules, pendingTurnGuidance] =
+    await Promise.all([
+      args.db
+        .from('ai_guidance_rules')
+        .select('scope, content, created_at')
+        .eq('account_id', args.accountId)
+        .eq('is_active', true)
+        .eq('scope', 'conversation')
+        .eq('conversation_id', args.conversationId)
+        .order('created_at', { ascending: false })
+        .limit(10),
+      args.db
+        .from('ai_guidance_rules')
+        .select('scope, content, created_at')
+        .eq('account_id', args.accountId)
+        .eq('is_active', true)
+        .eq('scope', 'knowledge')
+        .is('conversation_id', null)
+        .order('created_at', { ascending: false })
+        .limit(10),
+      args.db
+        .from('ai_guidance_requests')
+        .select('owner_guidance, created_at')
+        .eq('account_id', args.accountId)
+        .eq('conversation_id', args.conversationId)
+        .eq('status', 'resolving')
+        .not('owner_guidance', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1),
+    ]);
+  if (
+    conversationRules.error ||
+    knowledgeRules.error ||
+    pendingTurnGuidance.error
+  ) {
     console.error(
       '[Studiosp/IA] orientações não carregadas:',
-      conversationRules.error ?? knowledgeRules.error
+      conversationRules.error ??
+        knowledgeRules.error ??
+        pendingTurnGuidance.error
     );
     return [];
   }
-  return [...(conversationRules.data ?? []), ...(knowledgeRules.data ?? [])]
+  return [
+    ...(conversationRules.data ?? []),
+    ...(knowledgeRules.data ?? []),
+    ...(pendingTurnGuidance.data ?? []).map((item) => ({
+      scope: 'reply',
+      content: item.owner_guidance,
+      created_at: item.created_at,
+    })),
+  ]
     .sort(
       (left, right) =>
         new Date(left.created_at).getTime() -
@@ -132,25 +157,21 @@ export async function openGuidanceRequest(args: {
       role: 'system',
       content: args.summary.slice(0, 5000),
     }),
-    args.db.from('attention_items').upsert(
-      {
-        account_id: args.accountId,
-        opportunity_id: args.opportunityId ?? null,
-        assigned_role: 'owner',
-        kind: 'ai_needs_guidance',
-        severity: 'warning',
-        title: 'Pedro precisa de contexto para responder',
-        context: {
-          conversation_id: args.conversationId,
-          guidance_request_id: inserted.data.id,
-          trigger_message_id: args.triggerMessageId ?? null,
-          lead_message_excerpt: args.leadMessage.slice(0, 1200),
-        },
-        due_at: new Date().toISOString(),
-        deduplication_key: `ai-guidance:${args.conversationId}`,
+    upsertOwnerAttention(args.db, {
+      accountId: args.accountId,
+      opportunityId: args.opportunityId ?? null,
+      kind: 'ai_needs_guidance',
+      severity: 'warning',
+      title: 'Pedro precisa de contexto para responder',
+      context: {
+        conversation_id: args.conversationId,
+        guidance_request_id: inserted.data.id,
+        trigger_message_id: args.triggerMessageId ?? null,
+        lead_message_excerpt: args.leadMessage.slice(0, 1200),
       },
-      { onConflict: 'account_id,deduplication_key' }
-    ),
+      dueAt: new Date().toISOString(),
+      deduplicationKey: `ai-guidance:${args.conversationId}`,
+    }),
   ]);
   return inserted.data;
 }
@@ -164,30 +185,93 @@ export async function openOperationalFailure(args: {
   reasonCode: string;
   summary: string;
   retryable: boolean;
+  jobId?: string | null;
+  outboxId?: string | null;
+  deliveryState?:
+    'not_started' | 'safe_to_retry' | 'partially_sent' | 'ambiguous' | 'sent';
+  blockConversation?: boolean;
   context?: Row;
 }) {
-  const { error } = await args.db.from('attention_items').upsert(
-    {
-      account_id: args.accountId,
-      opportunity_id: args.opportunityId ?? null,
-      assigned_role: 'owner',
-      kind: 'ai_operational_failure',
-      severity: args.retryable ? 'warning' : 'critical',
-      title: 'Falha operacional no atendimento da IA',
-      context: {
-        conversation_id: args.conversationId,
-        trigger_message_id: args.triggerMessageId ?? null,
-        reason_code: args.reasonCode,
-        summary: args.summary.slice(0, 1000),
-        retryable: args.retryable,
-        ...(args.context ?? {}),
-      },
-      due_at: new Date().toISOString(),
-      deduplication_key: `ai-operational:${args.conversationId}:${args.reasonCode}`,
-    },
-    { onConflict: 'account_id,deduplication_key' }
-  );
+  const blockConversation = args.blockConversation ?? !args.retryable;
+  const { data, error } = await args.db.rpc('studiosp_open_ai_incident', {
+    p_account_id: args.accountId,
+    p_conversation_id: args.conversationId,
+    p_reason_code: args.reasonCode,
+    p_summary: args.summary.slice(0, 2000),
+    p_retryable: args.retryable,
+    p_delivery_state:
+      args.deliveryState ?? (args.retryable ? 'safe_to_retry' : 'not_started'),
+    p_opportunity_id: args.opportunityId ?? null,
+    p_trigger_message_id: args.triggerMessageId ?? null,
+    p_job_id: args.jobId ?? null,
+    p_outbox_id: args.outboxId ?? null,
+    p_technical_context: args.context ?? {},
+    p_block_conversation: blockConversation,
+  });
   if (error) {
     console.error('[Studiosp/IA] alerta operacional não criado:', error);
   }
+  return data;
+}
+
+export async function loadResolvingGuidance(args: {
+  db: SupabaseClient;
+  accountId: string;
+  conversationId: string;
+}) {
+  const { data, error } = await args.db
+    .from('ai_guidance_requests')
+    .select('id, created_at, owner_guidance')
+    .eq('account_id', args.accountId)
+    .eq('conversation_id', args.conversationId)
+    .eq('status', 'resolving')
+    .not('owner_guidance', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function resolveGuidanceAfterReply(args: {
+  db: SupabaseClient;
+  accountId: string;
+  conversationId: string;
+  requestId: string;
+  responseMessageId?: string | null;
+  responseText: string;
+}) {
+  const resolvedAt = new Date().toISOString();
+  await Promise.all([
+    args.db
+      .from('ai_guidance_requests')
+      .update({
+        status: 'resolved',
+        response_message_id: args.responseMessageId ?? null,
+        resumed_at: resolvedAt,
+        resolved_at: resolvedAt,
+      })
+      .eq('account_id', args.accountId)
+      .eq('id', args.requestId)
+      .eq('status', 'resolving'),
+    args.db.from('ai_guidance_messages').insert({
+      account_id: args.accountId,
+      request_id: args.requestId,
+      role: 'assistant',
+      content: args.responseText.slice(0, 5000),
+    }),
+    args.db
+      .from('attention_items')
+      .update({
+        status: 'resolved',
+        resolved_at: resolvedAt,
+        resolution: {
+          outcome: 'owner_guidance_applied',
+          guidance_request_id: args.requestId,
+        },
+      })
+      .eq('account_id', args.accountId)
+      .eq('deduplication_key', `ai-guidance:${args.conversationId}`)
+      .in('status', ['open', 'snoozed']),
+  ]);
 }

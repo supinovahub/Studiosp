@@ -6,7 +6,8 @@ import {
   RATE_LIMITS,
 } from '@/lib/rate-limit';
 import { supabaseAdmin } from '@/lib/ai/admin-client';
-import { processAiReplyQueue } from '@/lib/ai/reply-queue';
+import { triggerAiReplyProcessor } from '@/lib/ai/processor-trigger';
+import { hasMinRole } from '@/lib/auth/roles';
 
 type Params = { params: Promise<{ conversationId: string }> };
 
@@ -32,7 +33,7 @@ type Params = { params: Promise<{ conversationId: string }> };
  */
 export async function POST(request: Request, { params }: Params) {
   try {
-    const { supabase, accountId, userId } = await requireRole('agent');
+    const { supabase, accountId, userId, role } = await requireRole('agent');
 
     // Reuse the send bucket: this is a cheap per-user inbox action and
     // toggling it in a tight loop has no legitimate use.
@@ -45,7 +46,9 @@ export async function POST(request: Request, { params }: Params) {
       const admin = supabaseAdmin();
       const { data: conversation } = await admin
         .from('conversations')
-        .select('id, account_id, contact_id, user_id, contacts(phone)')
+        .select(
+          'id, account_id, contact_id, user_id, ai_context_version, ai_control_mode, contacts(phone)'
+        )
         .eq('id', conversationId)
         .eq('account_id', accountId)
         .maybeSingle();
@@ -53,6 +56,15 @@ export async function POST(request: Request, { params }: Params) {
         return NextResponse.json(
           { error: 'Conversa não encontrada' },
           { status: 404 }
+        );
+      }
+      if (
+        conversation.ai_control_mode === 'paused_failure' &&
+        !hasMinRole(role, 'admin')
+      ) {
+        return NextResponse.json(
+          { error: 'Somente o dono pode liberar uma falha operacional.' },
+          { status: 403 }
         );
       }
       const { data: trigger } = await admin
@@ -81,10 +93,16 @@ export async function POST(request: Request, { params }: Params) {
         .maybeSingle();
       if (existing) {
         await admin
+          .from('ai_response_outbox')
+          .update({ status: 'cancelled', lease_expires_at: null })
+          .eq('job_id', existing.id)
+          .in('status', ['pending', 'sending', 'failed', 'ambiguous']);
+        await admin
           .from('ai_reply_jobs')
           .update({
             status: 'queued',
             attempt_count: 0,
+            context_version: Number(conversation.ai_context_version),
             available_at: new Date().toISOString(),
             claimed_at: null,
             lease_expires_at: null,
@@ -128,8 +146,8 @@ export async function POST(request: Request, { params }: Params) {
         })
         .eq('id', conversationId)
         .eq('account_id', accountId);
-      const processed = await processAiReplyQueue(admin, 5);
-      return NextResponse.json({ success: true, queued: true, processed });
+      await triggerAiReplyProcessor(0);
+      return NextResponse.json({ success: true, queued: true });
     }
     if (!body || typeof body.paused !== 'boolean') {
       return NextResponse.json(
@@ -158,6 +176,16 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json(
         { error: 'Conversa não encontrada' },
         { status: 404 }
+      );
+    }
+    if (
+      !paused &&
+      conv.ai_control_mode === 'paused_failure' &&
+      !hasMinRole(role, 'admin')
+    ) {
+      return NextResponse.json(
+        { error: 'Somente o dono pode liberar uma falha operacional.' },
+        { status: 403 }
       );
     }
 

@@ -32,10 +32,11 @@ import { PageHeader } from './page-header';
 import { EmptyState, ErrorState, LoadingState } from './operational-state';
 import { StatusBadge } from './status-badge';
 
-type AttentionFilter = 'all' | 'critical' | 'overdue';
+type AttentionFilter = 'all' | 'ai' | 'critical' | 'overdue';
 
 const filterLabels: Record<AttentionFilter, string> = {
   all: 'Todas',
+  ai: 'Pedro',
   critical: 'Críticas',
   overdue: 'Vencidas',
 };
@@ -61,7 +62,20 @@ export function AttentionPage() {
   const criticalCount = items.filter(
     (item) => item.severity === 'critical'
   ).length;
+  const aiDecisionCount = items.filter((item) =>
+    [
+      'ai_needs_guidance',
+      'ai_operational_failure',
+      'ai_partial_reply',
+    ].includes(item.kind)
+  ).length;
   const visibleItems = items.filter((item) => {
+    if (filter === 'ai')
+      return [
+        'ai_needs_guidance',
+        'ai_operational_failure',
+        'ai_partial_reply',
+      ].includes(item.kind);
     if (filter === 'critical') return item.severity === 'critical';
     if (filter === 'overdue')
       return Boolean(
@@ -94,7 +108,14 @@ export function AttentionPage() {
 
   async function provideGuidance() {
     const requestId = String(guidanceItem?.guidanceRequest?.id ?? '');
-    if (!guidanceItem || !requestId || guidance.trim().length < 3) {
+    const incidentId = String(
+      guidanceItem?.incident?.id ?? guidanceItem?.context?.incident_id ?? ''
+    );
+    if (
+      !guidanceItem ||
+      (!requestId && !incidentId) ||
+      guidance.trim().length < 3
+    ) {
       setActionError('Escreva o contexto que o Pedro precisa para responder.');
       return;
     }
@@ -103,6 +124,7 @@ export function AttentionPage() {
     try {
       await runStudiospAction('provide_ai_guidance', {
         requestId,
+        incidentId,
         guidance: guidance.trim(),
         scope: guidanceScope,
       });
@@ -127,7 +149,12 @@ export function AttentionPage() {
     setSavingId(item.id);
     setActionError(null);
     try {
-      await runStudiospAction('retry_ai_failure', { conversationId });
+      await runStudiospAction('retry_ai_failure', {
+        conversationId,
+        incidentId: String(
+          item.incident?.id ?? item.context?.incident_id ?? ''
+        ),
+      });
       await reload();
     } catch (err) {
       setActionError(
@@ -169,7 +196,7 @@ export function AttentionPage() {
 
       <section
         aria-label="Resumo das pendências"
-        className="grid gap-3 sm:grid-cols-3"
+        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
       >
         <SummaryCard
           label="Pendências abertas"
@@ -177,6 +204,17 @@ export function AttentionPage() {
           detail="Total da sua visão atual"
           icon={Sparkles}
           tone="primary"
+        />
+        <SummaryCard
+          label="Pedro precisa de decisão"
+          value={aiDecisionCount}
+          detail={
+            aiDecisionCount
+              ? 'Contexto ou decisão pendente'
+              : 'Atendimento fluindo'
+          }
+          icon={MessageSquareText}
+          tone={aiDecisionCount ? 'warning' : 'success'}
         />
         <SummaryCard
           label="Críticas"
@@ -293,11 +331,33 @@ export function AttentionPage() {
                             item.lead?.contact?.phone ??
                             'Pendência geral da operação'}
                         </p>
+                        {item.incident?.summary || item.context?.summary ? (
+                          <p className="text-foreground/80 mt-1 max-w-2xl text-xs leading-5">
+                            {String(
+                              item.incident?.summary ?? item.context?.summary
+                            )}
+                          </p>
+                        ) : null}
+                        {['ambiguous', 'partially_sent'].includes(
+                          String(
+                            item.incident?.delivery_state ??
+                              item.context?.delivery_state ??
+                              ''
+                          )
+                        ) ? (
+                          <p className="mt-1 text-xs font-medium text-red-400">
+                            O envio pode ter chegado ao lead. Confira a conversa
+                            antes de liberar outra tentativa.
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 pl-11 lg:pl-0">
-                      {item.kind === 'ai_needs_guidance' &&
-                      item.guidanceRequest ? (
+                      {[
+                        'ai_needs_guidance',
+                        'ai_operational_failure',
+                        'ai_partial_reply',
+                      ].includes(item.kind) ? (
                         <Button
                           onClick={() => {
                             setGuidanceItem(item);
@@ -306,29 +366,33 @@ export function AttentionPage() {
                           }}
                         >
                           <MessageSquareText />
-                          Orientar Pedro
+                          Orientar e retomar
                         </Button>
                       ) : null}
                       {['ai_operational_failure', 'ai_partial_reply'].includes(
                         item.kind
                       ) ? (
-                        <>
-                          <Button
-                            variant="outline"
-                            onClick={() => void retryFailure(item)}
-                            disabled={savingId === item.id}
-                          >
-                            <RefreshCw />
-                            Tentar novamente
-                          </Button>
-                          <Button
-                            onClick={() => void takeOver(item)}
-                            disabled={savingId === item.id}
-                          >
-                            <UserRoundCheck />
-                            Assumir conversa
-                          </Button>
-                        </>
+                        <Button
+                          variant="outline"
+                          onClick={() => void retryFailure(item)}
+                          disabled={savingId === item.id}
+                        >
+                          <RefreshCw />
+                          Tentar novamente
+                        </Button>
+                      ) : null}
+                      {[
+                        'ai_needs_guidance',
+                        'ai_operational_failure',
+                        'ai_partial_reply',
+                      ].includes(item.kind) ? (
+                        <Button
+                          onClick={() => void takeOver(item)}
+                          disabled={savingId === item.id}
+                        >
+                          <UserRoundCheck />
+                          Manter pausada e assumir
+                        </Button>
                       ) : null}
                       {item.context?.conversation_id ? (
                         <Button
@@ -352,7 +416,11 @@ export function AttentionPage() {
                           Abrir contexto
                         </Button>
                       ) : null}
-                      {item.kind !== 'ai_needs_guidance' ? (
+                      {![
+                        'ai_needs_guidance',
+                        'ai_operational_failure',
+                        'ai_partial_reply',
+                      ].includes(item.kind) ? (
                         <Button
                           variant={
                             [
@@ -454,8 +522,9 @@ function GuidanceDialog({
         <DialogHeader>
           <DialogTitle>Orientar o Pedro e retomar o atendimento</DialogTitle>
           <DialogDescription>
-            O lead continua sem resposta até você fornecer um contexto
-            confiável. O Pedro formulará a mensagem final no tom da conversa.
+            O Pedro continuará pausado até você fornecer uma orientação
+            confiável. Depois disso, ele formulará e enviará a resposta pelo
+            fluxo seguro.
           </DialogDescription>
         </DialogHeader>
 
@@ -507,17 +576,25 @@ function GuidanceDialog({
           <section className="space-y-4">
             <div className="border-warning/25 bg-warning-soft rounded-xl border p-3">
               <p className="text-foreground text-xs font-semibold">
-                O que está faltando
+                {item?.incident ? 'O que aconteceu' : 'O que está faltando'}
               </p>
               <p className="text-muted-foreground mt-1 text-xs leading-5">
                 {String(
                   request?.missing_context_summary ??
+                    item?.incident?.summary ??
+                    item?.context?.summary ??
                     'Contexto confiável para continuar.'
                 )}
               </p>
-              {request?.lead_message_excerpt ? (
+              {request?.lead_message_excerpt ||
+              item?.context?.lead_message_excerpt ? (
                 <p className="text-foreground mt-2 text-xs">
-                  “{String(request.lead_message_excerpt)}”
+                  “
+                  {String(
+                    request?.lead_message_excerpt ??
+                      item?.context?.lead_message_excerpt
+                  )}
+                  ”
                 </p>
               ) : null}
             </div>

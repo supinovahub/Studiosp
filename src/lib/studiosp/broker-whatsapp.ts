@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendProviderText, type ProviderConfig } from '@/lib/whatsapp/provider';
 import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
+import { upsertOwnerAttention } from './attention';
 
 // As ofertas são projeções dinâmicas das consultas administrativas.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -167,20 +168,16 @@ async function createOperationalAttention(
     .select('opportunity_id')
     .eq('id', offer.appointment_id)
     .maybeSingle();
-  await db.from('attention_items').upsert(
-    {
-      account_id: accountId,
-      opportunity_id: appointment?.opportunity_id ?? null,
-      assigned_role: 'owner',
-      kind: 'broker_whatsapp_error',
-      severity: 'critical',
-      title: 'Resposta do corretor precisa de revisão',
-      context: { offer_id: offer.id, error: error.slice(0, 300) },
-      due_at: new Date().toISOString(),
-      deduplication_key: `broker-whatsapp-error:${offer.id}`,
-    },
-    { onConflict: 'account_id,deduplication_key', ignoreDuplicates: true }
-  );
+  await upsertOwnerAttention(db, {
+    accountId,
+    opportunityId: appointment?.opportunity_id ?? null,
+    kind: 'broker_whatsapp_error',
+    severity: 'critical',
+    title: 'Resposta do corretor precisa de revisão',
+    context: { offer_id: offer.id, error: error.slice(0, 300) },
+    dueAt: new Date().toISOString(),
+    deduplicationKey: `broker-whatsapp-error:${offer.id}`,
+  });
 }
 
 function normalize(value: string | null) {

@@ -30,6 +30,7 @@ import {
 } from './semantic-context';
 import { openOperationalFailure } from './guidance';
 import { nextAllowedFollowupAt } from './followup-window';
+import { upsertOwnerAttention } from '@/lib/studiosp/attention';
 
 // O orquestrador combina respostas estruturadas da IA e linhas de várias tabelas.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -731,27 +732,23 @@ export async function prepareStudiospTurn(args: {
         '[Studiosp/IA] reserva de horário falhou:',
         reservation.error
       );
-      await args.db.from('attention_items').upsert(
-        {
-          account_id: args.accountId,
-          opportunity_id: opportunity.id,
-          assigned_role: 'owner',
-          kind: 'schedule_exception',
-          severity: 'critical',
-          title: 'Reserva automática de reunião falhou',
-          context: {
-            conversation_id: args.conversationId,
-            requested_slot_id: slotToReserve.id,
-            sanitized_error: String(reservation.error.message ?? '').slice(
-              0,
-              300
-            ),
-          },
-          due_at: new Date().toISOString(),
-          deduplication_key: `schedule-reservation-failed:${opportunity.id}`,
+      await upsertOwnerAttention(args.db, {
+        accountId: args.accountId,
+        opportunityId: opportunity.id,
+        kind: 'schedule_exception',
+        severity: 'critical',
+        title: 'Reserva automática de reunião falhou',
+        context: {
+          conversation_id: args.conversationId,
+          requested_slot_id: slotToReserve.id,
+          sanitized_error: String(reservation.error.message ?? '').slice(
+            0,
+            300
+          ),
         },
-        { onConflict: 'account_id,deduplication_key' }
-      );
+        dueAt: new Date().toISOString(),
+        deduplicationKey: `schedule-reservation-failed:${opportunity.id}`,
+      });
     }
   }
 
@@ -767,28 +764,24 @@ export async function prepareStudiospTurn(args: {
     extraction.insists_on_requested_time === true;
   if (needsOwnerScheduleReview) {
     const requestedIso = requestedStart!.toISOString();
-    await args.db.from('attention_items').upsert(
-      {
-        account_id: args.accountId,
-        opportunity_id: opportunity.id,
-        assigned_role: 'owner',
-        kind: 'schedule_exception',
-        severity: 'critical',
-        title: 'Lead pediu um encaixe fora da agenda garantida',
-        context: {
-          requested_start_at: requestedIso,
-          timezone: 'America/Sao_Paulo',
-          alternatives_offered: nearbySlots.map((slot) => ({
-            id: slot.id,
-            starts_at: slot.starts_at,
-          })),
-          conversation_id: args.conversationId,
-        },
-        due_at: new Date().toISOString(),
-        deduplication_key: `schedule-exception:${opportunity.id}`,
+    await upsertOwnerAttention(args.db, {
+      accountId: args.accountId,
+      opportunityId: opportunity.id,
+      kind: 'schedule_exception',
+      severity: 'critical',
+      title: 'Lead pediu um encaixe fora da agenda garantida',
+      context: {
+        requested_start_at: requestedIso,
+        timezone: 'America/Sao_Paulo',
+        alternatives_offered: nearbySlots.map((slot) => ({
+          id: slot.id,
+          starts_at: slot.starts_at,
+        })),
+        conversation_id: args.conversationId,
       },
-      { onConflict: 'account_id,deduplication_key', ignoreDuplicates: true }
-    );
+      dueAt: new Date().toISOString(),
+      deduplicationKey: `schedule-exception:${opportunity.id}`,
+    });
     await args.db
       .from('opportunities')
       .update({
@@ -1547,12 +1540,38 @@ export function normalizeQualificationValue(args: {
   if (value.unknown === true) return value;
 
   if (args.question.data_type === 'single_choice') {
-    const option = (args.options ?? []).find(
-      (item) => String(item.value) === String(value.value)
-    );
+    const candidate = normalize(String(value.value ?? value.label ?? ''));
+    const option = (args.options ?? []).find((item) => {
+      const aliases = [
+        item.value,
+        item.label,
+        ...(Array.isArray(item.synonyms) ? item.synonyms : []),
+      ]
+        .map((itemValue) => normalize(String(itemValue ?? '')))
+        .filter(Boolean);
+      return aliases.some(
+        (alias) =>
+          candidate === alias ||
+          (alias.length >= 5 && candidate.includes(alias))
+      );
+    });
+    const urgencyFallback =
+      !option && args.question.key === 'purchase_urgency'
+        ? urgencyOptionValue(candidate)
+        : null;
+    const canonicalOption = urgencyFallback
+      ? (args.options ?? []).find(
+          (item) => String(item.value) === urgencyFallback
+        )
+      : option;
     return option
       ? { value: String(option.value), label: String(option.label) }
-      : value;
+      : canonicalOption
+        ? {
+            value: String(canonicalOption.value),
+            label: String(canonicalOption.label),
+          }
+        : value;
   }
   if (args.question.data_type === 'money_range') {
     const min = value.min === null ? null : Number(value.min);
@@ -1581,6 +1600,21 @@ export function normalizeQualificationValue(args: {
     };
   }
   return value;
+}
+
+function urgencyOptionValue(candidate: string) {
+  const monthMatch = candidate.match(/\b(\d{1,2})\s+mes/);
+  if (monthMatch) {
+    const months = Number(monthMatch[1]);
+    if (months <= 1) return 'up_to_30_days';
+    if (months <= 3) return 'one_to_three_months';
+    if (months <= 6) return 'three_to_six_months';
+    if (months <= 12) return 'six_to_twelve_months';
+    return 'over_twelve_months';
+  }
+  const yearMatch = candidate.match(/\b(\d{1,2})\s+ano/);
+  if (yearMatch && Number(yearMatch[1]) >= 1) return 'over_twelve_months';
+  return null;
 }
 
 export function trustedAcceptedSlotId(args: {

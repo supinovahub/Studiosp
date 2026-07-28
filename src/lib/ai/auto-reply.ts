@@ -21,15 +21,25 @@ import { splitAiMessage, waitBetweenAiMessages } from './message-parser';
 import { guardPrematureMeetingOffer } from './scheduling-intent';
 import {
   loadTrustedGuidance,
+  loadResolvingGuidance,
   openGuidanceRequest,
   openOperationalFailure,
   recordPromptInjectionSignal,
+  resolveGuidanceAfterReply,
 } from './guidance';
 import {
+  delayedResumePrefix,
   enforceOutboundPolicy,
   isExplicitOptOut,
+  joinResumePrefix,
   type OutboundPolicyResult,
 } from './response-policy';
+import {
+  beginAiOutboxPart,
+  markAiOutboxAmbiguous,
+  markAiOutboxPartSent,
+  prepareAiResponseOutbox,
+} from './delivery';
 import { semanticMessageMetadata } from './semantic-context';
 import type { AiConfig, ChatMessage } from './types';
 
@@ -44,7 +54,11 @@ interface DispatchArgs {
    *  audit columns (mirrors how the flow runner passes it through). */
   configOwnerUserId: string;
   /** Exact inbound row that created the durable job. */
-  triggerMessageId?: string | null;
+  triggerMessageId: string;
+  /** Durable execution identity; every provider send belongs to one job. */
+  jobId: string;
+  /** Conversation epoch captured when the job was enqueued. */
+  contextVersion: number;
 }
 
 export type AiDispatchResult =
@@ -83,6 +97,8 @@ export async function dispatchInboundToAiReply(
     configOwnerUserId,
     senderPhone,
     triggerMessageId,
+    jobId,
+    contextVersion,
   } = args;
 
   try {
@@ -98,7 +114,7 @@ export async function dispatchInboundToAiReply(
     const { data: conv, error: convErr } = await db
       .from('conversations')
       .select(
-        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_context_started_at, ai_control_mode, status'
+        'assigned_agent_id, ai_autoreply_disabled, ai_reply_count, ai_context_started_at, ai_context_version, ai_control_mode, status'
       )
       .eq('id', conversationId)
       .maybeSingle();
@@ -115,10 +131,16 @@ export async function dispatchInboundToAiReply(
       return { outcome: 'skipped', reason: 'awaiting_owner_guidance' };
     if (conv.ai_control_mode === 'closed' || conv.status === 'closed')
       return { outcome: 'skipped', reason: 'conversation_closed' };
-    if (conv.ai_control_mode === 'paused')
+    if (
+      conv.ai_control_mode === 'paused' ||
+      conv.ai_control_mode === 'paused_failure'
+    )
       return { outcome: 'skipped', reason: 'conversation_paused' };
     if (conv.ai_autoreply_disabled)
       return { outcome: 'skipped', reason: 'conversation_paused' };
+    if (Number(conv.ai_context_version) !== contextVersion) {
+      return { outcome: 'skipped', reason: 'stale_context_version' };
+    }
     const contextBoundary = conv.ai_context_started_at;
     if (!conv.ai_context_started_at) {
       const newContextStartedAt = new Date().toISOString();
@@ -533,85 +555,120 @@ export async function dispatchInboundToAiReply(
       }
     }
 
-    const outboundText = compactAiReply(responseText);
-    const { data: fingerprintClaimed, error: fingerprintError } = await db.rpc(
-      'claim_ai_response_fingerprint',
-      {
-        p_account_id: accountId,
-        p_conversation_id: conversationId,
-        p_fingerprint: responseFingerprint(outboundText),
-        p_window_seconds: 600,
-      }
+    const resolvingGuidance = await loadResolvingGuidance({
+      db,
+      accountId,
+      conversationId,
+    });
+    const resumePrefix = resolvingGuidance
+      ? delayedResumePrefix(
+          Date.now() - new Date(resolvingGuidance.created_at).getTime()
+        )
+      : '';
+    const outboundText = compactAiReply(
+      joinResumePrefix(resumePrefix, responseText)
     );
-    if (fingerprintError) {
+    const outboundParts = splitAiMessage(outboundText);
+    const semanticContext = semanticMessageMetadata({
+      ...studiosp.semanticContext,
+      ...(resolvingGuidance
+        ? {
+            mode: 'guidance' as const,
+            guidanceRequestId: resolvingGuidance.id,
+          }
+        : {}),
+    });
+    let outbox = await prepareAiResponseOutbox({
+      db,
+      accountId,
+      conversationId,
+      jobId,
+      triggerMessageId,
+      contextVersion,
+      responseText: outboundText,
+      parts: outboundParts,
+      semanticContext,
+    });
+    if (outbox.status === 'ambiguous') {
       return {
         outcome: 'failed',
-        reason: 'response_fingerprint_claim_failed',
-        retryable: true,
+        reason: 'ambiguous_delivery',
+        retryable: false,
       };
     }
-    if (fingerprintClaimed !== true) {
-      return { outcome: 'skipped', reason: 'duplicate_response_blocked' };
-    }
-    const outboundParts = splitAiMessage(outboundText);
-    for (const [index, part] of outboundParts.entries()) {
+
+    let lastResponseMessageId: string | null = null;
+    for (
+      let index = outbox.sent_part_count;
+      index < outbox.parts.length;
+      index += 1
+    ) {
+      outbox = await beginAiOutboxPart(db, outbox, index);
       try {
-        await engineSendText({
+        const sent = await engineSendText({
           accountId,
           userId: configOwnerUserId,
           conversationId,
           contactId,
-          text: part,
+          text: outbox.parts[index],
           aiGenerated: true,
-          semanticContext: semanticMessageMetadata(studiosp.semanticContext),
+          semanticContext,
+        });
+        lastResponseMessageId = sent.message_id;
+        outbox = await markAiOutboxPartSent({
+          db,
+          outbox,
+          partIndex: index,
+          providerMessageId:
+            sent.whatsapp_message_id ?? sent.message_id ?? `local:${index}`,
         });
       } catch (error) {
-        if (index === 0) throw error;
-        const summary =
-          'Uma resposta da IA foi enviada parcialmente. Revise a conversa antes de continuar para evitar conteúdo duplicado.';
-        await db
-          .from('conversations')
-          .update({
-            ai_autoreply_disabled: true,
-            ai_control_mode: 'paused',
-            ai_control_reason: 'partial_reply_send_failed',
-            ai_control_changed_at: new Date().toISOString(),
-            ai_handoff_summary: summary,
-            ai_processing_status: 'handoff',
-            ai_processing_reason: 'partial_reply_send_failed',
-          })
-          .eq('id', conversationId)
-          .eq('account_id', accountId);
-        await db.from('attention_items').upsert(
-          {
-            account_id: accountId,
-            opportunity_id: studiosp.opportunityId,
-            assigned_role: 'owner',
-            kind: 'ai_partial_reply',
-            severity: 'critical',
-            title: 'Resposta da IA enviada parcialmente',
-            context: {
-              conversation_id: conversationId,
-              sent_parts: index,
-              total_parts: outboundParts.length,
-            },
-            due_at: new Date().toISOString(),
-            deduplication_key: `ai-partial-reply:${conversationId}`,
+        const reason =
+          error instanceof Error ? error.message : 'outbound_send_failed';
+        const ambiguous = await markAiOutboxAmbiguous(db, outbox.id, reason);
+        const sentParts = ambiguous?.sent_part_count ?? outbox.sent_part_count;
+        await openOperationalFailure({
+          db,
+          accountId,
+          conversationId,
+          opportunityId: studiosp.opportunityId,
+          triggerMessageId,
+          jobId,
+          outboxId: outbox.id,
+          reasonCode: 'ambiguous_delivery',
+          summary:
+            sentParts > 0
+              ? 'Uma parte da resposta foi enviada, mas o restante ficou sem confirmação. O Pedro foi pausado para evitar repetição.'
+              : 'O provedor pode ter recebido a resposta, mas não confirmou o resultado. O Pedro foi pausado para evitar mensagem duplicada.',
+          retryable: false,
+          deliveryState: sentParts > 0 ? 'partially_sent' : 'ambiguous',
+          blockConversation: true,
+          context: {
+            sent_parts: sentParts,
+            total_parts: outbox.parts.length,
+            provider_error: reason.slice(0, 500),
           },
-          {
-            onConflict: 'account_id,deduplication_key',
-            ignoreDuplicates: true,
-          }
-        );
+        });
         return {
           outcome: 'failed',
-          reason: 'partial_reply_send_failed',
+          reason: 'ambiguous_delivery',
           retryable: false,
         };
       }
-      if (index < outboundParts.length - 1) {
+      if (index < outbox.parts.length - 1) {
         await waitBetweenAiMessages();
       }
+    }
+
+    if (resolvingGuidance) {
+      await resolveGuidanceAfterReply({
+        db,
+        accountId,
+        conversationId,
+        requestId: resolvingGuidance.id,
+        responseMessageId: lastResponseMessageId,
+        responseText: outbox.response_text,
+      });
     }
 
     await persistSdrClassification({
@@ -644,6 +701,9 @@ export async function dispatchInboundToAiReply(
     console.error('[ai auto-reply] dispatch failed:', err);
     const reason =
       err instanceof Error ? err.message : 'unknown_dispatch_error';
+    if (reason === 'stale_or_unowned_ai_turn') {
+      return { outcome: 'skipped', reason };
+    }
     return {
       outcome: 'failed',
       reason,

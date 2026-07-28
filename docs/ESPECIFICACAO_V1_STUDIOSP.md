@@ -1468,3 +1468,39 @@ Não podem ser desativados:
 ## 23. Definição de pronto da V1
 
 A V1 está pronta quando os doze cenários de aceite funcionarem de ponta a ponta em produção, com dados reais controlados, sem intervenção técnica no fluxo normal e com contingência visível para toda falha relevante.
+
+## 24. Confiabilidade do atendimento do Pedro
+
+### Confirmado em 28/07/2026
+
+- o webhook confirma o recebimento após persistir e enfileirar; geração e envio
+  são executados por um worker separado;
+- cada job pertence à versão de contexto da conversa que o originou;
+- a resposta de uma reativação cancela imediatamente todos os próximos
+  contatos da cadência, antes de qualquer chamada ao modelo;
+- reativar um contato reabre a conversa antiga e inicia uma nova versão de
+  contexto sem misturar o ciclo encerrado;
+- uma resposta só é reenviável automaticamente enquanto o envio ainda não
+  começou de forma ambígua;
+- o outbox registra texto, partes, início do envio, IDs do provedor e
+  confirmação final;
+- envio parcial ou sem confirmação pausa o Pedro e exige decisão do dono;
+- falhas transitórias recebem no máximo três tentativas com espaçamento;
+- falhas definitivas, conflito de estado e envio ambíguo abrem um incidente
+  operacional deduplicado;
+- a Central de atenção oferece `Orientar e retomar`, `Tentar novamente` e
+  `Manter pausada e assumir`;
+- orientação do dono volta à mesma fila segura; a requisição do painel não
+  chama o modelo nem envia diretamente ao WhatsApp;
+- ao retomar depois de uma espera, a justificativa é proporcional ao tempo e
+  não menciona IA, alerta ou processo interno;
+- valores de qualificação são convertidos para opções canônicas configuradas
+  pelo dono; texto ambíguo não se transforma em fato comercial;
+- perguntas sobre identidade recebem exatamente: “Aqui é o Pedro. Trabalho
+  com o mercado de imóveis em SP.”;
+- o Pedro não afirma ser IA nem humano, não repete o nome do lead
+  mecanicamente e não avança para outra pergunta quando o lead demonstra
+  dúvida, confusão ou frustração;
+- conteúdo do lead, histórico, documentos e preferências editáveis continuam
+  sendo dados não confiáveis e não podem alterar instruções, acessar outro
+  contato ou revelar segredos.

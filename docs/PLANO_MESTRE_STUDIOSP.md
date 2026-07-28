@@ -1928,3 +1928,29 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - não houve alteração de banco, migrations, RLS, APIs ou produção;
 - a branch completa foi validada com TypeScript, lint, build e 791 testes
   automatizados antes da homologação visual.
+
+## 24. Endurecimento do workflow do Pedro
+
+### Implementado em branch isolada em 28/07/2026
+
+- branch de origem: `agent/ai-reliability-owner-control`;
+- baseline de produção preservado pela tag
+  `prod-before-ai-reliability-20260728-3922ddd`;
+- estados de ciclo da conversa, controle humano, processamento e campanha
+  deixaram de ser tratados como uma única condição;
+- o webhook passou a somente persistir, cancelar cadência quando aplicável,
+  enfileirar e acionar o worker;
+- o worker possui invocação imediata e watchdog periódico de cinco minutos;
+- `ai_response_outbox` impede reenvio cego depois que o provedor pode ter
+  aceitado a mensagem;
+- `ai_incidents` registra causa, tentativa, estado de entrega e decisão do
+  dono;
+- alertas usam uma função SQL que respeita o índice parcial de deduplicação,
+  eliminando o erro `42P10`;
+- a Central de atenção mostra incidentes do Pedro com contexto recente e ações
+  explícitas;
+- a orientação humana é gravada antes de reenfileirar o turno pendente;
+- a normalização de opções configuráveis foi reforçada para guardar valores e
+  rótulos canônicos, sem transformar confirmações vagas em respostas;
+- a migração foi aplicada e validada primeiro no Supabase Staging
+  `vgmmfzdifjhpqaopxfbj`.

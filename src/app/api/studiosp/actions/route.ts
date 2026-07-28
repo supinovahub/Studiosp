@@ -18,22 +18,9 @@ import {
   qualificationLabelFingerprint,
 } from '@/lib/ai/qualification-question-config';
 import { supabaseAdmin } from '@/lib/ai/admin-client';
-import { buildConversationContext } from '@/lib/ai/context';
-import { loadAiConfig } from '@/lib/ai/config';
-import { retrieveKnowledge } from '@/lib/ai/knowledge';
-import { buildSystemPrompt } from '@/lib/ai/defaults';
-import { generateReply } from '@/lib/ai/generate';
-import { latestUserMessage } from '@/lib/ai/query';
-import { prepareStudiospTurn } from '@/lib/ai/studiosp-orchestrator';
-import {
-  delayedResumePrefix,
-  enforceOutboundPolicy,
-  joinResumePrefix,
-} from '@/lib/ai/response-policy';
-import { loadTrustedGuidance, openOperationalFailure } from '@/lib/ai/guidance';
-import { engineSendText } from '@/lib/flows/meta-send';
-import { semanticMessageMetadata } from '@/lib/ai/semantic-context';
-import { processAiReplyQueue } from '@/lib/ai/reply-queue';
+import { openOperationalFailure } from '@/lib/ai/guidance';
+import { triggerAiReplyProcessor } from '@/lib/ai/processor-trigger';
+import { upsertOwnerAttention } from '@/lib/studiosp/attention';
 
 function text(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
@@ -175,11 +162,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'provide_ai_guidance') {
-      const requestId = text(body.requestId);
+      let requestId = text(body.requestId);
+      const incidentId = text(body.incidentId);
       const guidance = text(body.guidance);
       const scope = text(body.scope, 'reply');
       if (
-        !requestId ||
+        (!requestId && !incidentId) ||
         guidance.length < 3 ||
         guidance.length > 4000 ||
         !['reply', 'conversation', 'knowledge'].includes(scope)
@@ -191,6 +179,72 @@ export async function POST(request: NextRequest) {
       }
 
       const admin = supabaseAdmin();
+      if (!requestId && incidentId) {
+        const { data: incident, error: incidentError } = await admin
+          .from('ai_incidents')
+          .select(
+            'id, conversation_id, opportunity_id, trigger_message_id, summary, status'
+          )
+          .eq('account_id', accountId)
+          .eq('id', incidentId)
+          .in('status', ['open', 'resolving'])
+          .maybeSingle();
+        actionError(incidentError);
+        if (!incident) {
+          return NextResponse.json(
+            { error: 'Este alerta já foi tratado ou não existe.' },
+            { status: 409 }
+          );
+        }
+        const { data: conversation } = await admin
+          .from('conversations')
+          .select('contact_id')
+          .eq('account_id', accountId)
+          .eq('id', incident.conversation_id)
+          .single();
+        const { data: latestInbound } = await admin
+          .from('messages')
+          .select('id, content_text')
+          .eq('account_id', accountId)
+          .eq('conversation_id', incident.conversation_id)
+          .eq('sender_type', 'customer')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const existing = await admin
+          .from('ai_guidance_requests')
+          .select('id')
+          .eq('account_id', accountId)
+          .eq('conversation_id', incident.conversation_id)
+          .in('status', ['open', 'resolving'])
+          .maybeSingle();
+        if (existing.data) {
+          requestId = existing.data.id;
+        } else {
+          const created = await admin
+            .from('ai_guidance_requests')
+            .insert({
+              account_id: accountId,
+              conversation_id: incident.conversation_id,
+              contact_id: conversation?.contact_id,
+              opportunity_id: incident.opportunity_id,
+              trigger_message_id:
+                incident.trigger_message_id ?? latestInbound?.id,
+              reason_code: 'owner_guidance_for_incident',
+              missing_context_summary: incident.summary,
+              lead_message_excerpt: latestInbound?.content_text ?? null,
+              context: { incident_id: incident.id },
+            })
+            .select('id')
+            .single();
+          actionError(created.error);
+          if (!created.data) {
+            throw new Error('Não foi possível criar o pedido de orientação.');
+          }
+          requestId = created.data.id;
+        }
+      }
+
       const claim = await admin
         .from('ai_guidance_requests')
         .update({
@@ -234,167 +288,31 @@ export async function POST(request: NextRequest) {
             created_by: profileId,
           });
         }
-
-        const config = await loadAiConfig(admin, accountId);
-        if (!config || !config.autoReplyEnabled) {
-          throw new Error('A configuração de IA não está ativa.');
-        }
-        const messages = await buildConversationContext(
+        const queued = await queueOwnerAiRetry({
           admin,
-          guidanceRequest.conversation_id
-        );
-        if (!messages.length) {
-          throw new Error('A conversa não possui contexto para responder.');
-        }
-        const { data: latestInbound } = await admin
-          .from('messages')
-          .select('id')
-          .eq('account_id', accountId)
-          .eq('conversation_id', guidanceRequest.conversation_id)
-          .eq('sender_type', 'customer')
-          .order('created_at', { ascending: false })
-          .order('id', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const studiosp = await prepareStudiospTurn({
-          db: admin,
           accountId,
           conversationId: guidanceRequest.conversation_id,
-          contactId: guidanceRequest.contact_id,
-          triggerMessageId:
-            latestInbound?.id ?? guidanceRequest.trigger_message_id,
-          config,
-          messages,
+          reason: 'owner_guidance',
         });
-        const [knowledge, savedGuidance] = await Promise.all([
-          retrieveKnowledge(
-            admin,
-            accountId,
-            config,
-            latestUserMessage(messages)
-          ),
-          loadTrustedGuidance({
-            db: admin,
-            accountId,
-            conversationId: guidanceRequest.conversation_id,
-          }),
-        ]);
-        const systemPrompt = buildSystemPrompt({
-          internalPrompt: config.internalPrompt,
-          communicationPrompt: config.communicationPrompt,
-          identityName: config.identityName,
-          toneConfig: config.toneConfig,
-          mode: 'auto_reply',
-          knowledge,
-          operation: [
-            ...studiosp.grounding,
-            ...savedGuidance,
-            `Orientação confiável do dono para resolver este turno: ${guidance}`,
-            'Responda agora ao lead usando a orientação acima. Não mencione a orientação, o alerta ou a espera interna.',
-          ],
-        });
-        const generated = await generateReply({
-          config,
-          systemPrompt,
-          messages,
-        });
-        if (generated.handoff || generated.needsGuidance) {
-          throw new Error(
-            'A IA ainda não conseguiu formular uma resposta com essa orientação.'
-          );
+        if (incidentId) {
+          await admin
+            .from('ai_incidents')
+            .update({
+              status: 'resolving',
+              owner_profile_id: profileId,
+              owner_action: 'guidance',
+            })
+            .eq('account_id', accountId)
+            .eq('id', incidentId)
+            .in('status', ['open', 'resolving']);
         }
-        const { data: contact } = await admin
-          .from('contacts')
-          .select('name')
-          .eq('account_id', accountId)
-          .eq('id', guidanceRequest.contact_id)
-          .maybeSingle();
-        const policy = enforceOutboundPolicy({
-          text: studiosp.outboundOverride ?? generated.text,
-          latestLeadMessage: latestUserMessage(messages),
-          messages,
-          leadName: contact?.name,
-        });
-        if (!policy.ok) {
-          throw new Error(
-            `A resposta não passou pela validação: ${policy.violations.join(', ')}.`
-          );
-        }
-        const waitedMs =
-          Date.now() - new Date(guidanceRequest.created_at).getTime();
-        const outbound = joinResumePrefix(
-          delayedResumePrefix(waitedMs),
-          policy.text
-        );
-        const sent = await engineSendText({
-          accountId,
-          userId,
-          conversationId: guidanceRequest.conversation_id,
-          contactId: guidanceRequest.contact_id,
-          text: outbound,
-          aiGenerated: true,
-          semanticContext: semanticMessageMetadata({
-            ...studiosp.semanticContext,
-            mode: 'guidance',
-            guidanceRequestId: requestId,
-          }),
-        });
-        const resolvedAt = new Date().toISOString();
-        await Promise.all([
-          admin
-            .from('ai_guidance_requests')
-            .update({
-              status: 'resolved',
-              response_message_id: sent.message_id,
-              resumed_at: resolvedAt,
-              resolved_at: resolvedAt,
-            })
-            .eq('account_id', accountId)
-            .eq('id', requestId),
-          admin.from('ai_guidance_messages').insert({
-            account_id: accountId,
-            request_id: requestId,
-            role: 'assistant',
-            content: outbound,
-          }),
-          admin
-            .from('conversations')
-            .update({
-              ai_control_mode: 'ai_active',
-              ai_control_reason: null,
-              ai_control_changed_at: resolvedAt,
-              ai_processing_status: 'idle',
-              ai_processing_reason: 'guidance_resolved',
-              ai_last_response_at: resolvedAt,
-            })
-            .eq('account_id', accountId)
-            .eq('id', guidanceRequest.conversation_id)
-            .is('assigned_agent_id', null),
-          admin
-            .from('attention_items')
-            .update({
-              status: 'resolved',
-              resolved_at: resolvedAt,
-              resolved_by: profileId,
-              resolution: {
-                outcome: 'owner_guidance_sent',
-                guidance_scope: scope,
-                guidance_request_id: requestId,
-              },
-            })
-            .eq('account_id', accountId)
-            .eq(
-              'deduplication_key',
-              `ai-guidance:${guidanceRequest.conversation_id}`
-            )
-            .in('status', ['open', 'snoozed']),
-        ]);
+        await triggerAiReplyProcessor(0);
         return NextResponse.json({
           guidanceRequest: {
             ...guidanceRequest,
-            status: 'resolved',
-            response_message_id: sent.message_id,
+            status: 'resolving',
           },
+          queued,
         });
       } catch (guidanceError) {
         await admin
@@ -415,6 +333,7 @@ export async function POST(request: NextRequest) {
               ? guidanceError.message
               : 'Falha ao retomar a conversa.',
           retryable: true,
+          blockConversation: true,
           context: { guidance_request_id: requestId },
         });
         throw guidanceError;
@@ -454,6 +373,35 @@ export async function POST(request: NextRequest) {
           .eq('conversation_id', conversationId)
           .in('status', ['open', 'resolving']),
         admin
+          .from('ai_reply_jobs')
+          .update({
+            status: 'skipped',
+            completed_at: takeoverAt,
+            claimed_at: null,
+            lease_expires_at: null,
+            outcome_reason: 'owner_takeover',
+          })
+          .eq('account_id', accountId)
+          .eq('conversation_id', conversationId)
+          .in('status', ['queued', 'retrying', 'processing']),
+        admin
+          .from('ai_response_outbox')
+          .update({ status: 'cancelled', lease_expires_at: null })
+          .eq('account_id', accountId)
+          .eq('conversation_id', conversationId)
+          .in('status', ['pending', 'sending', 'failed', 'ambiguous']),
+        admin
+          .from('ai_incidents')
+          .update({
+            status: 'human_owned',
+            owner_profile_id: profileId,
+            owner_action: 'takeover',
+            resolved_at: takeoverAt,
+          })
+          .eq('account_id', accountId)
+          .eq('conversation_id', conversationId)
+          .in('status', ['open', 'resolving']),
+        admin
           .from('attention_items')
           .update({
             status: 'resolved',
@@ -470,82 +418,28 @@ export async function POST(request: NextRequest) {
 
     if (action === 'retry_ai_failure') {
       const conversationId = text(body.conversationId);
+      const incidentId = text(body.incidentId);
       const admin = supabaseAdmin();
-      const { data: conversation } = await admin
-        .from('conversations')
-        .select('id, contact_id, user_id, contacts(phone)')
-        .eq('account_id', accountId)
-        .eq('id', conversationId)
-        .maybeSingle();
-      if (!conversation) {
-        return NextResponse.json(
-          { error: 'Conversa não encontrada.' },
-          { status: 404 }
-        );
-      }
-      const { data: trigger } = await admin
-        .from('messages')
-        .select('id')
-        .eq('account_id', accountId)
-        .eq('conversation_id', conversationId)
-        .eq('sender_type', 'customer')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!trigger) {
-        return NextResponse.json(
-          { error: 'Não há mensagem do lead para tentar novamente.' },
-          { status: 409 }
-        );
-      }
-      const contact = Array.isArray(conversation.contacts)
-        ? conversation.contacts[0]
-        : conversation.contacts;
-      const { data: existing } = await admin
-        .from('ai_reply_jobs')
-        .select('id')
-        .eq('account_id', accountId)
-        .eq('trigger_message_id', trigger.id)
-        .maybeSingle();
-      if (existing) {
+      const queued = await queueOwnerAiRetry({
+        admin,
+        accountId,
+        conversationId,
+        reason: 'owner_retry',
+      });
+      if (incidentId) {
         await admin
-          .from('ai_reply_jobs')
+          .from('ai_incidents')
           .update({
-            status: 'queued',
-            attempt_count: 0,
-            available_at: new Date().toISOString(),
-            claimed_at: null,
-            lease_expires_at: null,
-            completed_at: null,
-            outcome_reason: 'owner_retry',
-            last_error: null,
+            status: 'resolving',
+            owner_profile_id: profileId,
+            owner_action: 'retry',
           })
-          .eq('id', existing.id);
-      } else {
-        const enqueue = await admin.rpc('enqueue_ai_reply_job', {
-          p_account_id: accountId,
-          p_conversation_id: conversationId,
-          p_contact_id: conversation.contact_id,
-          p_trigger_message_id: trigger.id,
-          p_config_owner_user_id: conversation.user_id,
-          p_sender_phone: contact?.phone ?? '',
-        });
-        actionError(enqueue.error);
+          .eq('account_id', accountId)
+          .eq('id', incidentId)
+          .in('status', ['open', 'resolving']);
       }
-      await admin
-        .from('conversations')
-        .update({
-          assigned_agent_id: null,
-          ai_control_mode: 'ai_active',
-          ai_control_reason: null,
-          ai_control_changed_at: new Date().toISOString(),
-          ai_processing_status: 'queued',
-          ai_processing_reason: 'owner_retry',
-        })
-        .eq('account_id', accountId)
-        .eq('id', conversationId);
-      const processed = await processAiReplyQueue(admin, 5);
-      return NextResponse.json({ queued: true, processed });
+      await triggerAiReplyProcessor(0);
+      return NextResponse.json({ queued });
     }
 
     if (action === 'schedule_manual_appointment') {
@@ -621,26 +515,19 @@ export async function POST(request: NextRequest) {
               '[Studiosp/actions] falha ao notificar agendamento manual:',
               error instanceof SendMessageError ? error.code : error
             );
-            await supabase.from('attention_items').upsert(
-              {
-                account_id: accountId,
-                opportunity_id: opportunityId,
-                assigned_role: 'owner',
-                kind: 'manual_schedule_notification_failed',
-                severity: 'critical',
-                title: 'Confirmação de call não enviada ao lead',
-                context: {
-                  appointment_id: (result.data as { id?: string })?.id ?? null,
-                  conversation_id: conversationId,
-                },
-                due_at: new Date().toISOString(),
-                deduplication_key: `manual-schedule-notification:${(result.data as { id?: string })?.id ?? opportunityId}`,
+            await upsertOwnerAttention(supabaseAdmin(), {
+              accountId,
+              opportunityId,
+              kind: 'manual_schedule_notification_failed',
+              severity: 'critical',
+              title: 'Confirmação de call não enviada ao lead',
+              context: {
+                appointment_id: (result.data as { id?: string })?.id ?? null,
+                conversation_id: conversationId,
               },
-              {
-                onConflict: 'account_id,deduplication_key',
-                ignoreDuplicates: true,
-              }
-            );
+              dueAt: new Date().toISOString(),
+              deduplicationKey: `manual-schedule-notification:${(result.data as { id?: string })?.id ?? opportunityId}`,
+            });
           }
         }
       }
@@ -738,7 +625,8 @@ export async function POST(request: NextRequest) {
             .select('id')
             .single();
           actionError(created.error);
-          if (!created.data?.id) throw new Error('Falha ao criar incorporadora.');
+          if (!created.data?.id)
+            throw new Error('Falha ao criar incorporadora.');
           developerId = created.data.id;
         }
       }
@@ -785,8 +673,7 @@ export async function POST(request: NextRequest) {
       ) {
         return NextResponse.json(
           {
-            error:
-              'Informe tipologia, metragem e preço da primeira unidade.',
+            error: 'Informe tipologia, metragem e preço da primeira unidade.',
           },
           { status: 400 }
         );
@@ -1285,4 +1172,114 @@ export async function POST(request: NextRequest) {
     }
     return toErrorResponse(error);
   }
+}
+
+async function queueOwnerAiRetry(args: {
+  admin: ReturnType<typeof supabaseAdmin>;
+  accountId: string;
+  conversationId: string;
+  reason: 'owner_guidance' | 'owner_retry';
+}) {
+  const { data: conversation, error: conversationError } = await args.admin
+    .from('conversations')
+    .select('id, contact_id, user_id, ai_context_version, contacts(phone)')
+    .eq('account_id', args.accountId)
+    .eq('id', args.conversationId)
+    .maybeSingle();
+  actionError(conversationError);
+  if (!conversation) throw new Error('Conversa não encontrada.');
+
+  const { data: trigger, error: triggerError } = await args.admin
+    .from('messages')
+    .select('id')
+    .eq('account_id', args.accountId)
+    .eq('conversation_id', args.conversationId)
+    .eq('sender_type', 'customer')
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  actionError(triggerError);
+  if (!trigger) {
+    throw new Error('Não há mensagem do lead para reenfileirar.');
+  }
+
+  const { data: existing } = await args.admin
+    .from('ai_reply_jobs')
+    .select('id')
+    .eq('account_id', args.accountId)
+    .eq('trigger_message_id', trigger.id)
+    .maybeSingle();
+  let jobId = existing?.id ?? null;
+  if (jobId) {
+    const { data: outbox } = await args.admin
+      .from('ai_response_outbox')
+      .select('id, status')
+      .eq('job_id', jobId)
+      .maybeSingle();
+    if (outbox?.status === 'sent') {
+      throw new Error(
+        'Esta resposta já foi enviada. Abra a conversa antes de iniciar uma nova ação.'
+      );
+    }
+    if (outbox) {
+      await args.admin
+        .from('ai_response_outbox')
+        .update({ status: 'cancelled', lease_expires_at: null })
+        .eq('id', outbox.id);
+    }
+    const reset = await args.admin
+      .from('ai_reply_jobs')
+      .update({
+        status: 'queued',
+        attempt_count: 0,
+        context_version: Number(conversation.ai_context_version),
+        available_at: new Date().toISOString(),
+        claimed_at: null,
+        lease_expires_at: null,
+        completed_at: null,
+        outcome_reason: args.reason,
+        last_error: null,
+      })
+      .eq('id', jobId);
+    actionError(reset.error);
+  } else {
+    const contact = Array.isArray(conversation.contacts)
+      ? conversation.contacts[0]
+      : conversation.contacts;
+    const enqueue = await args.admin.rpc('enqueue_ai_reply_job', {
+      p_account_id: args.accountId,
+      p_conversation_id: args.conversationId,
+      p_contact_id: conversation.contact_id,
+      p_trigger_message_id: trigger.id,
+      p_config_owner_user_id: conversation.user_id,
+      p_sender_phone: contact?.phone ?? '',
+    });
+    actionError(enqueue.error);
+    jobId = String(enqueue.data?.id ?? '');
+    await args.admin
+      .from('ai_reply_jobs')
+      .update({
+        available_at: new Date().toISOString(),
+        outcome_reason: args.reason,
+      })
+      .eq('id', jobId);
+  }
+
+  const resumed = await args.admin
+    .from('conversations')
+    .update({
+      assigned_agent_id: null,
+      ai_autoreply_disabled: false,
+      ai_control_mode: 'ai_active',
+      ai_control_reason: null,
+      ai_control_changed_at: new Date().toISOString(),
+      ai_processing_status: 'queued',
+      ai_processing_reason: args.reason,
+      ai_processing_job_id: jobId,
+    })
+    .eq('account_id', args.accountId)
+    .eq('id', args.conversationId);
+  actionError(resumed.error);
+  return { jobId, triggerMessageId: trigger.id };
 }

@@ -862,3 +862,49 @@ Ficam fora do modelo ativo da V1:
 - produto SaaS multiempresa.
 
 As chaves e relações escolhidas permitem adicionar essas capacidades sem reescrever o histórico.
+
+## 24. Entidades de confiabilidade do atendimento
+
+### `conversations`
+
+- `ai_context_version` identifica o ciclo conversacional atual;
+- `ai_control_mode = paused_failure` preserva uma pausa causada por incidente,
+  distinta de pausa manual, atribuição humana e espera por contexto.
+
+### `ai_reply_jobs`
+
+- `context_version` congela a versão da conversa que pode ser respondida;
+- jobs de uma versão anterior terminam sem enviar;
+- a recuperação de lease nunca reivindica automaticamente um job cujo outbox
+  está em envio, enviado ou ambíguo.
+
+### `ai_response_outbox`
+
+- uma linha única por job;
+- guarda a resposta final e suas partes antes do primeiro envio;
+- estados: `pending`, `sending`, `sent`, `failed`, `ambiguous` e `cancelled`;
+- `sent_part_count` e `provider_message_ids` permitem retomar apenas entre
+  partes confirmadas;
+- `sending` com lease expirado vira `ambiguous`, nunca retry automático.
+
+### `ai_incidents`
+
+- uma ocorrência aberta por conta, conversa e causa;
+- vincula mensagem de origem, job, outbox e oportunidade quando disponíveis;
+- distingue `safe_to_retry`, `partially_sent` e `ambiguous`;
+- registra decisão do dono: orientação, nova tentativa ou controle humano;
+- incidentes são visíveis somente a administradores; escrita e funções
+  operacionais ficam restritas ao `service_role`.
+
+### Funções
+
+- `studiosp_upsert_attention_item`: deduplicação compatível com o índice
+  parcial de pendências abertas;
+- `studiosp_open_ai_incident`: registra o incidente, pausa a conversa quando
+  necessário e cria a pendência do dono;
+- `studiosp_cancel_reactivation_on_inbound`: cancela a cadência no primeiro
+  inbound sem encerrar prematuramente o contexto de reativação;
+- `enqueue_ai_reply_job`: captura a versão de contexto e consolida rajadas de
+  mensagens;
+- `claim_ai_reply_jobs`: usa lease e `SKIP LOCKED`, sem recuperar envio de
+  resultado incerto.

@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/studiosp/ai/process",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/studiosp/cron",
       "schedule": "0 13 * * *"
     }

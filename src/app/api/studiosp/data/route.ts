@@ -154,6 +154,7 @@ export async function GET(request: NextRequest) {
       const leadMap = new Map(leads.map((lead) => [lead.id, lead]));
       let guidanceRequests: Row[] = [];
       let guidanceMessages: Row[] = [];
+      let incidents: Row[] = [];
       let conversationMessages: Row[] = [];
       if (role !== 'agent' && attention.length) {
         const guidanceIds = attention
@@ -166,6 +167,19 @@ export async function GET(request: NextRequest) {
               .filter(Boolean)
           ),
         ];
+        const incidentIds = attention
+          .map((item) => String(item.context?.incident_id ?? ''))
+          .filter(Boolean);
+        if (incidentIds.length) {
+          incidents = assertQuery<Row[]>(
+            await supabase
+              .from('ai_incidents')
+              .select('*')
+              .eq('account_id', accountId)
+              .in('id', incidentIds),
+            'incidentes do atendimento'
+          );
+        }
         if (guidanceIds.length) {
           guidanceRequests = assertQuery<Row[]>(
             await supabase
@@ -203,13 +217,16 @@ export async function GET(request: NextRequest) {
       const guidanceMap = new Map(
         guidanceRequests.map((item) => [item.id, item])
       );
+      const incidentMap = new Map(incidents.map((item) => [item.id, item]));
       response.attention = attention.map((item) => {
         const guidanceId = String(item.context?.guidance_request_id ?? '');
+        const incidentId = String(item.context?.incident_id ?? '');
         const conversationId = String(item.context?.conversation_id ?? '');
         return {
           ...item,
           lead: leadMap.get(item.opportunity_id) ?? null,
           guidanceRequest: guidanceMap.get(guidanceId) ?? null,
+          incident: incidentMap.get(incidentId) ?? null,
           guidanceMessages: guidanceMessages.filter(
             (message) => message.request_id === guidanceId
           ),

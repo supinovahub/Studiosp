@@ -1,5 +1,8 @@
 import { supabaseAdmin } from './admin-client';
 import { dispatchInboundToAiReply, type AiDispatchResult } from './auto-reply';
+import { findStaleSendingOutboxes } from './delivery';
+import { openOperationalFailure } from './guidance';
+import { triggerAiReplyProcessor } from './processor-trigger';
 
 type Db = ReturnType<typeof supabaseAdmin>;
 
@@ -23,12 +26,31 @@ interface AiReplyJob {
   attempt_count: number;
   max_attempts: number;
   correlation_id: string;
+  context_version: number;
 }
 
 export async function enqueueInboundAiReply(
   args: EnqueueAiReplyArgs
 ): Promise<{ queued: boolean; processed: number }> {
   const db = supabaseAdmin();
+  const cancellation = await db.rpc('studiosp_cancel_reactivation_on_inbound', {
+    p_account_id: args.accountId,
+    p_contact_id: args.contactId,
+    p_conversation_id: args.conversationId,
+    p_trigger_message_id: args.triggerMessageId,
+  });
+  if (cancellation.error) {
+    console.error(
+      JSON.stringify({
+        event: 'reactivation_inbound_cancellation_failed',
+        account_id: args.accountId,
+        conversation_id: args.conversationId,
+        trigger_message_id: args.triggerMessageId,
+        error: cancellation.error.message,
+      })
+    );
+    throw cancellation.error;
+  }
   const { data, error } = await db.rpc('enqueue_ai_reply_job', {
     p_account_id: args.accountId,
     p_conversation_id: args.conversationId,
@@ -50,11 +72,10 @@ export async function enqueueInboundAiReply(
     throw error;
   }
 
-  // Give consecutive short messages time to form one conversational turn.
-  // Every newer enqueue supersedes the older audit job in the database.
-  await waitForInboundQuietPeriod();
-  const processed = await processAiReplyQueue(db, 5);
-  return { queued: Boolean(data), processed };
+  // The webhook only persists and schedules. A separate invocation owns the
+  // quiet period and the expensive model/provider work.
+  await triggerAiReplyProcessor();
+  return { queued: Boolean(data), processed: 0 };
 }
 
 export async function waitForInboundQuietPeriod(ms = 8_250) {
@@ -65,6 +86,7 @@ export async function processAiReplyQueue(
   db: Db = supabaseAdmin(),
   limit = 10
 ): Promise<number> {
+  await reconcileAmbiguousDeliveries(db);
   await flagDelayedAiReplies(db);
   const { data, error } = await db.rpc('claim_ai_reply_jobs', {
     p_limit: limit,
@@ -105,25 +127,21 @@ async function flagDelayedAiReplies(db: Db) {
       .not('stage', 'in', '("won","lost")')
       .maybeSingle();
     if (!opportunity) continue;
-    await db.from('attention_items').upsert(
-      {
-        account_id: job.account_id,
-        opportunity_id: opportunity.id,
-        assigned_role: 'owner',
-        kind: 'ai_handoff',
-        severity: 'warning',
-        title: 'Resposta da IA atrasada',
-        context: {
-          conversation_id: job.conversation_id,
-          trigger_message_id: job.trigger_message_id,
-          job_id: job.id,
-          correlation_id: job.correlation_id,
-        },
-        due_at: new Date().toISOString(),
-        deduplication_key: `ai-reply-delayed:${job.conversation_id}`,
-      },
-      { onConflict: 'account_id,deduplication_key', ignoreDuplicates: true }
-    );
+    await openOperationalFailure({
+      db,
+      accountId: job.account_id,
+      conversationId: job.conversation_id,
+      opportunityId: opportunity.id,
+      triggerMessageId: job.trigger_message_id,
+      jobId: job.id,
+      reasonCode: 'ai_reply_delayed',
+      summary:
+        'A resposta está levando mais tempo que o esperado e continua na fila.',
+      retryable: true,
+      deliveryState: 'safe_to_retry',
+      blockConversation: false,
+      context: { correlation_id: job.correlation_id },
+    });
   }
 }
 
@@ -167,6 +185,8 @@ async function processClaimedJob(db: Db, job: AiReplyJob) {
     triggerMessageId: job.trigger_message_id,
     configOwnerUserId: job.config_owner_user_id,
     senderPhone: job.sender_phone,
+    jobId: job.id,
+    contextVersion: Number(job.context_version),
   });
   const latencyMs = Date.now() - startedAt;
 
@@ -196,6 +216,7 @@ async function processClaimedJob(db: Db, job: AiReplyJob) {
       updateConversationState(db, job, 'retrying', 'temporary_failure'),
     ]);
     logFinished(job, 'retrying', latencyMs, result.reason);
+    await triggerAiReplyProcessor(delaySeconds * 1000 + 500);
     return;
   }
 
@@ -226,6 +247,8 @@ async function processClaimedJob(db: Db, job: AiReplyJob) {
 
   if (result.outcome === 'failed') {
     await openFailureAttention(db, job, result.reason);
+  } else if (result.outcome === 'completed') {
+    await resolveConversationIncidents(db, job);
   }
   logFinished(job, terminal.jobStatus, latencyMs, terminal.reason);
 }
@@ -317,35 +340,93 @@ async function updateConversationState(
 }
 
 async function openFailureAttention(db: Db, job: AiReplyJob, reason: string) {
-  const { data: opportunity } = await db
-    .from('opportunities')
-    .select('id')
-    .eq('account_id', job.account_id)
-    .eq('primary_conversation_id', job.conversation_id)
-    .not('stage', 'in', '("won","lost")')
-    .maybeSingle();
-  if (!opportunity) return;
-
-  await db.from('attention_items').upsert(
-    {
-      account_id: job.account_id,
-      opportunity_id: opportunity.id,
-      assigned_role: 'owner',
-      kind: 'ai_operational_failure',
-      severity: 'critical',
-      title: 'Falha operacional no atendimento da IA',
-      context: {
-        conversation_id: job.conversation_id,
-        trigger_message_id: job.trigger_message_id,
-        job_id: job.id,
-        correlation_id: job.correlation_id,
-        reason: sanitizeError(reason),
-      },
-      due_at: new Date().toISOString(),
-      deduplication_key: `ai-reply-failed:${job.conversation_id}`,
+  await openOperationalFailure({
+    db,
+    accountId: job.account_id,
+    conversationId: job.conversation_id,
+    triggerMessageId: job.trigger_message_id,
+    jobId: job.id,
+    reasonCode: reasonCode(reason) || 'ai_reply_terminal_failure',
+    summary: sanitizeError(reason),
+    retryable: false,
+    deliveryState: reason.toLowerCase().includes('ambiguous')
+      ? 'ambiguous'
+      : 'not_started',
+    blockConversation: true,
+    context: {
+      correlation_id: job.correlation_id,
+      attempt_count: job.attempt_count,
+      max_attempts: job.max_attempts,
     },
-    { onConflict: 'account_id,deduplication_key', ignoreDuplicates: true }
+  });
+}
+
+async function reconcileAmbiguousDeliveries(db: Db) {
+  const stale = await findStaleSendingOutboxes(db).catch((error) => {
+    console.error(
+      '[Studiosp/IA] falha ao reconciliar envios sem confirmação:',
+      error
+    );
+    return [];
+  });
+  for (const outbox of stale) {
+    await db
+      .from('ai_reply_jobs')
+      .update({
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        claimed_at: null,
+        lease_expires_at: null,
+        outcome_reason: 'ambiguous_delivery',
+        last_error: 'Resultado do envio não confirmado.',
+      })
+      .eq('id', outbox.job_id)
+      .eq('status', 'processing');
+    await openOperationalFailure({
+      db,
+      accountId: outbox.account_id,
+      conversationId: outbox.conversation_id,
+      triggerMessageId: outbox.trigger_message_id,
+      jobId: outbox.job_id,
+      outboxId: outbox.id,
+      reasonCode: 'ambiguous_delivery',
+      summary:
+        'O envio ao WhatsApp pode ter sido aceito, mas o sistema não recebeu a confirmação final. É necessário decidir antes de tentar novamente.',
+      retryable: false,
+      deliveryState:
+        outbox.sent_part_count > 0 ? 'partially_sent' : 'ambiguous',
+      blockConversation: true,
+      context: {
+        sent_parts: outbox.sent_part_count,
+        total_parts: outbox.parts.length,
+      },
+    });
+  }
+}
+
+async function resolveConversationIncidents(db: Db, job: AiReplyJob) {
+  const resolvedAt = new Date().toISOString();
+  const { data: incidents } = await db
+    .from('ai_incidents')
+    .update({ status: 'resolved', resolved_at: resolvedAt })
+    .eq('account_id', job.account_id)
+    .eq('conversation_id', job.conversation_id)
+    .eq('status', 'resolving')
+    .select('reason_code');
+  const deduplicationKeys = (incidents ?? []).map(
+    (incident) => `ai-incident:${job.conversation_id}:${incident.reason_code}`
   );
+  if (!deduplicationKeys.length) return;
+  await db
+    .from('attention_items')
+    .update({
+      status: 'resolved',
+      resolved_at: resolvedAt,
+      resolution: { outcome: 'ai_reply_completed', job_id: job.id },
+    })
+    .eq('account_id', job.account_id)
+    .in('status', ['open', 'snoozed'])
+    .in('deduplication_key', deduplicationKeys);
 }
 
 export function retryDelaySeconds(attempt: number) {

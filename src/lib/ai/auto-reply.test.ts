@@ -15,9 +15,15 @@ const h = vi.hoisted(() => ({
   engineSendText: vi.fn(),
   engineSendMedia: vi.fn(),
   loadTrustedGuidance: vi.fn(),
+  loadResolvingGuidance: vi.fn(),
+  resolveGuidanceAfterReply: vi.fn(),
   openGuidanceRequest: vi.fn(),
   openOperationalFailure: vi.fn(),
   recordPromptInjectionSignal: vi.fn(),
+  prepareAiResponseOutbox: vi.fn(),
+  beginAiOutboxPart: vi.fn(),
+  markAiOutboxPartSent: vi.fn(),
+  markAiOutboxAmbiguous: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as Record<string, unknown>[],
@@ -48,9 +54,17 @@ vi.mock('./sdr-store', () => ({
 }));
 vi.mock('./guidance', () => ({
   loadTrustedGuidance: h.loadTrustedGuidance,
+  loadResolvingGuidance: h.loadResolvingGuidance,
+  resolveGuidanceAfterReply: h.resolveGuidanceAfterReply,
   openGuidanceRequest: h.openGuidanceRequest,
   openOperationalFailure: h.openOperationalFailure,
   recordPromptInjectionSignal: h.recordPromptInjectionSignal,
+}));
+vi.mock('./delivery', () => ({
+  prepareAiResponseOutbox: h.prepareAiResponseOutbox,
+  beginAiOutboxPart: h.beginAiOutboxPart,
+  markAiOutboxPartSent: h.markAiOutboxPartSent,
+  markAiOutboxAmbiguous: h.markAiOutboxAmbiguous,
 }));
 vi.mock('@/lib/flows/meta-send', () => ({
   engineSendText: h.engineSendText,
@@ -153,6 +167,9 @@ const ARGS = {
   contactId: 'contact-1',
   configOwnerUserId: 'user-1',
   senderPhone: '5527981168321',
+  triggerMessageId: 'message-1',
+  jobId: 'job-1',
+  contextVersion: 1,
 };
 
 function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
@@ -178,6 +195,7 @@ beforeEach(() => {
     assigned_agent_id: null,
     ai_autoreply_disabled: false,
     ai_reply_count: 0,
+    ai_context_version: 1,
     ai_control_mode: 'ai_active',
     status: 'open',
   };
@@ -244,6 +262,53 @@ beforeEach(() => {
     message_id: 'local-m1',
   });
   h.loadTrustedGuidance.mockResolvedValue([]);
+  h.loadResolvingGuidance.mockResolvedValue(null);
+  h.resolveGuidanceAfterReply.mockResolvedValue(undefined);
+  const baseOutbox = {
+    id: 'outbox-1',
+    account_id: 'acct-1',
+    conversation_id: 'conv-1',
+    job_id: 'job-1',
+    trigger_message_id: 'message-1',
+    context_version: 1,
+    response_text: 'Hello!',
+    parts: ['Hello!'],
+    semantic_context: {},
+    status: 'pending',
+    sent_part_count: 0,
+    provider_message_ids: [],
+  };
+  h.prepareAiResponseOutbox.mockImplementation(
+    async (args: { responseText: string; parts: string[] }) => ({
+      ...baseOutbox,
+      response_text: args.responseText,
+      parts: args.parts,
+    })
+  );
+  h.beginAiOutboxPart.mockImplementation(
+    async (_db: unknown, outbox: Record<string, unknown>) => ({
+      ...outbox,
+      status: 'sending',
+    })
+  );
+  h.markAiOutboxPartSent.mockImplementation(
+    async ({
+      outbox,
+      partIndex,
+    }: {
+      outbox: { parts: string[]; provider_message_ids: string[] };
+      partIndex: number;
+    }) => ({
+      ...outbox,
+      status: partIndex + 1 >= outbox.parts.length ? 'sent' : 'pending',
+      sent_part_count: partIndex + 1,
+      provider_message_ids: [
+        ...(outbox.provider_message_ids ?? []),
+        `provider-${partIndex}`,
+      ],
+    })
+  );
+  h.markAiOutboxAmbiguous.mockResolvedValue(null);
   h.openGuidanceRequest.mockResolvedValue({ id: 'guidance-1' });
   h.openOperationalFailure.mockResolvedValue(undefined);
   h.recordPromptInjectionSignal.mockResolvedValue({
@@ -268,7 +333,6 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     await dispatchInboundToAiReply(ARGS);
     expect(h.state.rpcCalls.map((call) => call.name)).toEqual([
       'claim_ai_reply_slot',
-      'claim_ai_response_fingerprint',
     ]);
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({ conversationId: 'conv-1', text: 'Hello!' })
@@ -413,8 +477,21 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.engineSendText).not.toHaveBeenCalled();
   });
 
-  it('blocks an equivalent response claimed by another job', async () => {
-    h.state.fingerprintClaim = false;
+  it('does not resend a durable response already marked as sent', async () => {
+    h.prepareAiResponseOutbox.mockResolvedValueOnce({
+      id: 'outbox-1',
+      account_id: 'acct-1',
+      conversation_id: 'conv-1',
+      job_id: 'job-1',
+      trigger_message_id: 'message-1',
+      context_version: 1,
+      response_text: 'Hello!',
+      parts: ['Hello!'],
+      semantic_context: {},
+      status: 'sent',
+      sent_part_count: 1,
+      provider_message_ids: ['provider-1'],
+    });
     await dispatchInboundToAiReply(ARGS);
     expect(h.engineSendText).not.toHaveBeenCalled();
   });
@@ -457,6 +534,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       assigned_agent_id: null,
       ai_autoreply_disabled: false,
       ai_reply_count: 3,
+      ai_context_version: 1,
       ai_control_mode: 'ai_active',
       status: 'open',
     };

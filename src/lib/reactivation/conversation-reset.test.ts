@@ -9,6 +9,7 @@ describe('reactivationConversationUpdates', () => {
         '2026-07-27T20:00:00.000Z'
       )
     ).toEqual({
+      status: 'open',
       whatsapp_connection_key: 'uazapi:instance-current',
       assigned_agent_id: null,
       ai_autoreply_disabled: false,
@@ -18,6 +19,9 @@ describe('reactivationConversationUpdates', () => {
       ai_control_mode: 'ai_active',
       ai_control_reason: 'reactivation_started',
       ai_control_changed_at: '2026-07-27T20:00:00.000Z',
+      ai_processing_status: 'idle',
+      ai_processing_reason: 'reactivation_started',
+      ai_processing_job_id: null,
     });
   });
 });

@@ -24,6 +24,45 @@ describe('qualification canonical normalization', () => {
     ).toEqual({ value: 'invest', label: 'Investir' });
   });
 
+  it('maps natural wording to the owner-configured canonical option', () => {
+    expect(
+      normalizeQualificationValue({
+        question: { key: 'property_timing', data_type: 'single_choice' },
+        normalizedValue: { value: 'pronto para morar' },
+        options: [
+          { value: 'off_plan', label: 'Na planta', synonyms: ['lançamento'] },
+          { value: 'ready', label: 'Pronto', synonyms: ['pronto para morar'] },
+        ],
+      })
+    ).toEqual({ value: 'ready', label: 'Pronto' });
+  });
+
+  it('normalizes a long purchase horizon without saving the lead wording', () => {
+    expect(
+      normalizeQualificationValue({
+        question: { key: 'purchase_urgency', data_type: 'single_choice' },
+        normalizedValue: { value: 'até 5 anos' },
+        options: [{ value: 'over_twelve_months', label: 'Mais de 12 meses' }],
+      })
+    ).toEqual({
+      value: 'over_twelve_months',
+      label: 'Mais de 12 meses',
+    });
+  });
+
+  it('does not turn an ambiguous confirmation into a business fact', () => {
+    expect(
+      normalizeQualificationValue({
+        question: { key: 'purchase_objective', data_type: 'single_choice' },
+        normalizedValue: { value: 'ainda é sim' },
+        options: [
+          { value: 'live', label: 'Morar', synonyms: ['moradia'] },
+          { value: 'invest', label: 'Investir', synonyms: ['investimento'] },
+        ],
+      })
+    ).toEqual({ value: 'ainda é sim' });
+  });
+
   it('normalizes location capitalization and spacing', () => {
     expect(
       normalizeQualificationValue({

@@ -10,6 +10,7 @@ import { generateContextualFollowup } from '@/lib/ai/followup';
 import { nextAllowedFollowupAt } from '@/lib/ai/followup-window';
 import { openOperationalFailure } from '@/lib/ai/guidance';
 import { semanticMessageMetadata } from '@/lib/ai/semantic-context';
+import { upsertOwnerAttention } from '@/lib/studiosp/attention';
 
 export const maxDuration = 300;
 
@@ -421,17 +422,13 @@ async function createAttention(
     key: string;
   }
 ) {
-  return db.from('attention_items').upsert(
-    {
-      account_id: args.accountId,
-      opportunity_id: args.opportunityId,
-      assigned_role: 'owner',
-      kind: args.kind,
-      severity: 'critical',
-      title: args.title,
-      due_at: new Date().toISOString(),
-      deduplication_key: args.key,
-    },
-    { onConflict: 'account_id,deduplication_key', ignoreDuplicates: true }
-  );
+  return upsertOwnerAttention(db, {
+    accountId: args.accountId,
+    opportunityId: args.opportunityId,
+    kind: args.kind,
+    severity: 'critical',
+    title: args.title,
+    dueAt: new Date().toISOString(),
+    deduplicationKey: args.key,
+  });
 }
