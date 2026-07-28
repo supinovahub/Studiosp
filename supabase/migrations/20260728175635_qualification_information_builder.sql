@@ -1,4 +1,4 @@
--- Construtor seguro das informações de qualificação.
+-- Construtor seguro das informações de qualificação, aplicado em staging.
 -- O dono configura o objetivo e a validação; a IA decide como conversar.
 
 create or replace function studiosp_private.qualification_question_is_visible(

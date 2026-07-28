@@ -1,4 +1,4 @@
--- Uma condição órfã nunca deve se tornar aplicável.
+-- Uma condição órfã nunca deve se tornar aplicável em nenhum ambiente.
 
 create or replace function studiosp_private.qualification_question_is_visible(
   p_account_id uuid,

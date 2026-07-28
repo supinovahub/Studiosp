@@ -46,8 +46,8 @@ pergunta curta e contextual, sem transformar a configuração em roteiro rígido
 
 Migrations aplicadas somente em staging:
 
-- `20260728174608_qualification_information_builder.sql`;
-- `20260728175853_qualification_visibility_dependency_guard.sql`.
+- `20260728175635_qualification_information_builder.sql`;
+- `20260728175923_qualification_visibility_dependency_guard.sql`.
 
 As gravações e reordenações usam funções atômicas `security invoker`, RLS e
 verificação de perfil administrativo. Funções de escrita não foram abertas para
