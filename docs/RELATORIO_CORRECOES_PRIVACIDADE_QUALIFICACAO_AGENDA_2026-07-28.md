@@ -57,8 +57,20 @@ Banco alterado: Supabase Staging `vgmmfzdifjhpqaopxfbj`
 
 ## Estado
 
-Implementado e validado tecnicamente em staging. Ainda requer homologação
-funcional no Preview antes de qualquer promoção para produção.
+Promovido para produção em 28/07/2026 após validação técnica no staging.
+
+Também foram promovidos:
+
+- recuperação idempotente da reserva após retry;
+- bloqueio do Inbox depois da call finalizada;
+- mensagens iniciais de reativação em blocos semânticos;
+- reparo dos textos UTF-8 em Inteligência, qualificação, motivos operacionais,
+  follow-ups, catálogo e auditoria.
+
+As migrations foram aplicadas ao Supabase de produção e a varredura final de
+mojibake retornou zero ocorrências. O teste transacional de RLS em produção
+confirmou que o corretor possui acesso durante a conversa aberta e perde acesso
+ao contato, conversa e oportunidade depois do fechamento.
 
 ## Rollback
 
