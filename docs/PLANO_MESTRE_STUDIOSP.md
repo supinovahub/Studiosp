@@ -388,6 +388,10 @@ Políticas comerciais e operacionais serão configuráveis pelo dono. Regras de 
   o corretor concluir a ação **Call finalizada** e registrar o status do lead;
 - conversas encerradas devem bloquear o compositor na interface e rejeitar
   tentativas de envio também no servidor;
+- se a reserva for persistida e a confirmação no WhatsApp falhar, o retry do
+  mesmo turno deve reutilizar a reserva existente e reenviar somente a
+  confirmação; ele nunca pode recalcular a agenda e tratar a vaga do próprio
+  lead como indisponível;
 
 - uma resposta da IA nunca constitui confirmação de reunião por si só;
 - a reunião só pode ser apresentada como marcada ou confirmada após a criação

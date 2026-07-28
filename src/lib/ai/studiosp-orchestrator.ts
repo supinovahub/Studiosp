@@ -255,6 +255,32 @@ export async function prepareStudiospTurn(args: {
     .maybeSingle();
   if (!opportunity) return empty;
 
+  // A reservation is a durable side effect that can succeed before the
+  // outbound WhatsApp confirmation fails. On a retry of the same inbound
+  // message, resume from that reservation instead of recalculating slots and
+  // treating the lead's own appointment as unavailable.
+  const existingReservation = args.triggerMessageId
+    ? await existingReservationForTrigger(args.db, {
+        accountId: args.accountId,
+        opportunityId: String(opportunity.id),
+        triggerMessageId: args.triggerMessageId,
+      })
+    : null;
+  if (existingReservation) {
+    await notifyPendingBrokers(args.db, {
+      appointmentId: String(existingReservation.id),
+      limit: 1,
+    });
+    return {
+      opportunityId: String(opportunity.id),
+      grounding: [
+        `A reserva já foi concluída anteriormente para ${slotLabel(existingReservation)}. Este processamento é uma retomada idempotente: confirme exatamente esse horário e não consulte nem ofereça outros slots.`,
+      ],
+      reservedAppointment: existingReservation,
+      outboundOverride: appointmentConfirmation(existingReservation),
+    };
+  }
+
   const { data: reactivationSession } = await args.db
     .from('reactivation_sessions')
     .select('*')
@@ -930,6 +956,41 @@ function normalize(value: unknown) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('pt-BR');
+}
+
+export async function existingReservationForTrigger(
+  db: SupabaseClient,
+  args: {
+    accountId: string;
+    opportunityId: string;
+    triggerMessageId: string;
+  }
+): Promise<Row | null> {
+  const { data: event } = await db
+    .from('opportunity_events')
+    .select('payload')
+    .eq('account_id', args.accountId)
+    .eq('opportunity_id', args.opportunityId)
+    .eq('event_type', 'appointment_reserved')
+    .like('idempotency_key', `slot:${args.triggerMessageId}%`)
+    .order('occurred_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const appointmentId =
+    event?.payload && typeof event.payload === 'object'
+      ? String((event.payload as Row).appointment_id ?? '')
+      : '';
+  if (!appointmentId) return null;
+
+  const { data: appointment } = await db
+    .from('appointments')
+    .select('*')
+    .eq('account_id', args.accountId)
+    .eq('opportunity_id', args.opportunityId)
+    .eq('id', appointmentId)
+    .in('status', ['reserved', 'broker_confirmed'])
+    .maybeSingle();
+  return (appointment as Row | null) ?? null;
 }
 
 export function knownReactivationConfirmationCandidates(args: {
