@@ -31,7 +31,11 @@ Especificação da importação segura de conversas antigas:
 - as referências externas ficam fixadas em commits auditados e não recebem
   atualização automática;
 - o redesign será incremental, rota por rota, com validação de owner, corretor,
-  desktop, celular e estados de exceção antes de qualquer promoção.
+  desktop, celular e estados de exceção antes de qualquer promoção;
+- o inventário inicial de rotas, perfis, riscos e fases está registrado em
+  [Inventário visual do Studiosp](./INVENTARIO_VISUAL_STUDIOSP_2026-07-28.md);
+- nenhuma implementação visual começa antes da aprovação da direção e do
+  congelamento dos cenários funcionais da Fase 0.
 
 ### Robustez operacional da IA — decisão de 27 de julho de 2026
 

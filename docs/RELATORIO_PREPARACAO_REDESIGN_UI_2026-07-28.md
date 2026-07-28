@@ -40,14 +40,20 @@ biblioteca visual ou script externo foi adicionada ao Studiosp.
 - nenhum arquivo de aplicação, API, banco ou infraestrutura alterado;
 - nenhum deploy realizado.
 
+## Inventário visual
+
+O inventário foi concluído em
+`docs/INVENTARIO_VISUAL_STUDIOSP_2026-07-28.md`. Ele registra rotas, perfis,
+problemas por superfície, riscos funcionais, direção visual e uma sequência
+segura de implementação.
+
 ## Próximo passo recomendado
 
-Executar a fase de inventário visual: capturar as telas atuais por perfil e
-breakpoint, classificar rotas ativas/legadas e aprovar a direção visual antes
-de editar tokens ou componentes.
+Aprovar a direção visual e as quatro decisões pendentes do inventário. Depois,
+executar a Fase 0, congelando os cenários E2E e a matriz de estados antes de
+editar tokens ou componentes.
 
 ## Rollback
 
 Remover `.agents/skills/studiosp-ui-redesign`, este relatório e a seção de
 redesign no Plano Mestre. Não existe rollback de banco ou infraestrutura.
-
