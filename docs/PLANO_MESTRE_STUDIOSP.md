@@ -13,6 +13,30 @@ Especificação da importação segura de conversas antigas:
 
 ## Estado da implementação
 
+### Construtor seguro da qualificação — 28 de julho de 2026
+
+#### Implementado em staging, aguardando homologação
+
+- o Dono configura informações a descobrir, e não frases rígidas que a IA
+  precisa repetir;
+- cada informação possui nome interno, objetivo, tipo normalizado, exemplo
+  opcional de pergunta, exemplos de resposta e orientação para ambiguidades;
+- campos de escolha exigem ao menos duas opções e aceitam aliases;
+- informações adicionais podem ser complementares ou bloquear a conclusão;
+- condições só podem depender de uma informação anterior, evitando ciclos;
+- objetivos essenciais não podem ser desativados nem perder tipo,
+  obrigatoriedade ou aplicação;
+- a extração usa somente informações aplicáveis, valida valores e mantém
+  exemplos separados de evidências reais do lead;
+- a IA recebe o objetivo configurado e formula uma pergunta curta conforme o
+  contexto, preservando uma pergunta por mensagem e a liberdade para responder
+  desvios úteis;
+- gravação e reordenação são transações `security invoker` protegidas por RLS;
+- migration aplicada somente no Supabase **Studiosp Staging**; produção
+  permanece sem esta mudança;
+- implementação, verificações e rollback estão registrados no
+  [Relatório do construtor de qualificação](./RELATORIO_CONSTRUTOR_QUALIFICACAO_IA_2026-07-28.md).
+
 ### Redesign integral da interface — decisão de 28 de julho de 2026
 
 #### Confirmado

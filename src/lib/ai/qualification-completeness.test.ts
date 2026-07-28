@@ -72,4 +72,57 @@ describe('qualificationQuestionsRequiredBeforeMeeting', () => {
         .missingQuestions
     ).toEqual([questions[1]]);
   });
+
+  it('não bloqueia a conclusão com um campo condicional que não se aplica', () => {
+    const questions = [
+      {
+        id: 'objective',
+        key: 'purchase_objective',
+        is_active: true,
+        is_required: true,
+        visibility_condition: {},
+      },
+      {
+        id: 'entry',
+        key: 'entry_budget',
+        is_active: true,
+        is_required: false,
+        visibility_condition: {},
+      },
+      {
+        id: 'conditional',
+        key: 'custom_investor_experience',
+        is_active: true,
+        is_required: true,
+        visibility_condition: {
+          mode: 'answer_matches',
+          question_key: 'purchase_objective',
+          operator: 'equals',
+          values: ['investir'],
+        },
+      },
+    ];
+    const answers = [
+      {
+        question_id: 'objective',
+        status: 'confirmed',
+        is_current: true,
+        normalized_value: { value: 'morar' },
+      },
+      {
+        question_id: 'entry',
+        status: 'confirmed',
+        is_current: true,
+        normalized_value: { min: 50000, max: 50000, currency: 'BRL' },
+      },
+    ];
+
+    expect(
+      qualificationRequirementState(
+        questions,
+        new Set(['objective', 'entry']),
+        answers
+      )
+    ).toEqual({ complete: true, missingQuestions: [] });
+  });
 });

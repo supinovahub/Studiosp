@@ -76,6 +76,7 @@ export interface StudiospData {
   appointments?: StudiospAppointment[];
   events?: Record<string, unknown>[];
   questions?: Record<string, unknown>[];
+  questionOptions?: Record<string, unknown>[];
   answers?: Record<string, unknown>[];
   matches?: Record<string, unknown>[];
   developments?: Record<string, unknown>[];

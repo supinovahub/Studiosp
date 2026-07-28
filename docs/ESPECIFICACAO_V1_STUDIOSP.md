@@ -264,22 +264,38 @@ flowchart LR
 - Baixa: abaixo de 0,55; não conclui o campo e pergunta novamente.
 - Campos obrigatórios precisam estar confirmados para concluir a qualificação.
 
-### 5.5 Perguntas configuráveis
+### 5.5 Informações configuráveis de qualificação
 
 O dono pode:
 
-- editar o texto e a orientação das perguntas;
+- dar um nome interno para a informação;
+- explicar o objetivo que a IA precisa descobrir, sem escrever um roteiro;
+- cadastrar um exemplo opcional de pergunta e exemplos de resposta;
+- orientar como esclarecer respostas ambíguas;
 - alterar prioridade e ordem;
 - configurar opções permitidas;
-- adicionar perguntas personalizadas;
-- criar condições de exibição;
-- desativar perguntas personalizadas;
+- adicionar informações personalizadas;
+- permitir uma resposta explícita de desconhecimento;
+- criar condições baseadas somente em uma informação anterior;
+- desativar informações personalizadas;
 - testar em simulador;
 - salvar rascunho;
 - publicar versão;
 - restaurar versão anterior.
 
-Os cinco objetivos mínimos da qualificação permanecem invariáveis. O dono pode mudar como são perguntados, mas não remover o dado necessário.
+Os objetivos essenciais permanecem protegidos: o dono pode ajustar nome,
+orientação, exemplos, opções e ordem, mas não pode desativá-los, mudar seu tipo
+ou retirar sua garantia operacional. Informações personalizadas obrigatórias
+bloqueiam a conclusão enquanto estiverem aplicáveis e sem resposta confirmada.
+
+O modelo decide a frase adequada a cada turno usando a conversa e o objetivo
+configurado. Exemplos são referências, nunca fatos do lead nem frases que
+precisam ser copiadas. Configurações inválidas, duplicadas, cíclicas ou com
+menos de duas opções em campos de escolha são recusadas no servidor e no banco.
+
+Na entrega atual, alterações salvas passam a valer imediatamente para conversas
+novas e em andamento. O ciclo completo de rascunho, simulador, publicação e
+restauração permanece como evolução planejada do versionamento.
 
 ## 6. IA
 
@@ -958,14 +974,15 @@ Comportamento:
 - transbordo;
 - fechamento da qualificação.
 
-Perguntas:
+Informações de qualificação:
 
 - construtor;
 - tipo;
 - opções;
 - ordem;
 - obrigatoriedade;
-- condições;
+- exemplos e orientação de esclarecimento;
+- condições dependentes somente de informações anteriores;
 - vínculo canônico.
 
 Publicação:

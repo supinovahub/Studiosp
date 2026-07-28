@@ -13,6 +13,10 @@ import {
   SendMessageError,
   sendMessageToConversation,
 } from '@/lib/whatsapp/send-message';
+import {
+  prepareQualificationQuestionInput,
+  qualificationLabelFingerprint,
+} from '@/lib/ai/qualification-question-config';
 
 function text(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
@@ -442,45 +446,114 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'save_question') {
-      const label = text(body.label);
-      if (!label)
+      const questionId = text(body.id) || null;
+      const values = prepareQualificationQuestionInput(body);
+      const [questionsResult, existingResult] = await Promise.all([
+        supabase
+          .from('qualification_questions')
+          .select('id, label')
+          .eq('account_id', accountId),
+        questionId
+          ? supabase
+              .from('qualification_questions')
+              .select(
+                'id, key, data_type, normalization_strategy, is_required, is_active, is_system'
+              )
+              .eq('account_id', accountId)
+              .eq('id', questionId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+      actionError(questionsResult.error);
+      actionError(existingResult.error);
+      const existing = existingResult.data;
+      if (questionId && !existing) {
         return NextResponse.json(
-          { error: 'Informe a pergunta.' },
+          { error: 'Informação de qualificação não encontrada.' },
+          { status: 404 }
+        );
+      }
+      const fingerprint = qualificationLabelFingerprint(values.label);
+      const duplicate = (questionsResult.data ?? []).find(
+        (question) =>
+          question.id !== questionId &&
+          qualificationLabelFingerprint(question.label) === fingerprint
+      );
+      if (duplicate) {
+        return NextResponse.json(
+          {
+            error:
+              'Já existe uma informação com esse nome. Edite a existente ou escolha outro nome.',
+          },
+          { status: 409 }
+        );
+      }
+      if (
+        existing?.is_system &&
+        (values.dataType !== existing.data_type ||
+          values.isRequired !== existing.is_required ||
+          values.isActive !== existing.is_active ||
+          values.visibilityCondition.mode !== 'always')
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'Objetivos essenciais não podem ser desativados nem ter seu tipo ou obrigatoriedade alterados.',
+          },
           { status: 400 }
         );
-      const values = {
-        account_id: accountId,
-        label,
-        prompt_instruction:
-          text(body.promptInstruction) || `Entenda naturalmente: ${label}.`,
-        data_type: text(body.dataType, 'text'),
-        normalization_strategy: text(
-          body.normalizationStrategy,
-          'free_text_v1'
-        ),
-        is_required: body.isRequired === true,
-        is_active: body.isActive !== false,
-        display_order: Number(body.displayOrder ?? 100),
-      };
-      const result = body.id
-        ? await supabase
-            .from('qualification_questions')
-            .update(values)
-            .eq('account_id', accountId)
-            .eq('id', text(body.id))
-            .select()
-            .single()
-        : await supabase
-            .from('qualification_questions')
-            .insert({
-              ...values,
-              key: `custom_${Date.now().toString(36)}`,
-              is_system: false,
-            })
-            .select()
-            .single();
+      }
+      if (
+        values.visibilityCondition.mode === 'answer_matches' &&
+        values.visibilityCondition.question_key === existing?.key
+      ) {
+        return NextResponse.json(
+          { error: 'Uma informação não pode depender dela mesma.' },
+          { status: 400 }
+        );
+      }
+      const result = await supabase.rpc(
+        'studiosp_save_qualification_question',
+        {
+          p_account_id: accountId,
+          p_question_id: questionId,
+          p_label: values.label,
+          p_prompt_instruction: values.promptInstruction,
+          p_data_type: values.dataType,
+          p_normalization_strategy: existing?.is_system
+            ? existing.normalization_strategy
+            : values.normalizationStrategy,
+          p_is_required: values.isRequired,
+          p_is_active: values.isActive,
+          p_display_order: values.displayOrder,
+          p_validation_schema: values.validationSchema,
+          p_visibility_condition: values.visibilityCondition,
+          p_options: values.options,
+        }
+      );
       actionError(result.error);
       return NextResponse.json({ question: result.data });
+    }
+
+    if (action === 'reorder_qualification_questions') {
+      const questionIds = Array.isArray(body.questionIds)
+        ? body.questionIds.map((value) => text(value)).filter(Boolean)
+        : [];
+      if (!questionIds.length) {
+        return NextResponse.json(
+          { error: 'Informe a nova ordem das informações.' },
+          { status: 400 }
+        );
+      }
+      const result = await supabase.rpc(
+        'studiosp_reorder_qualification_questions',
+        {
+          p_account_id: accountId,
+          p_question_ids: questionIds,
+        }
+      );
+      actionError(result.error);
+      return NextResponse.json({ questions: result.data });
     }
 
     if (action === 'save_ai_config') {

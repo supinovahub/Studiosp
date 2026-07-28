@@ -284,14 +284,45 @@ Uma restrição parcial impede dois itens abertos com a mesma `deduplication_key
 | `normalization_strategy`                | text controlado                                                                             |
 | `is_required`, `is_system`, `is_active` | boolean                                                                                     |
 | `display_order`                         | integer                                                                                     |
+| `visibility_condition`                  | jsonb controlado; sempre ou condição sobre uma pergunta anterior                            |
 | `validation_schema`                     | jsonb                                                                                       |
 | `created_at`, `updated_at`              | timestamptz                                                                                 |
 
-Perguntas do sistema aceitam edição de texto, ordem e orientação, mas sua `key` e seu tipo não são alteráveis livremente.
+`validation_schema` pode conter `question_example`,
+`clarification_guidance`, `examples`, `allow_unknown`, `minimum`, `maximum` e
+`currency`. Exemplos orientam interpretação e formulação, mas nunca são
+gravados como resposta sem evidência na mensagem do lead.
+
+`visibility_condition` usa somente estes formatos:
+
+```json
+{ "mode": "always" }
+```
+
+```json
+{
+  "mode": "answer_matches",
+  "question_key": "purchase_objective",
+  "operator": "answered | not_answered | equals | includes_any",
+  "values": ["investir"]
+}
+```
+
+A dependência precisa aparecer antes do campo condicionado. Isso impede ciclos
+e garante que a IA consiga chegar à pergunta. Perguntas do sistema aceitam
+edição de nome, ordem, orientação, exemplos e rótulos de opções, mas `key`,
+tipo, obrigatoriedade, atividade e aplicação permanente são protegidos.
+
+As funções `studiosp_save_qualification_question` e
+`studiosp_reorder_qualification_questions` executam as alterações de forma
+atômica, como `security invoker`, sob RLS e validação administrativa.
 
 ### 6.2 `qualification_question_options`
 
-Contém `question_id`, `value` estável, `label`, `aliases`, `display_order` e `is_active`. A combinação `(question_id, value)` é única.
+Contém `question_id`, `value` estável, `label`, `aliases`, `display_order` e
+`is_active`. A combinação `(question_id, value)` é única. Campos de escolha
+exigem ao menos duas opções ativas; valores canônicos das opções essenciais não
+podem ser removidos.
 
 ### 6.3 `qualification_answers`
 

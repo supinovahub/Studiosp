@@ -110,6 +110,7 @@ export function qualificationQuestionPrompt(question?: {
   key?: unknown;
   label?: unknown;
   prompt_instruction?: unknown;
+  validation_schema?: unknown;
 }) {
   if (!question) return null;
   const prompts: Record<string, string> = {
@@ -128,9 +129,20 @@ export function qualificationQuestionPrompt(question?: {
   };
   const key = String(question.key ?? '');
   if (prompts[key]) return prompts[key];
+  const validation =
+    question.validation_schema &&
+    typeof question.validation_schema === 'object' &&
+    !Array.isArray(question.validation_schema)
+      ? (question.validation_schema as Record<string, unknown>)
+      : {};
+  const configuredExample =
+    typeof validation.question_example === 'string'
+      ? validation.question_example.trim()
+      : '';
+  if (configuredExample) return configuredExample;
   const label = String(question.label ?? '').trim();
   return label
-    ? `Me conta uma coisa: ${label.toLocaleLowerCase('pt-BR')}?`
+    ? `Pra eu entender melhor, me conta sobre ${label.toLocaleLowerCase('pt-BR')}?`
     : null;
 }
 

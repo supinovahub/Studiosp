@@ -11,6 +11,7 @@ import {
 } from './scheduling-intent';
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
 import { isValidQualificationValue } from './qualification-validation';
+import { visibleQualificationQuestions } from './qualification-question-config';
 import { generateReply } from './generate';
 import type { AiConfig, ChatMessage } from './types';
 import { loadAiConfig } from './config';
@@ -369,6 +370,13 @@ export async function prepareStudiospTurn(args: {
   if (!questions?.length) {
     return { ...empty, opportunityId: opportunity.id };
   }
+  const confirmedAnswersAtTurn = ((currentAnswers ?? []) as Row[]).filter(
+    (answer) => answer.status === 'confirmed' && answer.is_current !== false
+  );
+  const visibleQuestionsAtTurn = visibleQualificationQuestions(
+    questions as Row[],
+    confirmedAnswersAtTurn
+  );
 
   const availableSlots = await loadAvailableSlots(args.db, args.accountId);
   const startedAt = Date.now();
@@ -405,7 +413,7 @@ export async function prepareStudiospTurn(args: {
   });
   try {
     const extractionPrompt = buildExtractionPrompt(
-      questions as Row[],
+      visibleQuestionsAtTurn,
       options as Row[],
       currentAnswers as Row[],
       availableSlots,
@@ -429,7 +437,7 @@ export async function prepareStudiospTurn(args: {
       ? extraction.answers
       : [];
     const explicitUnknown = explicitUnknownCandidate({
-      questions: questions as Row[],
+      questions: visibleQuestionsAtTurn,
       latestUserMessage: latestUserText,
       expectedQuestionKey: turn.expectedQuestionKey,
     });
@@ -440,7 +448,7 @@ export async function prepareStudiospTurn(args: {
       }
     }
     for (const candidate of knownReactivationConfirmationCandidates({
-      questions: questions as Row[],
+      questions: visibleQuestionsAtTurn,
       knownContext: (reactivationSession?.known_context ?? {}) as Row,
       latestUserMessage: latestUserText,
       expectedQuestionKey: turn.expectedQuestionKey,
@@ -456,7 +464,7 @@ export async function prepareStudiospTurn(args: {
     }
     const answerRows = [...candidateByQuestion.values()];
     const questionMap = new Map(
-      (questions as Row[]).map((question) => [question.id, question])
+      visibleQuestionsAtTurn.map((question) => [question.id, question])
     );
     const currentMap = new Map(
       ((currentAnswers ?? []) as Row[]).map((answer) => [
@@ -618,7 +626,7 @@ export async function prepareStudiospTurn(args: {
   const reservableSlots = await loadAvailableSlots(args.db, args.accountId);
   const preReservationAnswers = await args.db
     .from('qualification_answers')
-    .select('question_id')
+    .select('question_id, normalized_value, status, is_current')
     .eq('account_id', args.accountId)
     .eq('opportunity_id', opportunity.id)
     .eq('is_current', true)
@@ -628,7 +636,8 @@ export async function prepareStudiospTurn(args: {
   );
   const qualificationBeforeReservation = qualificationRequirementState(
     questions as Row[],
-    preReservationConfirmedIds
+    preReservationConfirmedIds,
+    (preReservationAnswers.data ?? []) as Row[]
   );
   const qualificationCompleteBeforeReservation =
     qualificationBeforeReservation.complete;
@@ -754,7 +763,8 @@ export async function prepareStudiospTurn(args: {
   );
   const qualification = qualificationRequirementState(
     questions as Row[],
-    confirmedQuestionIds
+    confirmedQuestionIds,
+    (answerRefresh.data ?? []) as Row[]
   );
   const missingQuestions = qualification.missingQuestions;
   const missing = missingQuestions.map((question) => question.label);
@@ -791,6 +801,9 @@ export async function prepareStudiospTurn(args: {
     missing.length
       ? `Perguntas obrigatórias ainda sem resposta confirmada: ${missing.join('; ')}.`
       : 'Todas as perguntas obrigatórias foram respondidas.',
+    nextQuestion
+      ? `Próxima informação a descobrir: ${String(nextQuestion.label)}. Objetivo configurado pelo dono: ${String(nextQuestion.prompt_instruction)}. Critérios de validação e exemplos orientativos: ${JSON.stringify(nextQuestion.validation_schema ?? {})}. Formule uma única pergunta curta e natural para este contexto; não copie mecanicamente os exemplos nem trate exemplos como resposta do lead.`
+      : null,
     qualification.complete
       ? 'A qualificação mínima está concluída. Somente agora você pode dizer que existem algumas oportunidades de acordo com o perfil. Nunca revele quantidade, nomes, preços ou uma unidade específica antes da conversa com o corretor.'
       : 'A qualificação mínima ainda não está concluída. Não diga que encontrou oportunidades e não ofereça reunião antes de concluir os campos pendentes.',
@@ -1140,6 +1153,8 @@ function buildExtractionPrompt(
     type: question.data_type,
     instruction: question.prompt_instruction,
     required: question.is_required,
+    validation: question.validation_schema,
+    visibility: question.visibility_condition,
     options: options
       .filter((option) => option.question_id === question.id)
       .map((option) => ({
@@ -1157,6 +1172,8 @@ Regras:
 - O histórico anterior serve apenas para entender contexto e produzir summary/call_brief. Em answers, extraia SOMENTE fatos afirmados ou corrigidos na ÚLTIMA MENSAGEM DO LEAD.
 - raw_text deve ser um trecho literal da última mensagem do lead. Nunca copie como raw_text algo dito pela assistente ou em uma mensagem anterior.
 - Exemplos dados pela assistente nunca são respostas do lead.
+- Os exemplos e orientações configurados em validation são apenas referências de interpretação. Nunca os copie para answers e nunca suponha que o lead escolheu um exemplo.
+- Respeite a condição visibility de cada informação. A lista abaixo já contém apenas informações aplicáveis ao momento atual.
 - Uma resposta curta como "sim", "não", "não sei" ou um valor sem rótulo só pode responder ao campo esperado pela pergunta imediatamente anterior.
 - Se a última mensagem negar um valor ou disser que não sabe, não recupere um número antigo para preencher esse campo.
 - Não repita respostas atuais em answers, exceto quando a última mensagem fizer uma correção explícita.
@@ -1164,6 +1181,7 @@ Regras:
 - Para dinheiro use {"min":numero_ou_null,"max":numero_ou_null,"currency":"BRL"}.
 - Para localização use uma lista de nomes em {"values":["bairro"]}.
 - Para data/período use {"text":"preferência dita pelo lead"}.
+- Quando validation.allow_unknown for true e o lead disser explicitamente que não sabe, use {"unknown":true}. Não use unknown por mera ausência de resposta.
 - Quando o lead propuser data e horário, registre também a pergunta configurada com key schedule_preference.
 - requested_start_at deve conter a data e hora solicitadas pelo lead em ISO 8601 com offset de São Paulo, inclusive para expressões relativas como "amanhã às 10h". Agora: ${new Date().toISOString()}. Fuso operacional: America/Sao_Paulo.
 - accepted_slot_id só pode ser preenchido quando o lead aceitar claramente um horário exato que a assistente acabou de oferecer e o ID estiver na lista de horários. Caso contrário, null.
@@ -1209,9 +1227,10 @@ function normalize(value: unknown) {
 }
 
 export function qualificationQuestionsRequiredBeforeMeeting(
-  questions: Row[]
+  questions: Row[],
+  confirmedAnswers: Row[] = []
 ): Row[] {
-  return questions.filter(
+  return visibleQualificationQuestions(questions, confirmedAnswers).filter(
     (question) =>
       question.is_active !== false &&
       question.is_required === true &&
@@ -1221,13 +1240,23 @@ export function qualificationQuestionsRequiredBeforeMeeting(
 
 export function qualificationRequirementState(
   questions: Row[],
-  confirmedQuestionIds: Set<unknown>
+  confirmedQuestionIds: Set<unknown>,
+  confirmedAnswers: Row[] = []
 ) {
-  const required = qualificationQuestionsRequiredBeforeMeeting(questions);
+  const visibleQuestions = visibleQualificationQuestions(
+    questions,
+    confirmedAnswers
+  );
+  const required = visibleQuestions.filter(
+    (question) =>
+      question.is_active !== false &&
+      question.is_required === true &&
+      question.key !== 'schedule_preference'
+  );
   const missingQuestions = required.filter(
     (question) => !confirmedQuestionIds.has(question.id)
   );
-  const financialQuestions = questions.filter(
+  const financialQuestions = visibleQuestions.filter(
     (question) =>
       question.is_active !== false &&
       ['entry_budget', 'monthly_installment_budget'].includes(

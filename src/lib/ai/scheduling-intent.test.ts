@@ -116,6 +116,20 @@ describe('scheduling intent', () => {
     ).toContain('agendar');
   });
 
+  it('uses the configured example only as the deterministic custom fallback', () => {
+    expect(
+      qualificationQuestionPrompt({
+        key: 'custom_move_reason',
+        label: 'Motivo da mudança',
+        prompt_instruction:
+          'Entenda o que levou o lead a procurar neste momento.',
+        validation_schema: {
+          question_example: 'O que fez você começar a procurar agora?',
+        },
+      })
+    ).toBe('O que fez você começar a procurar agora?');
+  });
+
   it('answers availability but resumes qualification before reserving', () => {
     expect(
       availabilityReply({

@@ -4,7 +4,6 @@ import {
   Bot,
   Clock3,
   MessageSquareText,
-  Plus,
   Save,
   ShieldCheck,
 } from 'lucide-react';
@@ -12,12 +11,12 @@ import { FormEvent, useEffect, useState } from 'react';
 import { AiConfig } from '@/components/settings/ai-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { runStudiospAction, useStudiospData } from '@/hooks/use-studiosp-data';
 import { formatDateTime } from '@/lib/studiosp/labels';
 import { PageHeader } from './page-header';
 import { ErrorState, LoadingState } from './operational-state';
+import { QualificationInformationBuilder } from './qualification-information-builder';
 import { StatusBadge } from './status-badge';
 
 type Tab =
@@ -59,6 +58,7 @@ export function IntelligencePage() {
       await runStudiospAction(action, payload);
       setMessage({ type: 'success', text: success });
       await reload();
+      return true;
     } catch (saveError) {
       setMessage({
         type: 'error',
@@ -67,6 +67,7 @@ export function IntelligencePage() {
             ? saveError.message
             : 'Não foi possível salvar.',
       });
+      return false;
     } finally {
       setSaving(false);
     }
@@ -126,8 +127,9 @@ export function IntelligencePage() {
         />
       ) : null}
       {tab === 'questions' ? (
-        <QuestionsPanel
+        <QualificationInformationBuilder
           questions={data.questions ?? []}
+          questionOptions={data.questionOptions ?? []}
           saving={saving}
           disabled={!canManage}
           onSave={(payload) =>
@@ -135,8 +137,15 @@ export function IntelligencePage() {
               'save_question',
               payload,
               payload.id
-                ? 'Pergunta atualizada.'
-                : 'Pergunta adicionada à qualificação.'
+                ? 'Informação atualizada.'
+                : 'Informação adicionada à qualificação.'
+            )
+          }
+          onReorder={(questionIds) =>
+            save(
+              'reorder_qualification_questions',
+              { questionIds },
+              'Ordem da qualificação atualizada.'
             )
           }
         />
@@ -399,144 +408,6 @@ function BehaviorForm({
         ) : null}
       </div>
     </form>
-  );
-}
-
-function QuestionsPanel({
-  questions,
-  saving,
-  disabled,
-  onSave,
-}: {
-  questions: Record<string, unknown>[];
-  saving: boolean;
-  disabled: boolean;
-  onSave: (payload: Record<string, unknown>) => void;
-}) {
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    onSave({
-      label: form.get('label'),
-      promptInstruction: form.get('promptInstruction'),
-      dataType: form.get('dataType'),
-      isRequired: form.get('isRequired') === 'on',
-      displayOrder: questions.length * 10 + 10,
-    });
-    event.currentTarget.reset();
-  }
-  return (
-    <div className="space-y-4">
-      <div className="border-border/70 bg-card overflow-hidden rounded-2xl border">
-        <div className="border-border border-b px-4 py-3">
-          <h3 className="text-foreground text-sm font-semibold">
-            Perguntas ativas
-          </h3>
-          <p className="text-muted-foreground text-xs">
-            A IA pode fugir da sequência para responder o lead e depois retoma
-            naturalmente.
-          </p>
-        </div>
-        <div className="divide-border divide-y">
-          {questions.map((question, index) => (
-            <div
-              key={String(question.id)}
-              className="grid gap-3 px-4 py-3 sm:grid-cols-[auto_1fr_auto] sm:items-center"
-            >
-              <span className="border-border bg-muted/50 text-muted-foreground flex size-7 items-center justify-center rounded-full border text-[10px] font-semibold">
-                {index + 1}
-              </span>
-              <div>
-                <p className="text-foreground text-sm font-medium">
-                  {String(question.label)}
-                </p>
-                <p className="text-muted-foreground mt-0.5 text-xs leading-5">
-                  {String(question.prompt_instruction)}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusBadge
-                  compact
-                  label={question.is_required ? 'Obrigatória' : 'Opcional'}
-                  tone={question.is_required ? 'primary' : 'neutral'}
-                />
-                {!disabled ? (
-                  <Switch
-                    checked={question.is_active === true}
-                    onCheckedChange={(checked) =>
-                      onSave({
-                        ...question,
-                        id: question.id,
-                        label: question.label,
-                        promptInstruction: question.prompt_instruction,
-                        dataType: question.data_type,
-                        normalizationStrategy: question.normalization_strategy,
-                        isRequired: question.is_required,
-                        isActive: checked,
-                        displayOrder: question.display_order,
-                      })
-                    }
-                    aria-label={`${question.is_active ? 'Desativar' : 'Ativar'} ${String(question.label)}`}
-                  />
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {!disabled ? (
-        <form
-          onSubmit={submit}
-          className="border-primary/25 bg-primary/5 rounded-lg border p-4"
-        >
-          <h3 className="text-foreground flex items-center gap-2 text-sm font-semibold">
-            <Plus className="text-primary size-4" /> Adicionar pergunta
-            configurável
-          </h3>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <Field label="Pergunta">
-              <Input
-                name="label"
-                required
-                placeholder="Ex.: Qual faixa de entrada fica confortável?"
-              />
-            </Field>
-            <Field label="Tipo de resposta">
-              <select
-                name="dataType"
-                className="border-input bg-background text-foreground h-9 w-full rounded-lg border px-2 text-sm"
-              >
-                <option value="text">Texto livre</option>
-                <option value="single_choice">Escolha única</option>
-                <option value="money_range">Faixa de valor</option>
-                <option value="location">Localização</option>
-                <option value="boolean">Sim ou não</option>
-              </select>
-            </Field>
-            <Field label="Como a IA deve perguntar" wide>
-              <Textarea
-                name="promptInstruction"
-                rows={3}
-                placeholder="Explique a intenção da pergunta, sem escrever um roteiro rígido."
-              />
-            </Field>
-            <label className="text-muted-foreground flex items-center gap-2 text-xs">
-              <input
-                name="isRequired"
-                type="checkbox"
-                className="accent-primary size-4"
-              />{' '}
-              Obrigatória para concluir a qualificação
-            </label>
-            <div className="flex justify-end">
-              <Button type="submit" disabled={saving}>
-                <Plus /> Adicionar
-              </Button>
-            </div>
-          </div>
-        </form>
-      ) : null}
-    </div>
   );
 }
 

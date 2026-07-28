@@ -57,4 +57,43 @@ describe('qualification value validation', () => {
       )
     ).toBe(false);
   });
+
+  it('honors configured financial limits', () => {
+    const question = {
+      data_type: 'money_range',
+      validation_schema: { minimum: 1_000, maximum: 5_000 },
+    };
+    expect(
+      isValidQualificationValue(question, {
+        min: 1_500,
+        max: 3_000,
+        currency: 'BRL',
+      })
+    ).toBe(true);
+    expect(
+      isValidQualificationValue(question, {
+        min: 800,
+        max: 3_000,
+        currency: 'BRL',
+      })
+    ).toBe(false);
+  });
+
+  it('accepts explicit uncertainty only when configured', () => {
+    expect(
+      isValidQualificationValue(
+        {
+          data_type: 'money_range',
+          validation_schema: { allow_unknown: true },
+        },
+        { unknown: true }
+      )
+    ).toBe(true);
+    expect(
+      isValidQualificationValue(
+        { data_type: 'money_range', validation_schema: {} },
+        { unknown: true }
+      )
+    ).toBe(false);
+  });
 });
