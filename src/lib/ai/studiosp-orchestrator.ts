@@ -573,11 +573,10 @@ export async function prepareStudiospTurn(args: {
   const confirmedQuestionIds = new Set(
     (answerRefresh.data ?? []).map((answer) => answer.question_id)
   );
-  const missing = (questions as Row[])
-    .filter(
-      (question) =>
-        question.is_required && !confirmedQuestionIds.has(question.id)
-    )
+  const missing = qualificationQuestionsRequiredBeforeMeeting(
+    questions as Row[]
+  )
+    .filter((question) => !confirmedQuestionIds.has(question.id))
     .map((question) => question.label);
   const latestMatch = await args.db
     .from('property_match_runs')
@@ -956,6 +955,15 @@ function normalize(value: unknown) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('pt-BR');
+}
+
+export function qualificationQuestionsRequiredBeforeMeeting(
+  questions: Row[]
+): Row[] {
+  return questions.filter(
+    (question) =>
+      question.is_active !== false && question.key !== 'schedule_preference'
+  );
 }
 
 export async function existingReservationForTrigger(

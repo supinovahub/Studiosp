@@ -596,16 +596,24 @@ export function LeadDetailPage({ id }: { id: string }) {
 }
 
 function readableValue(value: unknown, raw: unknown) {
-  if (raw && typeof raw === 'string') return raw;
   if (value === null || value === undefined) return 'Não informado';
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const object = value as Record<string, unknown>;
+    if ('min' in object || 'max' in object) {
+      const min = Number(object.min ?? object.max);
+      const max = Number(object.max ?? object.min);
+      return min === max
+        ? formatCurrencyBRL(min)
+        : `${formatCurrencyBRL(min)} a ${formatCurrencyBRL(max)}`;
+    }
+  }
+  if (raw && typeof raw === 'string') return raw;
   if (typeof value === 'string' || typeof value === 'number')
     return String(value);
   if (Array.isArray(value)) return value.join(', ');
   if (typeof value === 'object') {
     const object = value as Record<string, unknown>;
     if ('label' in object) return String(object.label);
-    if ('min' in object || 'max' in object)
-      return `${formatCurrencyBRL(object.min as number)} a ${formatCurrencyBRL(object.max as number)}`;
     return (
       Object.values(object)
         .filter((item) => item !== null && item !== '')

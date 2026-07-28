@@ -1754,3 +1754,18 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   **Inteligência**, mantendo `/agents` apenas como compatibilidade temporária;
 - a nova extração e a unificação de IA estão implementadas localmente e ainda
   aguardam homologação no Preview/Staging.
+
+### Correções operacionais de 28 de julho de 2026
+
+#### Confirmado
+
+- depois de `Call finalizada`, o corretor responsável perde acesso ao contato,
+  à oportunidade, à conversa e às mensagens; o dono preserva a visão
+  administrativa e o bloqueio é aplicado por RLS no servidor;
+- a IA somente pode ofertar uma reunião depois que todas as perguntas ativas
+  da qualificação estiverem confirmadas, exceto a preferência de horário, que
+  pertence à própria etapa de agendamento;
+- valor de entrada, parcela mensal e preço total são métricas diferentes e
+  devem ser coletadas separadamente;
+- um retry posterior à reserva deve recuperar e confirmar a reserva já criada
+  para a mensagem original, sem recalcular a agenda nem oferecer outro horário.
