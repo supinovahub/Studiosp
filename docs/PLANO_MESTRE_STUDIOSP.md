@@ -37,6 +37,17 @@ Especificação da importação segura de conversas antigas:
 - nenhuma implementação visual começa antes da aprovação da direção e do
   congelamento dos cenários funcionais da Fase 0.
 
+#### Implementado, aguardando homologação visual
+
+- Fase 0 concluída com contratos congelados em
+  [Contratos do redesign](./CONTRATOS_REDESIGN_FASE_0_2026-07-28.md);
+- Fase 1 implementada na branch de redesign com tokens semânticos, shell,
+  navegação, estados operacionais e primitives compartilhadas;
+- testes, typecheck, lint e build aprovados conforme
+  [Relatório das Fases 0 e 1](./RELATORIO_REDESIGN_FASE_0_1_2026-07-28.md);
+- a próxima implementação cobre Visão geral, Central de atenção, Meu dia e
+  pendências, após homologação visual do preview da fundação.
+
 ### Robustez operacional da IA — decisão de 27 de julho de 2026
 
 #### Confirmado
