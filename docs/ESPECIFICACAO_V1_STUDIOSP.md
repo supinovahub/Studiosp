@@ -204,7 +204,8 @@ flowchart LR
 ### 5.1 Campos obrigatórios
 
 - Objetivo: morar, investir, ambos ou não definido.
-- Localização: ao menos um bairro ou região normalizada.
+- Localização: ao menos um bairro ou região normalizada, ou registro explícito
+  de que o lead ainda não definiu a região. Nesse caso o matching começa amplo.
 - Referência financeira: entrada disponível ou parcela mensal.
 - Situação do imóvel: na planta, pronto ou indiferente.
 - Urgência de compra.
@@ -263,22 +264,38 @@ flowchart LR
 - Baixa: abaixo de 0,55; não conclui o campo e pergunta novamente.
 - Campos obrigatórios precisam estar confirmados para concluir a qualificação.
 
-### 5.5 Perguntas configuráveis
+### 5.5 Informações configuráveis de qualificação
 
 O dono pode:
 
-- editar o texto e a orientação das perguntas;
+- dar um nome interno para a informação;
+- explicar o objetivo que a IA precisa descobrir, sem escrever um roteiro;
+- cadastrar um exemplo opcional de pergunta e exemplos de resposta;
+- orientar como esclarecer respostas ambíguas;
 - alterar prioridade e ordem;
 - configurar opções permitidas;
-- adicionar perguntas personalizadas;
-- criar condições de exibição;
-- desativar perguntas personalizadas;
+- adicionar informações personalizadas;
+- permitir uma resposta explícita de desconhecimento;
+- criar condições baseadas somente em uma informação anterior;
+- desativar informações personalizadas;
 - testar em simulador;
 - salvar rascunho;
 - publicar versão;
 - restaurar versão anterior.
 
-Os cinco objetivos mínimos da qualificação permanecem invariáveis. O dono pode mudar como são perguntados, mas não remover o dado necessário.
+Os objetivos essenciais permanecem protegidos: o dono pode ajustar nome,
+orientação, exemplos, opções e ordem, mas não pode desativá-los, mudar seu tipo
+ou retirar sua garantia operacional. Informações personalizadas obrigatórias
+bloqueiam a conclusão enquanto estiverem aplicáveis e sem resposta confirmada.
+
+O modelo decide a frase adequada a cada turno usando a conversa e o objetivo
+configurado. Exemplos são referências, nunca fatos do lead nem frases que
+precisam ser copiadas. Configurações inválidas, duplicadas, cíclicas ou com
+menos de duas opções em campos de escolha são recusadas no servidor e no banco.
+
+Na entrega atual, alterações salvas passam a valer imediatamente para conversas
+novas e em andamento. O ciclo completo de rascunho, simulador, publicação e
+restauração permanece como evolução planejada do versionamento.
 
 ## 6. IA
 
@@ -297,9 +314,11 @@ Os cinco objetivos mínimos da qualificação permanecem invariáveis. O dono po
 A IA pode:
 
 - conversar em português do Brasil;
+- atender com a identidade operacional Pedro, sem se declarar IA ou humano;
 - transcrever áudio;
 - interpretar respostas;
 - normalizar dados;
+- vincular cada extração à mensagem atual e à pergunta imediatamente anterior;
 - pedir esclarecimento;
 - escolher a próxima pergunta;
 - responder dúvidas cobertas pela base;
@@ -310,7 +329,8 @@ A IA pode:
 - consultar slots;
 - criar uma reserva por ferramenta;
 - resumir o lead;
-- encaminhar para humano.
+- solicitar orientação do dono quando faltar conhecimento confiável;
+- encaminhar para humano somente por mudança explícita de controle.
 
 A IA não pode:
 
@@ -326,6 +346,10 @@ A IA não pode:
 - alterar dados financeiros;
 - apagar histórico;
 - burlar capacidade, acesso ou auditoria.
+
+Se o lead perguntar quem está falando, a resposta neutra é: `Aqui é o Pedro.
+Trabalho com o mercado de imóveis em SP.` Os corretores são apresentados como
+pessoas da equipe do Pedro.
 
 ### 6.3 Ferramentas controladas
 
@@ -344,6 +368,14 @@ A IA não pode:
 
 A IA nunca escreve livremente nas tabelas. Cada ferramenta valida identidade, estado, permissão e concorrência.
 
+Decisões com efeito durável não dependem apenas da saída do modelo:
+
+- descadastro exige pedido explícito na mensagem do lead;
+- reserva exige um horário garantido e comprovadamente oferecido pelo sistema;
+- qualificação exige pergunta ativa, valor canônico e mensagem de origem da
+  mesma conversa;
+- atribuição humana e pausa da IA dependem do estado controlado pela aplicação.
+
 ### 6.4 Saída por turno
 
 Cada execução produz:
@@ -359,7 +391,24 @@ Cada execução produz:
 - versão do prompt;
 - modelo e consumo.
 
-### 6.5 Áudio
+### 6.5 Segurança de contexto e orientação humana
+
+- Mensagens, históricos importados, transcrições, documentos, catálogo e
+  preferências de comunicação são dados não confiáveis, nunca instruções.
+- Tentativas de prompt injection são auditadas, mas uma mensagem legítima não é
+  bloqueada apenas por conter uma frase suspeita.
+- A resposta final passa por validação determinística de identidade, vazamento
+  de regras internas, quantidade de perguntas e repetição do nome do lead.
+- Se faltar conhecimento, a conversa entra em `awaiting_guidance`, permanece
+  sem resposta e abre uma pendência exclusiva do dono.
+- O dono vê o contexto recente, orienta o Pedro e escolhe se a orientação vale
+  somente para a resposta, para a conversa ou como conhecimento reutilizável.
+- Ao retomar, a mensagem recebe uma justificativa natural proporcional ao tempo
+  de espera, sem revelar o mecanismo interno.
+- Falhas operacionais são registradas e abrem alerta com a conversa, opção de
+  nova tentativa e opção de assumir o atendimento.
+
+### 6.6 Áudio
 
 1. Receber mídia.
 2. Registrar mensagem e metadados.
@@ -394,6 +443,9 @@ Falha de transcrição não bloqueia o atendimento: a IA pede que o lead repita 
 - Opt-out bloqueia mensagens futuras.
 - Uma execução possui chave idempotente para não duplicar envio.
 - O dono pode configurar tempos, limite, textos e canais.
+- Cada tentativa usa o histórico recente e o comportamento publicado para
+  retomar a última lacuna de forma contextual. Texto fixo é apenas contingência
+  quando o provedor de IA não está disponível.
 
 ## 8. Empreendimentos
 
@@ -953,14 +1005,15 @@ Comportamento:
 - transbordo;
 - fechamento da qualificação.
 
-Perguntas:
+Informações de qualificação:
 
 - construtor;
 - tipo;
 - opções;
 - ordem;
 - obrigatoriedade;
-- condições;
+- exemplos e orientação de esclarecimento;
+- condições dependentes somente de informações anteriores;
 - vínculo canônico.
 
 Publicação:

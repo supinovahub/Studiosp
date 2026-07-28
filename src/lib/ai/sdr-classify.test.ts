@@ -20,10 +20,10 @@ describe('parseSdrClassification', () => {
     expect(result.requiresHandoff).toBe(false);
   });
 
-  it('forces handoff for complaints', () => {
+  it('does not let classification transfer control for complaints', () => {
     const result = parseSdrClassification(
       '{"primary_intent":"complaint","requires_handoff":false}'
     );
-    expect(result.requiresHandoff).toBe(true);
+    expect(result.requiresHandoff).toBe(false);
   });
 });

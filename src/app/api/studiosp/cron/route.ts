@@ -6,6 +6,10 @@ import { processNextDocumentAnalysis } from '@/lib/document-analysis/worker';
 import { sendDueReactivationTouches } from '@/lib/reactivation/worker';
 import { processAiReplyQueue } from '@/lib/ai/reply-queue';
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
+import { generateContextualFollowup } from '@/lib/ai/followup';
+import { nextAllowedFollowupAt } from '@/lib/ai/followup-window';
+import { openOperationalFailure } from '@/lib/ai/guidance';
+import { semanticMessageMetadata } from '@/lib/ai/semantic-context';
 
 export const maxDuration = 300;
 
@@ -154,6 +158,27 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
   if (error) return 0;
   let sent = 0;
   for (const followup of (due ?? []) as Row[]) {
+    const { data: policy } = await db
+      .from('followup_policies')
+      .select('timezone, allowed_weekdays, window_start, window_end')
+      .eq('account_id', followup.account_id)
+      .eq('id', followup.policy_id)
+      .maybeSingle();
+    const allowedAt = policy
+      ? nextAllowedFollowupAt(new Date(), policy)
+      : new Date();
+    if (allowedAt.getTime() > Date.now() + 60_000) {
+      await db
+        .from('followup_executions')
+        .update({
+          status: 'scheduled',
+          scheduled_for: allowedAt.toISOString(),
+          claimed_at: null,
+          claimed_by: null,
+        })
+        .eq('id', followup.id);
+      continue;
+    }
     const { data: opportunity } = await db
       .from('opportunities')
       .select('*')
@@ -168,6 +193,33 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         .update({
           status: 'cancelled',
           cancel_reason: 'opportunity_not_eligible',
+        })
+        .eq('id', followup.id);
+      continue;
+    }
+    const { data: conversation } = await db
+      .from('conversations')
+      .select('assigned_agent_id, ai_autoreply_disabled, ai_control_mode')
+      .eq('account_id', followup.account_id)
+      .eq('id', opportunity.primary_conversation_id)
+      .maybeSingle();
+    if (
+      !conversation ||
+      conversation.assigned_agent_id ||
+      conversation.ai_autoreply_disabled ||
+      conversation.ai_control_mode !== 'ai_active'
+    ) {
+      await db
+        .from('followup_executions')
+        .update({
+          status: 'cancelled',
+          cancel_reason: !conversation
+            ? 'conversation_not_found'
+            : conversation.assigned_agent_id
+              ? 'assigned_to_human'
+              : conversation.ai_control_mode === 'awaiting_guidance'
+                ? 'awaiting_owner_guidance'
+                : 'conversation_paused',
         })
         .eq('id', followup.id);
       continue;
@@ -188,22 +240,43 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         .eq('id', followup.id);
       continue;
     }
-    const messages = [
-      'Oi! Passando para saber se você conseguiu ver minha última mensagem 😊',
-      'Posso continuar te ajudando a encontrar oportunidades que façam sentido para o seu momento?',
-      'Se ainda estiver buscando, me diga por aqui e retomamos de onde paramos.',
-      'Vou pausar por enquanto para não te incomodar. Quando quiser retomar, é só me chamar por aqui.',
-    ];
+    const { count: totalSteps } = await db
+      .from('followup_executions')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', followup.account_id)
+      .eq('opportunity_id', opportunity.id)
+      .eq('policy_id', followup.policy_id);
+    const followupText = await generateContextualFollowup({
+      db,
+      accountId: followup.account_id,
+      conversationId: opportunity.primary_conversation_id,
+      stepNumber: Number(followup.step_number),
+      totalSteps: Math.max(Number(followup.step_number), totalSteps ?? 1),
+      leadSummary: opportunity.lead_summary,
+    });
+    if (!followupText) {
+      await db
+        .from('followup_executions')
+        .update({
+          status: 'cancelled',
+          cancel_reason: 'lead_replied_before_send',
+        })
+        .eq('id', followup.id);
+      continue;
+    }
     try {
       await engineSendText({
         accountId: followup.account_id,
         userId: await configOwnerUserId(db, followup.account_id),
         conversationId: opportunity.primary_conversation_id,
         contactId: opportunity.contact_id,
-        text: messages[
-          Math.min(messages.length - 1, Number(followup.step_number) - 1)
-        ],
+        text: followupText,
         aiGenerated: true,
+        semanticContext: semanticMessageMetadata({
+          version: 1,
+          mode: 'followup',
+          expectedQuestionKey: null,
+        }),
       });
       await db
         .from('followup_executions')
@@ -227,16 +300,27 @@ async function sendDueFollowups(db: ReturnType<typeof supabaseAdmin>) {
         .eq('id', opportunity.id);
       sent++;
     } catch (sendError) {
+      const failureMessage =
+        sendError instanceof Error
+          ? sendError.message.slice(0, 500)
+          : 'Falha desconhecida';
       await db
         .from('followup_executions')
         .update({
           status: 'failed',
-          last_error:
-            sendError instanceof Error
-              ? sendError.message.slice(0, 500)
-              : 'Falha desconhecida',
+          last_error: failureMessage,
         })
         .eq('id', followup.id);
+      await openOperationalFailure({
+        db,
+        accountId: followup.account_id,
+        conversationId: opportunity.primary_conversation_id,
+        opportunityId: opportunity.id,
+        reasonCode: 'followup_send_failed',
+        summary: failureMessage,
+        retryable: true,
+        context: { followup_execution_id: followup.id },
+      });
     }
   }
   return sent;

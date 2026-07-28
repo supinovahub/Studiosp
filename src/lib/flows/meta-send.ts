@@ -50,6 +50,9 @@ interface SendTextEngineArgs {
    *  badges it as an AI reply. Only the auto-reply bot sets this;
    *  deterministic Flow/automation sends leave it false. */
   aiGenerated?: boolean;
+  /** Server-calculated conversational state. Customer text can never write
+   *  this field; it is used to ground extraction on the next turn. */
+  semanticContext?: Record<string, unknown>;
 }
 
 /**
@@ -66,7 +69,7 @@ interface SendTextEngineArgs {
  */
 export async function engineSendText(
   args: SendTextEngineArgs
-): Promise<{ whatsapp_message_id: string }> {
+): Promise<{ whatsapp_message_id: string; message_id: string }> {
   const db = supabaseAdmin();
 
   const { data: contact, error: contactErr } = await db
@@ -138,18 +141,23 @@ export async function engineSendText(
       .eq('id', contact.id);
   }
 
-  const { error: msgErr } = await db.from('messages').insert({
-    account_id: args.accountId,
-    conversation_id: args.conversationId,
-    sender_type: 'bot',
-    content_type: 'text',
-    content_text: args.text,
-    message_id: waMessageId,
-    status: 'sent',
-    ai_generated: args.aiGenerated ?? false,
-    whatsapp_connection_key: connectionKey,
-  });
-  if (msgErr) {
+  const { data: message, error: msgErr } = await db
+    .from('messages')
+    .insert({
+      account_id: args.accountId,
+      conversation_id: args.conversationId,
+      sender_type: 'bot',
+      content_type: 'text',
+      content_text: args.text,
+      message_id: waMessageId,
+      status: 'sent',
+      ai_generated: args.aiGenerated ?? false,
+      whatsapp_connection_key: connectionKey,
+      provider_metadata: args.semanticContext ?? {},
+    })
+    .select('id')
+    .single();
+  if (msgErr || !message) {
     throw new Error(
       'mensagem enviada à Meta, mas não foi possível salvá-la no banco'
     );
@@ -165,7 +173,7 @@ export async function engineSendText(
     })
     .eq('id', args.conversationId);
 
-  return { whatsapp_message_id: waMessageId };
+  return { whatsapp_message_id: waMessageId, message_id: message.id };
 }
 
 interface SendMediaEngineArgs {

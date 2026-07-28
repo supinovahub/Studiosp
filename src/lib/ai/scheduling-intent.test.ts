@@ -55,8 +55,31 @@ describe('scheduling intent', () => {
         timezone: 'America/Sao_Paulo',
       })
     ).toBe(
-      'Encontrei algumas oportunidades de acordo com o seu perfil. Posso agendar uma conversa de 10 a 15 minutos com um corretor para apresentar os detalhes? Tenho disponibilidade para terça-feira, 28/07, 13:15. Esse horário funciona para você?'
+      'Boa, já entendi melhor o que você busca. Tenho algumas oportunidades que podem fazer sentido. Posso marcar uma conversa de 10 a 15 minutos com um corretor pra te explicar os detalhes? Tenho disponibilidade para terça-feira, 28/07, 13:15. Esse horário funciona pra você?'
     );
+  });
+
+  it('uses the safe completion wording configured by the owner', () => {
+    expect(
+      opportunityInvitation(
+        {
+          starts_at: '2026-07-28T16:15:00.000Z',
+          timezone: 'America/Sao_Paulo',
+        },
+        'Seu perfil ficou completo. Posso te explicar os próximos passos?'
+      )
+    ).toContain(
+      'Seu perfil ficou completo. Posso te explicar os próximos passos? Tenho disponibilidade'
+    );
+    expect(
+      opportunityInvitation(
+        {
+          starts_at: '2026-07-28T16:15:00.000Z',
+          timezone: 'America/Sao_Paulo',
+        },
+        'Sua reunião está confirmada.'
+      )
+    ).not.toContain('confirmada');
   });
 
   it('uses a deterministic failure instead of claiming a reservation', () => {
@@ -74,8 +97,9 @@ describe('scheduling intent', () => {
   });
 
   it('blocks a meeting offer while qualification is incomplete', () => {
-    const next =
-      qualificationQuestionPrompt({ key: 'monthly_installment_budget' })!;
+    const next = qualificationQuestionPrompt({
+      key: 'monthly_installment_budget',
+    })!;
     expect(
       guardPrematureMeetingOffer(
         'Encontrei opções. Vamos agendar uma conversa rápida com o corretor?',
@@ -90,6 +114,20 @@ describe('scheduling intent', () => {
         next
       )
     ).toContain('agendar');
+  });
+
+  it('uses the configured example only as the deterministic custom fallback', () => {
+    expect(
+      qualificationQuestionPrompt({
+        key: 'custom_move_reason',
+        label: 'Motivo da mudança',
+        prompt_instruction:
+          'Entenda o que levou o lead a procurar neste momento.',
+        validation_schema: {
+          question_example: 'O que fez você começar a procurar agora?',
+        },
+      })
+    ).toBe('O que fez você começar a procurar agora?');
   });
 
   it('answers availability but resumes qualification before reserving', () => {

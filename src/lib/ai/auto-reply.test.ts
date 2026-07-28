@@ -14,9 +14,14 @@ const h = vi.hoisted(() => ({
   persistSdrClassification: vi.fn(),
   engineSendText: vi.fn(),
   engineSendMedia: vi.fn(),
+  loadTrustedGuidance: vi.fn(),
+  openGuidanceRequest: vi.fn(),
+  openOperationalFailure: vi.fn(),
+  recordPromptInjectionSignal: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
-    autoResponders: [] as { id: string }[],
+    autoResponders: [] as Record<string, unknown>[],
+    automationReplySteps: [] as { id: string }[],
     claim: true as boolean,
     fingerprintClaim: true as boolean,
     updatePayload: null as Record<string, unknown> | null,
@@ -41,6 +46,12 @@ vi.mock('./sdr-catalog', () => ({
 vi.mock('./sdr-store', () => ({
   persistSdrClassification: h.persistSdrClassification,
 }));
+vi.mock('./guidance', () => ({
+  loadTrustedGuidance: h.loadTrustedGuidance,
+  openGuidanceRequest: h.openGuidanceRequest,
+  openOperationalFailure: h.openOperationalFailure,
+  recordPromptInjectionSignal: h.recordPromptInjectionSignal,
+}));
 vi.mock('@/lib/flows/meta-send', () => ({
   engineSendText: h.engineSendText,
   engineSendMedia: h.engineSendMedia,
@@ -49,13 +60,33 @@ vi.mock('./admin-client', () => ({
   supabaseAdmin: () => ({
     from: (table: string) => {
       if (table === 'automations') {
-        // .select().eq().eq().in().limit() → active auto-responders
         const chain = {
           select: () => chain,
           eq: () => chain,
           in: () => chain,
+          then: (
+            resolve: (value: {
+              data: Record<string, unknown>[];
+              error: null;
+            }) => unknown,
+            reject?: (reason: unknown) => unknown
+          ) =>
+            Promise.resolve({
+              data: h.state.autoResponders,
+              error: null,
+            }).then(resolve, reject),
+        };
+        return chain;
+      }
+      if (table === 'automation_steps') {
+        const chain = {
+          select: () => chain,
+          in: () => chain,
           limit: () =>
-            Promise.resolve({ data: h.state.autoResponders, error: null }),
+            Promise.resolve({
+              data: h.state.automationReplySteps,
+              error: null,
+            }),
         };
         return chain;
       }
@@ -70,6 +101,15 @@ vi.mock('./admin-client', () => ({
         };
         return chain;
       }
+      if (table === 'contacts') {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: () =>
+            Promise.resolve({ data: { name: 'Maria' }, error: null }),
+        };
+        return chain;
+      }
       // conversations
       return {
         select: () => ({
@@ -80,7 +120,15 @@ vi.mock('./admin-client', () => ({
         }),
         update: (payload: Record<string, unknown>) => {
           h.state.updatePayload = payload;
-          return { eq: () => Promise.resolve({ error: null }) };
+          const chain = {
+            eq: () => chain,
+            is: () => Promise.resolve({ error: null }),
+            then: (
+              resolve: (value: { error: null }) => unknown,
+              reject?: (reason: unknown) => unknown
+            ) => Promise.resolve({ error: null }).then(resolve, reject),
+          };
+          return chain;
         },
       };
     },
@@ -130,8 +178,11 @@ beforeEach(() => {
     assigned_agent_id: null,
     ai_autoreply_disabled: false,
     ai_reply_count: 0,
+    ai_control_mode: 'ai_active',
+    status: 'open',
   };
   h.state.autoResponders = [];
+  h.state.automationReplySteps = [];
   h.state.claim = true;
   h.state.fingerprintClaim = true;
   h.state.updatePayload = null;
@@ -164,12 +215,17 @@ beforeEach(() => {
     requiresHandoff: false,
   });
   h.prepareStudiospTurn.mockResolvedValue({
-    opportunityId: null,
+    opportunityId: 'opp-1',
     grounding: [],
     reservedAppointment: null,
     outboundOverride: null,
     qualificationComplete: true,
     nextQualificationPrompt: null,
+    semanticContext: {
+      version: 1,
+      mode: 'qualification',
+      expectedQuestionKey: null,
+    },
   });
   h.scheduleStudiospFollowups.mockResolvedValue(undefined);
   h.buildSdrTurnContext.mockResolvedValue({
@@ -178,8 +234,23 @@ beforeEach(() => {
     grounding: [],
   });
   h.persistSdrClassification.mockResolvedValue(undefined);
-  h.generateReply.mockResolvedValue({ text: 'Hello!', handoff: false });
-  h.engineSendText.mockResolvedValue({ whatsapp_message_id: 'm1' });
+  h.generateReply.mockResolvedValue({
+    text: 'Hello!',
+    handoff: false,
+    needsGuidance: false,
+  });
+  h.engineSendText.mockResolvedValue({
+    whatsapp_message_id: 'm1',
+    message_id: 'local-m1',
+  });
+  h.loadTrustedGuidance.mockResolvedValue([]);
+  h.openGuidanceRequest.mockResolvedValue({ id: 'guidance-1' });
+  h.openOperationalFailure.mockResolvedValue(undefined);
+  h.recordPromptInjectionSignal.mockResolvedValue({
+    detected: false,
+    severity: 'info',
+    signals: [],
+  });
 });
 
 describe('dispatchInboundToAiReply — eligibility gates', () => {
@@ -208,6 +279,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.generateReply.mockResolvedValue({
       text: 'Olá! Encontrei uma opção. Qual bairro você prefere?',
       handoff: false,
+      needsGuidance: false,
     });
 
     await dispatchInboundToAiReply(ARGS);
@@ -224,6 +296,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
         4
       )}Qual período funciona melhor para você?`,
       handoff: false,
+      needsGuidance: false,
     });
 
     await dispatchInboundToAiReply(ARGS);
@@ -245,10 +318,12 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
         'Sua conversa está confirmada para terça-feira, 28/07, 10:00.',
       qualificationComplete: true,
       nextQualificationPrompt: null,
+      semanticContext: { version: 1, mode: 'qualification' },
     });
     h.generateReply.mockResolvedValue({
       text: 'Um corretor entrará em contato para confirmar.',
       handoff: false,
+      needsGuidance: false,
     });
 
     await dispatchInboundToAiReply(ARGS);
@@ -269,10 +344,16 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       qualificationComplete: false,
       nextQualificationPrompt:
         'Antes de avançarmos, qual faixa de parcela mensal ficaria confortável para você?',
+      semanticContext: {
+        version: 1,
+        mode: 'qualification',
+        expectedQuestionKey: 'monthly_installment_budget',
+      },
     });
     h.generateReply.mockResolvedValue({
       text: 'Encontrei algumas oportunidades. Vamos agendar uma conversa rápida com um corretor?',
       handoff: false,
+      needsGuidance: false,
     });
 
     await dispatchInboundToAiReply(ARGS);
@@ -294,17 +375,41 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
   });
 
   it('stands down when an active message-level automation exists', async () => {
-    h.state.autoResponders = [{ id: 'auto-1' }];
+    h.state.autoResponders = [
+      {
+        id: 'auto-1',
+        trigger_type: 'new_message_received',
+        trigger_config: {},
+      },
+    ];
+    h.state.automationReplySteps = [{ id: 'step-1' }];
     await dispatchInboundToAiReply(ARGS);
     expect(h.generateReply).not.toHaveBeenCalled();
     expect(h.engineSendText).not.toHaveBeenCalled();
   });
 
+  it('does not silence the AI because of an unrelated keyword automation', async () => {
+    h.state.autoResponders = [
+      {
+        id: 'auto-1',
+        trigger_type: 'keyword_match',
+        trigger_config: {
+          keywords: ['segunda via'],
+          match_type: 'contains',
+        },
+      },
+    ];
+    h.state.automationReplySteps = [{ id: 'step-1' }];
+    await dispatchInboundToAiReply(ARGS);
+    expect(h.generateReply).toHaveBeenCalled();
+    expect(h.engineSendText).toHaveBeenCalled();
+  });
+
   it('does not send when the atomic slot claim loses the race', async () => {
     h.state.claim = false;
     await dispatchInboundToAiReply(ARGS);
-    // It still attempts the claim, but the send is skipped.
-    expect(h.state.rpcCalls).toHaveLength(1);
+    // Renova o orçamento uma vez, mas não envia se a segunda disputa falhar.
+    expect(h.state.rpcCalls).toHaveLength(2);
     expect(h.engineSendText).not.toHaveBeenCalled();
   });
 
@@ -347,14 +452,16 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.engineSendText).not.toHaveBeenCalled();
   });
 
-  it('skips when the per-conversation cap is reached', async () => {
+  it('renews the conversational reply budget when the cap is reached', async () => {
     h.state.conv = {
       assigned_agent_id: null,
       ai_autoreply_disabled: false,
       ai_reply_count: 3,
+      ai_control_mode: 'ai_active',
+      status: 'open',
     };
     await dispatchInboundToAiReply(ARGS);
-    expect(h.engineSendText).not.toHaveBeenCalled();
+    expect(h.engineSendText).toHaveBeenCalled();
   });
 
   it('skips when there is nothing to reply to', async () => {
@@ -365,29 +472,41 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
   });
 });
 
-describe('dispatchInboundToAiReply — handoff', () => {
-  it('disables auto-reply, writes a summary, and does not send on handoff', async () => {
-    h.generateReply.mockResolvedValue({ text: '', handoff: true });
-    await dispatchInboundToAiReply(ARGS);
-    expect(h.engineSendText).not.toHaveBeenCalled();
-    expect(h.state.rpcCalls).toHaveLength(0);
-    expect(h.state.updatePayload).toMatchObject({
-      ai_autoreply_disabled: true,
+describe('dispatchInboundToAiReply — owner guidance', () => {
+  it('opens an owner guidance request and does not send on model handoff', async () => {
+    h.generateReply.mockResolvedValue({
+      text: '',
+      handoff: true,
+      needsGuidance: false,
     });
-    expect(h.state.updatePayload?.ai_handoff_summary).toContain(
-      'AI agent handed off'
+    const result = await dispatchInboundToAiReply(ARGS);
+    expect(h.engineSendText).not.toHaveBeenCalled();
+    expect(h.state.rpcCalls.map((call) => call.name)).toEqual([
+      'studiosp_apply_opportunity_event',
+    ]);
+    expect(h.openGuidanceRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        reasonCode: 'model_safety_handoff',
+      })
     );
-    // No handoff target configured → conversation left unassigned.
-    expect(h.state.updatePayload).not.toHaveProperty('assigned_agent_id');
+    expect(result).toEqual({
+      outcome: 'waiting_guidance',
+      reason: 'awaiting_owner_guidance',
+    });
   });
 
-  it('routes to the configured handoff agent on handoff', async () => {
+  it('does not assign a broker merely because the model asks for handoff', async () => {
     h.loadAiConfig.mockResolvedValue(aiConfig({ handoffAgentId: 'agent-7' }));
-    h.generateReply.mockResolvedValue({ text: '', handoff: true });
+    h.generateReply.mockResolvedValue({
+      text: '',
+      handoff: true,
+      needsGuidance: false,
+    });
     await dispatchInboundToAiReply(ARGS);
-    expect(h.state.updatePayload).toMatchObject({
-      ai_autoreply_disabled: true,
+    expect(h.state.updatePayload).not.toMatchObject({
       assigned_agent_id: 'agent-7',
     });
+    expect(h.openGuidanceRequest).toHaveBeenCalled();
   });
 });

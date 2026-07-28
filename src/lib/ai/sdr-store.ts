@@ -45,7 +45,8 @@ export async function persistSdrClassification(args: {
   classification: SdrClassification;
   productIds: string[];
   responseText?: string;
-  outcome?: 'classified' | 'replied' | 'handoff' | 'failed';
+  outcome?:
+    'classified' | 'replied' | 'handoff' | 'awaiting_guidance' | 'failed';
 }): Promise<void> {
   const row = stateRow(args);
   const { error: stateError } = await args.db

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { qualificationQuestionsRequiredBeforeMeeting } from './studiosp-orchestrator';
+import {
+  qualificationQuestionsRequiredBeforeMeeting,
+  qualificationRequirementState,
+} from './studiosp-orchestrator';
 
 describe('qualificationQuestionsRequiredBeforeMeeting', () => {
-  it('exige todos os campos ativos, inclusive os financeiros opcionais', () => {
+  it('exige apenas os campos marcados como obrigatórios', () => {
     const questions = [
       { key: 'purchase_objective', is_active: true, is_required: true },
       {
@@ -18,11 +21,7 @@ describe('qualificationQuestionsRequiredBeforeMeeting', () => {
       qualificationQuestionsRequiredBeforeMeeting(questions).map(
         (question) => question.key
       )
-    ).toEqual([
-      'purchase_objective',
-      'monthly_installment_budget',
-      'total_price_budget',
-    ]);
+    ).toEqual(['purchase_objective']);
   });
 
   it('ignora campos inativos e a preferência preenchida no agendamento', () => {
@@ -32,5 +31,98 @@ describe('qualificationQuestionsRequiredBeforeMeeting', () => {
         { key: 'schedule_preference', is_active: true },
       ])
     ).toEqual([]);
+  });
+
+  it('conclui com os campos obrigatórios e uma referência financeira', () => {
+    const questions = [
+      {
+        id: 'objective',
+        key: 'purchase_objective',
+        is_active: true,
+        is_required: true,
+      },
+      {
+        id: 'entry',
+        key: 'entry_budget',
+        is_active: true,
+        is_required: false,
+      },
+      {
+        id: 'installment',
+        key: 'monthly_installment_budget',
+        is_active: true,
+        is_required: false,
+      },
+      {
+        id: 'total',
+        key: 'total_price_budget',
+        is_active: true,
+        is_required: false,
+      },
+    ];
+
+    expect(
+      qualificationRequirementState(
+        questions,
+        new Set(['objective', 'installment'])
+      )
+    ).toEqual({ complete: true, missingQuestions: [] });
+    expect(
+      qualificationRequirementState(questions, new Set(['objective', 'total']))
+        .missingQuestions
+    ).toEqual([questions[1]]);
+  });
+
+  it('não bloqueia a conclusão com um campo condicional que não se aplica', () => {
+    const questions = [
+      {
+        id: 'objective',
+        key: 'purchase_objective',
+        is_active: true,
+        is_required: true,
+        visibility_condition: {},
+      },
+      {
+        id: 'entry',
+        key: 'entry_budget',
+        is_active: true,
+        is_required: false,
+        visibility_condition: {},
+      },
+      {
+        id: 'conditional',
+        key: 'custom_investor_experience',
+        is_active: true,
+        is_required: true,
+        visibility_condition: {
+          mode: 'answer_matches',
+          question_key: 'purchase_objective',
+          operator: 'equals',
+          values: ['investir'],
+        },
+      },
+    ];
+    const answers = [
+      {
+        question_id: 'objective',
+        status: 'confirmed',
+        is_current: true,
+        normalized_value: { value: 'morar' },
+      },
+      {
+        question_id: 'entry',
+        status: 'confirmed',
+        is_current: true,
+        normalized_value: { min: 50000, max: 50000, currency: 'BRL' },
+      },
+    ];
+
+    expect(
+      qualificationRequirementState(
+        questions,
+        new Set(['objective', 'entry']),
+        answers
+      )
+    ).toEqual({ complete: true, missingQuestions: [] });
   });
 });

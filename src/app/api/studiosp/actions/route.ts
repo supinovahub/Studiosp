@@ -13,6 +13,27 @@ import {
   SendMessageError,
   sendMessageToConversation,
 } from '@/lib/whatsapp/send-message';
+import {
+  prepareQualificationQuestionInput,
+  qualificationLabelFingerprint,
+} from '@/lib/ai/qualification-question-config';
+import { supabaseAdmin } from '@/lib/ai/admin-client';
+import { buildConversationContext } from '@/lib/ai/context';
+import { loadAiConfig } from '@/lib/ai/config';
+import { retrieveKnowledge } from '@/lib/ai/knowledge';
+import { buildSystemPrompt } from '@/lib/ai/defaults';
+import { generateReply } from '@/lib/ai/generate';
+import { latestUserMessage } from '@/lib/ai/query';
+import { prepareStudiospTurn } from '@/lib/ai/studiosp-orchestrator';
+import {
+  delayedResumePrefix,
+  enforceOutboundPolicy,
+  joinResumePrefix,
+} from '@/lib/ai/response-policy';
+import { loadTrustedGuidance, openOperationalFailure } from '@/lib/ai/guidance';
+import { engineSendText } from '@/lib/flows/meta-send';
+import { semanticMessageMetadata } from '@/lib/ai/semantic-context';
+import { processAiReplyQueue } from '@/lib/ai/reply-queue';
 
 function text(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
@@ -151,6 +172,380 @@ export async function POST(request: NextRequest) {
       throw new ForbiddenError(
         'Somente o dono pode alterar esta configuração.'
       );
+    }
+
+    if (action === 'provide_ai_guidance') {
+      const requestId = text(body.requestId);
+      const guidance = text(body.guidance);
+      const scope = text(body.scope, 'reply');
+      if (
+        !requestId ||
+        guidance.length < 3 ||
+        guidance.length > 4000 ||
+        !['reply', 'conversation', 'knowledge'].includes(scope)
+      ) {
+        return NextResponse.json(
+          { error: 'Informe uma orientação válida e o alcance desejado.' },
+          { status: 400 }
+        );
+      }
+
+      const admin = supabaseAdmin();
+      const claim = await admin
+        .from('ai_guidance_requests')
+        .update({
+          status: 'resolving',
+          guidance_scope: scope,
+          owner_guidance: guidance,
+          owner_profile_id: profileId,
+        })
+        .eq('account_id', accountId)
+        .eq('id', requestId)
+        .eq('status', 'open')
+        .select()
+        .maybeSingle();
+      if (claim.error || !claim.data) {
+        return NextResponse.json(
+          {
+            error:
+              'Esta orientação já foi tratada ou não pertence à sua conta.',
+          },
+          { status: 409 }
+        );
+      }
+      const guidanceRequest = claim.data;
+
+      try {
+        await admin.from('ai_guidance_messages').insert({
+          account_id: accountId,
+          request_id: requestId,
+          role: 'owner',
+          content: guidance,
+          profile_id: profileId,
+        });
+        if (scope !== 'reply') {
+          await admin.from('ai_guidance_rules').insert({
+            account_id: accountId,
+            conversation_id:
+              scope === 'conversation' ? guidanceRequest.conversation_id : null,
+            source_request_id: requestId,
+            scope,
+            content: guidance,
+            created_by: profileId,
+          });
+        }
+
+        const config = await loadAiConfig(admin, accountId);
+        if (!config || !config.autoReplyEnabled) {
+          throw new Error('A configuração de IA não está ativa.');
+        }
+        const messages = await buildConversationContext(
+          admin,
+          guidanceRequest.conversation_id
+        );
+        if (!messages.length) {
+          throw new Error('A conversa não possui contexto para responder.');
+        }
+        const { data: latestInbound } = await admin
+          .from('messages')
+          .select('id')
+          .eq('account_id', accountId)
+          .eq('conversation_id', guidanceRequest.conversation_id)
+          .eq('sender_type', 'customer')
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const studiosp = await prepareStudiospTurn({
+          db: admin,
+          accountId,
+          conversationId: guidanceRequest.conversation_id,
+          contactId: guidanceRequest.contact_id,
+          triggerMessageId:
+            latestInbound?.id ?? guidanceRequest.trigger_message_id,
+          config,
+          messages,
+        });
+        const [knowledge, savedGuidance] = await Promise.all([
+          retrieveKnowledge(
+            admin,
+            accountId,
+            config,
+            latestUserMessage(messages)
+          ),
+          loadTrustedGuidance({
+            db: admin,
+            accountId,
+            conversationId: guidanceRequest.conversation_id,
+          }),
+        ]);
+        const systemPrompt = buildSystemPrompt({
+          internalPrompt: config.internalPrompt,
+          communicationPrompt: config.communicationPrompt,
+          identityName: config.identityName,
+          toneConfig: config.toneConfig,
+          mode: 'auto_reply',
+          knowledge,
+          operation: [
+            ...studiosp.grounding,
+            ...savedGuidance,
+            `Orientação confiável do dono para resolver este turno: ${guidance}`,
+            'Responda agora ao lead usando a orientação acima. Não mencione a orientação, o alerta ou a espera interna.',
+          ],
+        });
+        const generated = await generateReply({
+          config,
+          systemPrompt,
+          messages,
+        });
+        if (generated.handoff || generated.needsGuidance) {
+          throw new Error(
+            'A IA ainda não conseguiu formular uma resposta com essa orientação.'
+          );
+        }
+        const { data: contact } = await admin
+          .from('contacts')
+          .select('name')
+          .eq('account_id', accountId)
+          .eq('id', guidanceRequest.contact_id)
+          .maybeSingle();
+        const policy = enforceOutboundPolicy({
+          text: studiosp.outboundOverride ?? generated.text,
+          latestLeadMessage: latestUserMessage(messages),
+          messages,
+          leadName: contact?.name,
+        });
+        if (!policy.ok) {
+          throw new Error(
+            `A resposta não passou pela validação: ${policy.violations.join(', ')}.`
+          );
+        }
+        const waitedMs =
+          Date.now() - new Date(guidanceRequest.created_at).getTime();
+        const outbound = joinResumePrefix(
+          delayedResumePrefix(waitedMs),
+          policy.text
+        );
+        const sent = await engineSendText({
+          accountId,
+          userId,
+          conversationId: guidanceRequest.conversation_id,
+          contactId: guidanceRequest.contact_id,
+          text: outbound,
+          aiGenerated: true,
+          semanticContext: semanticMessageMetadata({
+            ...studiosp.semanticContext,
+            mode: 'guidance',
+            guidanceRequestId: requestId,
+          }),
+        });
+        const resolvedAt = new Date().toISOString();
+        await Promise.all([
+          admin
+            .from('ai_guidance_requests')
+            .update({
+              status: 'resolved',
+              response_message_id: sent.message_id,
+              resumed_at: resolvedAt,
+              resolved_at: resolvedAt,
+            })
+            .eq('account_id', accountId)
+            .eq('id', requestId),
+          admin.from('ai_guidance_messages').insert({
+            account_id: accountId,
+            request_id: requestId,
+            role: 'assistant',
+            content: outbound,
+          }),
+          admin
+            .from('conversations')
+            .update({
+              ai_control_mode: 'ai_active',
+              ai_control_reason: null,
+              ai_control_changed_at: resolvedAt,
+              ai_processing_status: 'idle',
+              ai_processing_reason: 'guidance_resolved',
+              ai_last_response_at: resolvedAt,
+            })
+            .eq('account_id', accountId)
+            .eq('id', guidanceRequest.conversation_id)
+            .is('assigned_agent_id', null),
+          admin
+            .from('attention_items')
+            .update({
+              status: 'resolved',
+              resolved_at: resolvedAt,
+              resolved_by: profileId,
+              resolution: {
+                outcome: 'owner_guidance_sent',
+                guidance_scope: scope,
+                guidance_request_id: requestId,
+              },
+            })
+            .eq('account_id', accountId)
+            .eq(
+              'deduplication_key',
+              `ai-guidance:${guidanceRequest.conversation_id}`
+            )
+            .in('status', ['open', 'snoozed']),
+        ]);
+        return NextResponse.json({
+          guidanceRequest: {
+            ...guidanceRequest,
+            status: 'resolved',
+            response_message_id: sent.message_id,
+          },
+        });
+      } catch (guidanceError) {
+        await admin
+          .from('ai_guidance_requests')
+          .update({ status: 'open' })
+          .eq('account_id', accountId)
+          .eq('id', requestId)
+          .eq('status', 'resolving');
+        await openOperationalFailure({
+          db: admin,
+          accountId,
+          conversationId: guidanceRequest.conversation_id,
+          opportunityId: guidanceRequest.opportunity_id,
+          triggerMessageId: guidanceRequest.trigger_message_id,
+          reasonCode: 'guidance_resume_failed',
+          summary:
+            guidanceError instanceof Error
+              ? guidanceError.message
+              : 'Falha ao retomar a conversa.',
+          retryable: true,
+          context: { guidance_request_id: requestId },
+        });
+        throw guidanceError;
+      }
+    }
+
+    if (action === 'take_over_ai_conversation') {
+      const conversationId = text(body.conversationId);
+      const result = await supabase
+        .from('conversations')
+        .update({
+          assigned_agent_id: userId,
+          ai_control_mode: 'human_active',
+          ai_control_reason: 'owner_takeover',
+          ai_control_changed_at: new Date().toISOString(),
+          ai_processing_status: 'paused',
+          ai_processing_reason: 'human_takeover',
+        })
+        .eq('account_id', accountId)
+        .eq('id', conversationId)
+        .select('id')
+        .maybeSingle();
+      actionError(result.error);
+      if (!result.data) {
+        return NextResponse.json(
+          { error: 'Conversa não encontrada.' },
+          { status: 404 }
+        );
+      }
+      const takeoverAt = new Date().toISOString();
+      const admin = supabaseAdmin();
+      await Promise.all([
+        admin
+          .from('ai_guidance_requests')
+          .update({ status: 'cancelled', resolved_at: takeoverAt })
+          .eq('account_id', accountId)
+          .eq('conversation_id', conversationId)
+          .in('status', ['open', 'resolving']),
+        admin
+          .from('attention_items')
+          .update({
+            status: 'resolved',
+            resolved_at: takeoverAt,
+            resolved_by: profileId,
+            resolution: { outcome: 'owner_takeover' },
+          })
+          .eq('account_id', accountId)
+          .contains('context', { conversation_id: conversationId })
+          .in('status', ['open', 'snoozed']),
+      ]);
+      return NextResponse.json({ conversation: result.data });
+    }
+
+    if (action === 'retry_ai_failure') {
+      const conversationId = text(body.conversationId);
+      const admin = supabaseAdmin();
+      const { data: conversation } = await admin
+        .from('conversations')
+        .select('id, contact_id, user_id, contacts(phone)')
+        .eq('account_id', accountId)
+        .eq('id', conversationId)
+        .maybeSingle();
+      if (!conversation) {
+        return NextResponse.json(
+          { error: 'Conversa não encontrada.' },
+          { status: 404 }
+        );
+      }
+      const { data: trigger } = await admin
+        .from('messages')
+        .select('id')
+        .eq('account_id', accountId)
+        .eq('conversation_id', conversationId)
+        .eq('sender_type', 'customer')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!trigger) {
+        return NextResponse.json(
+          { error: 'Não há mensagem do lead para tentar novamente.' },
+          { status: 409 }
+        );
+      }
+      const contact = Array.isArray(conversation.contacts)
+        ? conversation.contacts[0]
+        : conversation.contacts;
+      const { data: existing } = await admin
+        .from('ai_reply_jobs')
+        .select('id')
+        .eq('account_id', accountId)
+        .eq('trigger_message_id', trigger.id)
+        .maybeSingle();
+      if (existing) {
+        await admin
+          .from('ai_reply_jobs')
+          .update({
+            status: 'queued',
+            attempt_count: 0,
+            available_at: new Date().toISOString(),
+            claimed_at: null,
+            lease_expires_at: null,
+            completed_at: null,
+            outcome_reason: 'owner_retry',
+            last_error: null,
+          })
+          .eq('id', existing.id);
+      } else {
+        const enqueue = await admin.rpc('enqueue_ai_reply_job', {
+          p_account_id: accountId,
+          p_conversation_id: conversationId,
+          p_contact_id: conversation.contact_id,
+          p_trigger_message_id: trigger.id,
+          p_config_owner_user_id: conversation.user_id,
+          p_sender_phone: contact?.phone ?? '',
+        });
+        actionError(enqueue.error);
+      }
+      await admin
+        .from('conversations')
+        .update({
+          assigned_agent_id: null,
+          ai_control_mode: 'ai_active',
+          ai_control_reason: null,
+          ai_control_changed_at: new Date().toISOString(),
+          ai_processing_status: 'queued',
+          ai_processing_reason: 'owner_retry',
+        })
+        .eq('account_id', accountId)
+        .eq('id', conversationId);
+      const processed = await processAiReplyQueue(admin, 5);
+      return NextResponse.json({ queued: true, processed });
     }
 
     if (action === 'schedule_manual_appointment') {
@@ -619,45 +1014,114 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'save_question') {
-      const label = text(body.label);
-      if (!label)
+      const questionId = text(body.id) || null;
+      const values = prepareQualificationQuestionInput(body);
+      const [questionsResult, existingResult] = await Promise.all([
+        supabase
+          .from('qualification_questions')
+          .select('id, label')
+          .eq('account_id', accountId),
+        questionId
+          ? supabase
+              .from('qualification_questions')
+              .select(
+                'id, key, data_type, normalization_strategy, is_required, is_active, is_system'
+              )
+              .eq('account_id', accountId)
+              .eq('id', questionId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+      actionError(questionsResult.error);
+      actionError(existingResult.error);
+      const existing = existingResult.data;
+      if (questionId && !existing) {
         return NextResponse.json(
-          { error: 'Informe a pergunta.' },
+          { error: 'Informação de qualificação não encontrada.' },
+          { status: 404 }
+        );
+      }
+      const fingerprint = qualificationLabelFingerprint(values.label);
+      const duplicate = (questionsResult.data ?? []).find(
+        (question) =>
+          question.id !== questionId &&
+          qualificationLabelFingerprint(question.label) === fingerprint
+      );
+      if (duplicate) {
+        return NextResponse.json(
+          {
+            error:
+              'Já existe uma informação com esse nome. Edite a existente ou escolha outro nome.',
+          },
+          { status: 409 }
+        );
+      }
+      if (
+        existing?.is_system &&
+        (values.dataType !== existing.data_type ||
+          values.isRequired !== existing.is_required ||
+          values.isActive !== existing.is_active ||
+          values.visibilityCondition.mode !== 'always')
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'Objetivos essenciais não podem ser desativados nem ter seu tipo ou obrigatoriedade alterados.',
+          },
           { status: 400 }
         );
-      const values = {
-        account_id: accountId,
-        label,
-        prompt_instruction:
-          text(body.promptInstruction) || `Entenda naturalmente: ${label}.`,
-        data_type: text(body.dataType, 'text'),
-        normalization_strategy: text(
-          body.normalizationStrategy,
-          'free_text_v1'
-        ),
-        is_required: body.isRequired === true,
-        is_active: body.isActive !== false,
-        display_order: Number(body.displayOrder ?? 100),
-      };
-      const result = body.id
-        ? await supabase
-            .from('qualification_questions')
-            .update(values)
-            .eq('account_id', accountId)
-            .eq('id', text(body.id))
-            .select()
-            .single()
-        : await supabase
-            .from('qualification_questions')
-            .insert({
-              ...values,
-              key: `custom_${Date.now().toString(36)}`,
-              is_system: false,
-            })
-            .select()
-            .single();
+      }
+      if (
+        values.visibilityCondition.mode === 'answer_matches' &&
+        values.visibilityCondition.question_key === existing?.key
+      ) {
+        return NextResponse.json(
+          { error: 'Uma informação não pode depender dela mesma.' },
+          { status: 400 }
+        );
+      }
+      const result = await supabase.rpc(
+        'studiosp_save_qualification_question',
+        {
+          p_account_id: accountId,
+          p_question_id: questionId,
+          p_label: values.label,
+          p_prompt_instruction: values.promptInstruction,
+          p_data_type: values.dataType,
+          p_normalization_strategy: existing?.is_system
+            ? existing.normalization_strategy
+            : values.normalizationStrategy,
+          p_is_required: values.isRequired,
+          p_is_active: values.isActive,
+          p_display_order: values.displayOrder,
+          p_validation_schema: values.validationSchema,
+          p_visibility_condition: values.visibilityCondition,
+          p_options: values.options,
+        }
+      );
       actionError(result.error);
       return NextResponse.json({ question: result.data });
+    }
+
+    if (action === 'reorder_qualification_questions') {
+      const questionIds = Array.isArray(body.questionIds)
+        ? body.questionIds.map((value) => text(value)).filter(Boolean)
+        : [];
+      if (!questionIds.length) {
+        return NextResponse.json(
+          { error: 'Informe a nova ordem das informações.' },
+          { status: 400 }
+        );
+      }
+      const result = await supabase.rpc(
+        'studiosp_reorder_qualification_questions',
+        {
+          p_account_id: accountId,
+          p_question_ids: questionIds,
+        }
+      );
+      actionError(result.error);
+      return NextResponse.json({ questions: result.data });
     }
 
     if (action === 'save_ai_config') {
@@ -670,13 +1134,15 @@ export async function POST(request: NextRequest) {
       const result = await supabase
         .from('ai_config_versions')
         .update({
-          identity_name: text(body.identityName, 'Assistente Studiosp'),
+          identity_name: 'Pedro',
           communication_prompt: text(body.communicationPrompt),
           completion_message: text(body.completionMessage) || null,
           tone_config: {
             language: 'pt-BR',
             style: text(body.tone, 'consultivo'),
             message_length: text(body.messageLength, 'short'),
+            adapt_to_lead: body.adaptToLead !== false,
+            allow_contextual_laughter: body.allowContextualLaughter !== false,
           },
         })
         .eq('account_id', accountId)

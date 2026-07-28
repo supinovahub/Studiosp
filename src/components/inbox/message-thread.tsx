@@ -883,7 +883,15 @@ export function MessageThread({
       const supabase = createClient();
       const { error } = await supabase
         .from('conversations')
-        .update({ assigned_agent_id: agentId })
+        .update({
+          assigned_agent_id: agentId,
+          ai_autoreply_disabled: Boolean(agentId),
+          ai_control_mode: agentId ? 'human_active' : 'ai_active',
+          ai_control_reason: agentId ? 'human_assignment' : null,
+          ai_control_changed_at: new Date().toISOString(),
+          ai_processing_status: agentId ? 'paused' : 'idle',
+          ai_processing_reason: agentId ? 'human_takeover' : null,
+        })
         .eq('id', conversation.id);
 
       if (error) {

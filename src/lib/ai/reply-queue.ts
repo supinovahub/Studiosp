@@ -1,8 +1,5 @@
 import { supabaseAdmin } from './admin-client';
-import {
-  dispatchInboundToAiReply,
-  type AiDispatchResult,
-} from './auto-reply';
+import { dispatchInboundToAiReply, type AiDispatchResult } from './auto-reply';
 
 type Db = ReturnType<typeof supabaseAdmin>;
 
@@ -92,7 +89,9 @@ async function flagDelayedAiReplies(db: Db) {
   const threshold = new Date(Date.now() - 3 * 60 * 1000).toISOString();
   const { data: delayed } = await db
     .from('ai_reply_jobs')
-    .select('id, account_id, conversation_id, trigger_message_id, correlation_id')
+    .select(
+      'id, account_id, conversation_id, trigger_message_id, correlation_id'
+    )
     .in('status', ['queued', 'retrying'])
     .lte('created_at', threshold)
     .limit(20);
@@ -177,7 +176,9 @@ async function processClaimedJob(db: Db, job: AiReplyJob) {
     job.attempt_count < job.max_attempts
   ) {
     const delaySeconds = retryDelaySeconds(job.attempt_count);
-    const availableAt = new Date(Date.now() + delaySeconds * 1000).toISOString();
+    const availableAt = new Date(
+      Date.now() + delaySeconds * 1000
+    ).toISOString();
     await Promise.all([
       db
         .from('ai_reply_jobs')
@@ -244,6 +245,13 @@ export function terminalState(result: AiDispatchResult) {
       conversationStatus: 'handoff',
       reason: result.reason,
     } as const;
+  if (result.outcome === 'waiting_guidance')
+    return {
+      jobStatus: 'waiting_guidance',
+      attemptStatus: 'waiting_guidance',
+      conversationStatus: 'awaiting_guidance',
+      reason: result.reason,
+    } as const;
   if (result.outcome === 'skipped')
     return {
       jobStatus: 'skipped',
@@ -264,6 +272,8 @@ export function terminalState(result: AiDispatchResult) {
 const pausedSkipReasons = new Set([
   'assigned_to_human',
   'conversation_paused',
+  'awaiting_owner_guidance',
+  'conversation_closed',
   'sender_not_allowed',
 ]);
 
@@ -306,11 +316,7 @@ async function updateConversationState(
     .eq('ai_processing_job_id', job.id);
 }
 
-async function openFailureAttention(
-  db: Db,
-  job: AiReplyJob,
-  reason: string
-) {
+async function openFailureAttention(db: Db, job: AiReplyJob, reason: string) {
   const { data: opportunity } = await db
     .from('opportunities')
     .select('id')
@@ -325,9 +331,9 @@ async function openFailureAttention(
       account_id: job.account_id,
       opportunity_id: opportunity.id,
       assigned_role: 'owner',
-      kind: 'ai_handoff',
+      kind: 'ai_operational_failure',
       severity: 'critical',
-      title: 'A IA não conseguiu responder ao lead',
+      title: 'Falha operacional no atendimento da IA',
       context: {
         conversation_id: job.conversation_id,
         trigger_message_id: job.trigger_message_id,

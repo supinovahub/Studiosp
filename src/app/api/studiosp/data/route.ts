@@ -152,10 +152,73 @@ export async function GET(request: NextRequest) {
       }
       const attention = assertQuery<Row[]>(await attentionQuery, 'pendências');
       const leadMap = new Map(leads.map((lead) => [lead.id, lead]));
-      response.attention = attention.map((item) => ({
-        ...item,
-        lead: leadMap.get(item.opportunity_id) ?? null,
-      }));
+      let guidanceRequests: Row[] = [];
+      let guidanceMessages: Row[] = [];
+      let conversationMessages: Row[] = [];
+      if (role !== 'agent' && attention.length) {
+        const guidanceIds = attention
+          .map((item) => String(item.context?.guidance_request_id ?? ''))
+          .filter(Boolean);
+        const conversationIds = [
+          ...new Set(
+            attention
+              .map((item) => String(item.context?.conversation_id ?? ''))
+              .filter(Boolean)
+          ),
+        ];
+        if (guidanceIds.length) {
+          guidanceRequests = assertQuery<Row[]>(
+            await supabase
+              .from('ai_guidance_requests')
+              .select('*')
+              .eq('account_id', accountId)
+              .in('id', guidanceIds),
+            'pedidos de orientação da IA'
+          );
+          guidanceMessages = assertQuery<Row[]>(
+            await supabase
+              .from('ai_guidance_messages')
+              .select('*')
+              .eq('account_id', accountId)
+              .in('request_id', guidanceIds)
+              .order('created_at'),
+            'mensagens de orientação da IA'
+          );
+        }
+        if (conversationIds.length) {
+          conversationMessages = assertQuery<Row[]>(
+            await supabase
+              .from('messages')
+              .select(
+                'id, conversation_id, sender_type, content_type, content_text, created_at'
+              )
+              .eq('account_id', accountId)
+              .in('conversation_id', conversationIds)
+              .order('created_at', { ascending: false })
+              .limit(Math.min(500, conversationIds.length * 20)),
+            'contexto das conversas'
+          );
+        }
+      }
+      const guidanceMap = new Map(
+        guidanceRequests.map((item) => [item.id, item])
+      );
+      response.attention = attention.map((item) => {
+        const guidanceId = String(item.context?.guidance_request_id ?? '');
+        const conversationId = String(item.context?.conversation_id ?? '');
+        return {
+          ...item,
+          lead: leadMap.get(item.opportunity_id) ?? null,
+          guidanceRequest: guidanceMap.get(guidanceId) ?? null,
+          guidanceMessages: guidanceMessages.filter(
+            (message) => message.request_id === guidanceId
+          ),
+          conversationMessages: conversationMessages
+            .filter((message) => message.conversation_id === conversationId)
+            .slice(0, 12)
+            .reverse(),
+        };
+      });
     }
 
     if (['overview', 'my-day', 'agenda', 'lead'].includes(view)) {

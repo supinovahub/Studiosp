@@ -50,10 +50,13 @@ export function appointmentConfirmation(value: {
   return `Sua conversa de 10 a 15 minutos está confirmada para ${formatted}. Agora faremos a distribuição interna para um dos nossos corretores. Você receberá um lembrete antes da reunião.`;
 }
 
-export function opportunityInvitation(value: {
-  starts_at?: unknown;
-  timezone?: unknown;
-}) {
+export function opportunityInvitation(
+  value: {
+    starts_at?: unknown;
+    timezone?: unknown;
+  },
+  configuredCompletion?: string | null
+) {
   if (typeof value.starts_at !== 'string') return null;
   const startsAt = new Date(value.starts_at);
   if (!Number.isFinite(startsAt.getTime())) return null;
@@ -67,7 +70,17 @@ export function opportunityInvitation(value: {
     minute: '2-digit',
     timeZone: timezone,
   }).format(startsAt);
-  return `Encontrei algumas oportunidades de acordo com o seu perfil. Posso agendar uma conversa de 10 a 15 minutos com um corretor para apresentar os detalhes? Tenho disponibilidade para ${formatted}. Esse horário funciona para você?`;
+  const safeConfiguredCompletion =
+    configuredCompletion?.trim() &&
+    !/\b(confirmad[ao]|marcad[ao]|agendad[ao]|reservad[ao]|desconto|unidade garantida)\b/i.test(
+      configuredCompletion
+    )
+      ? configuredCompletion.trim().replace(/\s+/g, ' ')
+      : null;
+  const introduction =
+    safeConfiguredCompletion ??
+    'Boa, já entendi melhor o que você busca. Tenho algumas oportunidades que podem fazer sentido. Posso marcar uma conversa de 10 a 15 minutos com um corretor pra te explicar os detalhes?';
+  return `${introduction} Tenho disponibilidade para ${formatted}. Esse horário funciona pra você?`;
 }
 
 export function appointmentReservationFailure() {
@@ -97,28 +110,40 @@ export function qualificationQuestionPrompt(question?: {
   key?: unknown;
   label?: unknown;
   prompt_instruction?: unknown;
+  validation_schema?: unknown;
 }) {
   if (!question) return null;
   const prompts: Record<string, string> = {
     purchase_objective:
-      'Antes de avançarmos, você procura o imóvel para morar, investir ou combinar os dois objetivos?',
+      'Você está buscando esse imóvel pra morar, investir ou um pouco dos dois?',
     preferred_locations:
-      'Antes de avançarmos, qual bairro ou região de São Paulo você prefere?',
+      'Tem algum bairro ou região de São Paulo que você prefere? Se ainda não souber, tudo bem.',
     entry_budget:
-      'Antes de avançarmos, qual faixa de entrada você pretende utilizar?',
+      'Hoje, mais ou menos quanto você conseguiria usar de entrada?',
     monthly_installment_budget:
-      'Antes de avançarmos, qual faixa de parcela mensal ficaria confortável para você?',
+      'E qual valor de parcela por mês ficaria confortável pra você?',
     total_price_budget:
-      'Antes de avançarmos, qual faixa de preço total você está considerando?',
-    property_timing:
-      'Antes de avançarmos, você prefere imóvel na planta, pronto ou é indiferente?',
-    purchase_urgency:
-      'Antes de avançarmos, em quanto tempo você pretende realizar a compra?',
+      'Você já tem um valor total de compra em mente? Se não tiver, sem problema.',
+    property_timing: 'Você prefere algo na planta, pronto ou tanto faz?',
+    purchase_urgency: 'Você pretende comprar em quanto tempo, mais ou menos?',
   };
   const key = String(question.key ?? '');
   if (prompts[key]) return prompts[key];
+  const validation =
+    question.validation_schema &&
+    typeof question.validation_schema === 'object' &&
+    !Array.isArray(question.validation_schema)
+      ? (question.validation_schema as Record<string, unknown>)
+      : {};
+  const configuredExample =
+    typeof validation.question_example === 'string'
+      ? validation.question_example.trim()
+      : '';
+  if (configuredExample) return configuredExample;
   const label = String(question.label ?? '').trim();
-  return label ? `Antes de avançarmos, pode me informar: ${label}?` : null;
+  return label
+    ? `Pra eu entender melhor, me conta sobre ${label.toLocaleLowerCase('pt-BR')}?`
+    : null;
 }
 
 export function availabilityReply(args: {
@@ -127,14 +152,8 @@ export function availabilityReply(args: {
   nextQuestion: string | null;
   now?: Date;
 }) {
-  const usable = args.slots
-    .filter(
-      (slot): slot is Slot & { starts_at: string } =>
-        typeof slot.starts_at === 'string' &&
-        Number.isFinite(new Date(slot.starts_at).getTime())
-    )
-    .slice(0, 3);
-  if (!usable.length) {
+  const effective = selectAvailabilitySlots(args);
+  if (!effective.length) {
     return args.nextQuestion
       ? `Não encontrei um horário disponível dentro da agenda configurada agora. ${args.nextQuestion}`
       : 'Não encontrei um horário disponível dentro da agenda configurada agora.';
@@ -149,13 +168,6 @@ export function availabilityReply(args: {
       month: '2-digit',
       day: '2-digit',
     }).format(value);
-  const asksToday = /\bhoje\b/i.test(args.latestMessage);
-  const selected = asksToday
-    ? usable.filter(
-        (slot) => localDay(new Date(slot.starts_at)) === localDay(now)
-      )
-    : usable;
-  const effective = (selected.length ? selected : usable).slice(0, 3);
   const sameDay = effective.every(
     (slot) =>
       localDay(new Date(slot.starts_at)) ===
@@ -202,4 +214,36 @@ export function availabilityReply(args: {
   return nextQuestion
     ? `${availability} Antes de reservar, preciso concluir seu perfil. ${nextQuestion}`
     : `${availability} Qual desses horários funciona melhor para você?`;
+}
+
+export function selectAvailabilitySlots<T extends Slot>(args: {
+  slots: T[];
+  latestMessage: string;
+  now?: Date;
+}): Array<T & { starts_at: string }> {
+  const usable = args.slots
+    .filter(
+      (slot): slot is T & { starts_at: string } =>
+        typeof slot.starts_at === 'string' &&
+        Number.isFinite(new Date(slot.starts_at).getTime())
+    )
+    .slice(0, 3);
+  if (!usable.length) return [];
+
+  const timezone = 'America/Sao_Paulo';
+  const now = args.now ?? new Date();
+  const localDay = (value: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(value);
+  const asksToday = /\bhoje\b/i.test(args.latestMessage);
+  const selected = asksToday
+    ? usable.filter(
+        (slot) => localDay(new Date(slot.starts_at)) === localDay(now)
+      )
+    : usable;
+  return (selected.length ? selected : usable).slice(0, 3);
 }
