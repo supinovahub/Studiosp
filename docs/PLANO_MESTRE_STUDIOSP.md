@@ -1940,7 +1940,8 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
   deixaram de ser tratados como uma única condição;
 - o webhook passou a somente persistir, cancelar cadência quando aplicável,
   enfileirar e acionar o worker;
-- o worker possui invocação imediata e watchdog periódico de cinco minutos;
+- o worker possui invocação imediata a cada mensagem e retry; no plano Hobby da
+  Vercel, o cron diário permanece como watchdog de contingência;
 - `ai_response_outbox` impede reenvio cego depois que o provedor pode ter
   aceitado a mensagem;
 - `ai_incidents` registra causa, tentativa, estado de entrega e decisão do
