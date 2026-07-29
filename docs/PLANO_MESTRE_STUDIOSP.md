@@ -17,6 +17,17 @@ Especificação da importação segura de conversas antigas:
 
 #### Implementado, aguardando homologação real controlada
 
+- a qualificação central passa a ser controlada por estado determinístico no
+  servidor; o modelo interpreta ambiguidades e redige, mas não define sozinho
+  quais fatos foram persistidos nem qual campo vem em seguida;
+- respostas estruturadas aceitam tanto a chave canônica da informação quanto
+  seu UUID de banco, eliminando incompatibilidade entre o modelo e o schema;
+- objetivo, localização, valores financeiros, situação do imóvel e prazo
+  possuem extração determinística quando a evidência é inequívoca;
+- cada turno só pode persistir evidências da mensagem atual, evitando
+  reextração e corrupção a partir do histórico inteiro;
+- a próxima pergunta obrigatória é escolhida pelo estado confirmado no banco,
+  não pelo texto livre gerado;
 - a versão de produção que funcionava corretamente em 28/07/2026 às 13:18,
   commit `f10cb76`, é a referência comportamental da qualificação;
 - foi removido o realinhamento automático que podia atribuir uma resposta ao
@@ -28,7 +39,7 @@ Especificação da importação segura de conversas antigas:
 - fila persistida, idempotência, retries, limites operacionais e demais
   proteções de entrega atuais foram preservados;
 - a regressão e as verificações estão documentadas no
-  [Relatório de restauração da qualificação SDR](./RELATORIO_RESTAURACAO_QUALIFICACAO_SDR_2026-07-29.md).
+  [Relatório de robustez determinística da qualificação SDR](./RELATORIO_ROBUSTEZ_DETERMINISTICA_QUALIFICACAO_SDR_2026-07-29.md).
 
 ### Construtor seguro da qualificação — 28 de julho de 2026
 

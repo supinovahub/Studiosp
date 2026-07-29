@@ -50,6 +50,19 @@ describe('qualification canonical normalization', () => {
     });
   });
 
+  it('uses aliases stored by the current database schema', () => {
+    expect(
+      normalizeQualificationValue({
+        question: { key: 'purchase_objective', data_type: 'single_choice' },
+        normalizedValue: { value: 'uso próprio' },
+        options: [
+          { value: 'live', label: 'Morar', aliases: ['uso próprio'] },
+          { value: 'invest', label: 'Investir', aliases: ['investimento'] },
+        ],
+      })
+    ).toEqual({ value: 'live', label: 'Morar' });
+  });
+
   it('normalizes a long purchase horizon returned by the model as text', () => {
     expect(
       normalizeQualificationValue({
