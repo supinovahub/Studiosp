@@ -304,7 +304,7 @@ begin
     'development_review',
     'warning',
     'open',
-    'Revisar imóvel: ' || v_development.name,
+    'Revisar cadastro: ' || v_development.name,
     jsonb_build_object(
       'development_id', v_development.id,
       'submitted_by', v_profile_id

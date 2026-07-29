@@ -49,13 +49,62 @@ Durante o bootstrap foram corrigidos dois problemas de reprodutibilidade:
 - arquivos temporários preexistentes em `.superdesign/tmp/`: preservados e
   fora do escopo.
 
-## Homologação pendente
+## Homologação no novo staging
 
-No novo staging:
+Preview:
+`https://studiosp-git-feature-broker-development-submissions-brio5.vercel.app`
 
-1. testar cadastro e duas imagens como Corretor;
-2. testar reprovação com motivo e reenvio;
-3. testar aprovação e publicação como Dono;
-4. tentar acessos indevidos com um segundo Corretor;
-5. confirmar registros, mídias e pendências diretamente no banco;
-6. executar os advisors do Supabase.
+Fluxo validado em 29/07/2026:
+
+1. login e ativação do perfil Corretor;
+2. cadastro do `Residencial QA Corretor` com incorporadora, bairro, endereço e
+   primeira condição comercial;
+3. upload múltiplo real de duas imagens JPG;
+4. envio do rascunho para aprovação do Dono;
+5. criação automática da pendência na Central de atenção;
+6. reprovação com motivo e retorno do cadastro ao estado editável;
+7. reenvio do imóvel para análise;
+8. aprovação e publicação;
+9. conferência direta no banco.
+
+Resultado final conferido:
+
+- empreendimento com `status = published`;
+- submissão com `submission_status = approved`;
+- uma condição comercial ativa;
+- duas mídias publicadas;
+- nenhuma pendência de revisão aberta.
+
+Durante a homologação foram encontradas e corrigidas duas falhas:
+
+- a política do Storage interpretava o nome da coluna do caminho dentro de uma
+  subconsulta como o nome do empreendimento, bloqueando imagens do corretor;
+- as funções de envio e revisão dependiam de privilégios diretos sobre
+  `attention_items`, o que permitia cadastro, mas bloqueava a criação da
+  pendência. As transações agora executam com privilégio controlado e mantêm as
+  verificações explícitas de autor e papel.
+
+Também foi adicionada leitura dos dados comerciais e das mídias pelo corretor
+durante os estados `draft`, `pending` e `rejected`, sem liberar edição enquanto
+o cadastro aguarda o Dono.
+
+## Observações da infraestrutura
+
+- O projeto `Dash-Studio` foi pausado, de forma recuperável, para liberar uma
+  vaga do plano gratuito.
+- O Supabase novo permanece isolado da produção.
+- Os advisors ainda apontam avisos preexistentes de segurança e desempenho,
+  como funções `SECURITY DEFINER`, políticas permissivas sobrepostas e objetos
+  sem índices. Eles devem ser tratados em uma revisão específica antes de
+  promover esta branch.
+- O preview possui URL e chave anônima específicas do staging. Rotinas
+  independentes que exigem `SUPABASE_SERVICE_ROLE_KEY` ainda precisam receber a
+  chave da nova staging na Vercel; isso não impediu o fluxo autenticado de
+  cadastro, revisão, Storage e publicação testado neste relatório.
+
+## Pendência residual
+
+- Repetir o cenário com um segundo corretor para comprovar, via interface, que
+  ele não lê nem altera rascunhos pertencentes ao primeiro. As políticas RLS
+  foram implementadas para esse isolamento, mas a staging atual possui apenas
+  um perfil de corretor de teste.
