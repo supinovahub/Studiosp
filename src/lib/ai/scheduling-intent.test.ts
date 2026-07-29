@@ -3,15 +3,36 @@ import {
   availabilityReply,
   appointmentConfirmation,
   appointmentReservationFailure,
+  closestAvailableSlotReply,
   findExactRequestedSlot,
   guardPrematureMeetingOffer,
   isAvailabilityInquiry,
+  isOfferedSlotRejection,
   opportunityInvitation,
   qualificationQuestionPrompt,
   requestedStartFromExtraction,
+  schedulePreferenceQuestion,
 } from './scheduling-intent';
 
 describe('scheduling intent', () => {
+  it('asks for a preferred day and time after rejecting an offered slot', () => {
+    expect(
+      isOfferedSlotRejection('Não consigo nesse horário', ['slot-1'])
+    ).toBe(true);
+    expect(isOfferedSlotRejection('Não', [])).toBe(false);
+    expect(schedulePreferenceQuestion()).toBe(
+      'Sem problema. Qual seria o melhor dia e horário para você?'
+    );
+  });
+
+  it('offers the closest available time on the requested day', () => {
+    expect(
+      closestAvailableSlotReply({
+        starts_at: '2026-07-30T18:30:00.000Z',
+      })
+    ).toContain('15:30');
+  });
+
   it('accepts a valid ISO instant and rejects an invalid value', () => {
     expect(
       requestedStartFromExtraction('2026-07-28T10:00:00-03:00')?.toISOString()

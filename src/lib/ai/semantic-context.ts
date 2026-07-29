@@ -4,7 +4,7 @@ export interface AiSemanticContext {
   version: 1;
   mode: 'qualification' | 'reactivation' | 'followup' | 'guidance';
   expectedQuestionKey?: string | null;
-  expectedResponseKind?: 'reactivation_interest' | null;
+  expectedResponseKind?: 'reactivation_interest' | 'schedule_preference' | null;
   presentedFacts?: string[];
   offeredSlotId?: string | null;
   offeredSlotIds?: string[];

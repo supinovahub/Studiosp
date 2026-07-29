@@ -56,7 +56,7 @@ export interface ConversationTurn {
   latestUserMessage: string;
   previousAssistantMessage: string;
   expectedQuestionKey: string | null;
-  expectedResponseKind: 'reactivation_interest' | null;
+  expectedResponseKind: 'reactivation_interest' | 'schedule_preference' | null;
 }
 
 export type LeadPosture =
@@ -107,7 +107,8 @@ export function conversationTurn(
   messages: ChatMessage[],
   questions: Row[] = [],
   trustedExpectedQuestionKey?: string | null,
-  trustedExpectedResponseKind?: 'reactivation_interest' | null
+  trustedExpectedResponseKind?:
+    'reactivation_interest' | 'schedule_preference' | null
 ): ConversationTurn {
   const latestUserIndex = messages.findLastIndex(
     (message) => message.role === 'user'
@@ -135,7 +136,7 @@ export function classifyLeadPosture(args: {
   latestUserMessage: string;
   previousAssistantMessage: string;
   expectedQuestionKey: string | null;
-  expectedResponseKind?: 'reactivation_interest' | null;
+  expectedResponseKind?: 'reactivation_interest' | 'schedule_preference' | null;
   isReactivation: boolean;
 }): LeadPosture {
   const latest = normalizeConversationText(args.latestUserMessage);
@@ -193,7 +194,7 @@ export function isExplicitReactivationAffirmation(value: string) {
 export function deterministicPostureReply(args: {
   posture: LeadPosture;
   isReactivation: boolean;
-  expectedResponseKind?: 'reactivation_interest' | null;
+  expectedResponseKind?: 'reactivation_interest' | 'schedule_preference' | null;
 }) {
   if (args.posture === 'reactivation_hesitation') {
     return 'Entendi. O que está pesando mais nessa dúvida hoje: o momento da compra ou as condições?';

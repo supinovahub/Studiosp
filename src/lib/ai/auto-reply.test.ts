@@ -42,7 +42,15 @@ vi.mock('./context', () => ({
   buildConversationContext: h.buildConversationContext,
 }));
 vi.mock('./knowledge', () => ({ retrieveKnowledge: h.retrieveKnowledge }));
-vi.mock('./generate', () => ({ generateReply: h.generateReply }));
+vi.mock('./generate', () => ({
+  generateReply: h.generateReply,
+  generateReplyWithFallback: h.generateReply,
+  isTransientAiError: (error: unknown) =>
+    error instanceof Error &&
+    ['timeout', 'empty_response', 'rate_limited', 'network_error'].includes(
+      (error as Error & { code?: string }).code ?? ''
+    ),
+}));
 vi.mock('./sdr-classify', () => ({
   classifySdrTurn: h.classifySdrTurn,
   emptySdrClassification: () => ({

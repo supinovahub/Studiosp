@@ -1,6 +1,6 @@
 import type { ChatMessage } from './types';
 import type { AiConfig } from './types';
-import { generateReply } from './generate';
+import { generateReplyWithFallback } from './generate';
 import {
   SDR_INTENTS,
   type LeadStage,
@@ -152,7 +152,7 @@ export async function classifySdrTurn(args: {
   config: AiConfig;
   messages: ChatMessage[];
 }): Promise<SdrClassification> {
-  const result = await generateReply({
+  const result = await generateReplyWithFallback({
     config: args.config,
     systemPrompt: CLASSIFIER_PROMPT,
     messages: args.messages,

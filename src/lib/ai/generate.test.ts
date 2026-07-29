@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { generateReply, parseGeneration } from './generate';
+import {
+  generateReply,
+  generateReplyWithFallback,
+  parseGeneration,
+} from './generate';
 import { AiError, type AiConfig } from './types';
 
 function config(overrides: Partial<AiConfig> = {}): AiConfig {
@@ -147,6 +151,29 @@ describe('generateReply — OpenAI', () => {
         messages: [{ role: 'user', content: 'Hi' }],
       })
     ).rejects.toBeInstanceOf(AiError);
+  });
+
+  it('falls back to a smaller model after an empty completion', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        okResponse({ choices: [{ message: { content: '' } }] })
+      )
+      .mockResolvedValueOnce(
+        okResponse({ choices: [{ message: { content: 'Resposta segura' } }] })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateReplyWithFallback({
+      config: config({ model: 'gpt-4.1-mini' }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Oi' }],
+    });
+
+    expect(result.text).toBe('Resposta segura');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).toBe(
+      'gpt-4.1-nano'
+    );
   });
 });
 
