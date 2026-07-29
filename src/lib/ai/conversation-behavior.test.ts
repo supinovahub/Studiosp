@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyLeadPosture,
   conversationTurn,
+  deterministicPostureReply,
   explicitUnknownCandidate,
   inferExpectedQuestionKey,
+  isExplicitReactivationAffirmation,
   isQualificationCandidateGrounded,
 } from './conversation-behavior';
 
@@ -79,6 +81,57 @@ describe('conversation behavior', () => {
         isReactivation: true,
       })
     ).toBe('reactivation_hesitation');
+  });
+
+  it('treats the exact production reply as reactivation hesitation without a qualification key', () => {
+    expect(
+      classifyLeadPosture({
+        latestUserMessage: 'Mais ou menos',
+        previousAssistantMessage:
+          'Você ainda está avaliando essa possibilidade?',
+        expectedQuestionKey: null,
+        expectedResponseKind: 'reactivation_interest',
+        isReactivation: true,
+      })
+    ).toBe('reactivation_hesitation');
+  });
+
+  it('recognizes a bare question mark as confusion', () => {
+    expect(
+      classifyLeadPosture({
+        latestUserMessage: '?',
+        previousAssistantMessage:
+          'Você ainda está avaliando essa possibilidade?',
+        expectedQuestionKey: null,
+        expectedResponseKind: 'reactivation_interest',
+        isReactivation: true,
+      })
+    ).toBe('confused');
+  });
+
+  it('creates different contextual repairs for hesitation and confusion', () => {
+    const hesitation = deterministicPostureReply({
+      posture: 'reactivation_hesitation',
+      isReactivation: true,
+      expectedResponseKind: 'reactivation_interest',
+    });
+    const confusion = deterministicPostureReply({
+      posture: 'confused',
+      isReactivation: true,
+      expectedResponseKind: 'reactivation_interest',
+    });
+
+    expect(hesitation).toMatch(/dúvida/i);
+    expect(confusion).toMatch(/ainda está nos seus planos/i);
+    expect(confusion).not.toBe(hesitation);
+  });
+
+  it('only resolves reactivation when the lead affirms continued interest', () => {
+    expect(
+      isExplicitReactivationAffirmation('Sim, ainda estou avaliando')
+    ).toBe(true);
+    expect(isExplicitReactivationAffirmation('Mais ou menos')).toBe(false);
+    expect(isExplicitReactivationAffirmation('?')).toBe(false);
   });
 
   it('keeps an ambivalent short answer on the same qualification subject', () => {

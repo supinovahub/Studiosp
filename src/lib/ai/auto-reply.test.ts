@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   openGuidanceRequest: vi.fn(),
   openOperationalFailure: vi.fn(),
   recordPromptInjectionSignal: vi.fn(),
+  loadAiResponseOutboxForJob: vi.fn(),
   prepareAiResponseOutbox: vi.fn(),
   beginAiOutboxPart: vi.fn(),
   markAiOutboxPartSent: vi.fn(),
@@ -30,7 +31,7 @@ const h = vi.hoisted(() => ({
     automationReplySteps: [] as { id: string }[],
     rateClaim: true as boolean,
     claim: true as boolean,
-    fingerprintClaim: true as boolean,
+    fingerprintClaims: [true] as boolean[],
     updatePayload: null as Record<string, unknown> | null,
     rpcCalls: [] as { name: string; args: unknown }[],
   },
@@ -86,6 +87,7 @@ vi.mock('./guidance', () => ({
   recordPromptInjectionSignal: h.recordPromptInjectionSignal,
 }));
 vi.mock('./delivery', () => ({
+  loadAiResponseOutboxForJob: h.loadAiResponseOutboxForJob,
   prepareAiResponseOutbox: h.prepareAiResponseOutbox,
   beginAiOutboxPart: h.beginAiOutboxPart,
   markAiOutboxPartSent: h.markAiOutboxPartSent,
@@ -178,7 +180,7 @@ vi.mock('./admin-client', () => ({
           name === 'studiosp_claim_ai_account_rate_slot'
             ? h.state.rateClaim
             : name === 'claim_ai_response_fingerprint'
-              ? h.state.fingerprintClaim
+              ? (h.state.fingerprintClaims.shift() ?? true)
               : h.state.claim,
         error: null,
       });
@@ -230,7 +232,7 @@ beforeEach(() => {
   h.state.automationReplySteps = [];
   h.state.rateClaim = true;
   h.state.claim = true;
-  h.state.fingerprintClaim = true;
+  h.state.fingerprintClaims = [true];
   h.state.updatePayload = null;
   h.state.rpcCalls = [];
   h.loadAiConfig.mockResolvedValue(aiConfig());
@@ -291,6 +293,7 @@ beforeEach(() => {
   });
   h.loadTrustedGuidance.mockResolvedValue([]);
   h.loadResolvingGuidance.mockResolvedValue(null);
+  h.loadAiResponseOutboxForJob.mockResolvedValue(null);
   h.resolveGuidanceAfterReply.mockResolvedValue(undefined);
   const baseOutbox = {
     id: 'outbox-1',
@@ -362,6 +365,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.state.rpcCalls.map((call) => call.name)).toEqual([
       'studiosp_claim_ai_account_rate_slot',
       'claim_ai_reply_slot',
+      'claim_ai_response_fingerprint',
     ]);
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({ conversationId: 'conv-1', text: 'Hello!' })
@@ -540,7 +544,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
   });
 
   it('does not resend a durable response already marked as sent', async () => {
-    h.prepareAiResponseOutbox.mockResolvedValueOnce({
+    h.loadAiResponseOutboxForJob.mockResolvedValueOnce({
       id: 'outbox-1',
       account_id: 'acct-1',
       conversation_id: 'conv-1',
@@ -556,6 +560,66 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     });
     await dispatchInboundToAiReply(ARGS);
     expect(h.engineSendText).not.toHaveBeenCalled();
+    expect(
+      h.state.rpcCalls.some(
+        (call) => call.name === 'claim_ai_response_fingerprint'
+      )
+    ).toBe(false);
+  });
+
+  it('repairs a response blocked as a cross-job duplicate before sending', async () => {
+    h.state.fingerprintClaims = [false, true];
+    h.generateReply
+      .mockResolvedValueOnce({
+        text: 'Encontrei oportunidades. Posso reservar uma conversa?',
+        handoff: false,
+        needsGuidance: false,
+      })
+      .mockResolvedValueOnce({
+        text: 'Entendi. O que mudou para você desde a nossa última conversa?',
+        handoff: false,
+        needsGuidance: false,
+      });
+
+    const result = await dispatchInboundToAiReply(ARGS);
+
+    expect(result).toEqual({ outcome: 'completed' });
+    expect(
+      h.state.rpcCalls.filter(
+        (call) => call.name === 'claim_ai_response_fingerprint'
+      )
+    ).toHaveLength(2);
+    expect(h.engineSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Entendi. O que mudou para você desde a nossa última conversa?',
+      })
+    );
+  });
+
+  it('opens one blocking incident when a duplicate cannot be safely repaired', async () => {
+    h.state.fingerprintClaims = [false];
+    h.generateReply
+      .mockResolvedValueOnce({
+        text: 'Encontrei oportunidades. Posso reservar uma conversa?',
+        handoff: false,
+        needsGuidance: false,
+      })
+      .mockRejectedValueOnce(new Error('provider_timeout'));
+
+    const result = await dispatchInboundToAiReply(ARGS);
+
+    expect(result).toEqual({
+      outcome: 'failed',
+      reason: 'duplicate_response_blocked',
+      retryable: false,
+    });
+    expect(h.engineSendText).not.toHaveBeenCalled();
+    expect(h.openOperationalFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonCode: 'duplicate_response_blocked',
+        blockConversation: true,
+      })
+    );
   });
 
   it('skips when AI is off / not configured', async () => {

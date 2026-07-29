@@ -19,6 +19,21 @@ export interface AiResponseOutbox {
   lease_expires_at?: string | null;
 }
 
+export async function loadAiResponseOutboxForJob(args: {
+  db: SupabaseClient;
+  accountId: string;
+  jobId: string;
+}) {
+  const { data, error } = await args.db
+    .from('ai_response_outbox')
+    .select('*')
+    .eq('account_id', args.accountId)
+    .eq('job_id', args.jobId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? normalizeOutbox(data) : null;
+}
+
 export async function prepareAiResponseOutbox(args: {
   db: SupabaseClient;
   accountId: string;

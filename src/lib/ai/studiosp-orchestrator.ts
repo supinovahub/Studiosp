@@ -19,7 +19,9 @@ import { loadAiConfig } from './config';
 import {
   classifyLeadPosture,
   conversationTurn,
+  deterministicPostureReply,
   explicitUnknownCandidate,
+  isExplicitReactivationAffirmation,
   isQualificationCandidateGrounded,
   postureInstruction,
   type ConversationTurn,
@@ -433,7 +435,8 @@ export async function prepareStudiospTurn(args: {
   const turn = conversationTurn(
     args.messages,
     questions as Row[],
-    previousSemanticContext?.expectedQuestionKey
+    previousSemanticContext?.expectedQuestionKey,
+    previousSemanticContext?.expectedResponseKind
   );
   const posture = classifyLeadPosture({
     ...turn,
@@ -827,6 +830,14 @@ export async function prepareStudiospTurn(args: {
     value: answer.normalized_value,
   }));
   const currentPostureInstruction = postureInstruction(posture);
+  const reactivationAffirmed =
+    Boolean(reactivationSession) &&
+    isExplicitReactivationAffirmation(latestUserText);
+  const postureReply = deterministicPostureReply({
+    posture,
+    isReactivation: Boolean(reactivationSession),
+    expectedResponseKind: turn.expectedResponseKind,
+  });
   const grounding = [
     reactivationSession
       ? `Este turno continua uma reativação de base. Não reinicie a apresentação nem repita perguntas já respondidas. Use os dados conhecidos apenas como contexto a confirmar; se o lead acabou de confirmar um dado, trate-o como confirmado e avance para a próxima lacuna. Contexto conhecido: ${JSON.stringify(reactivationSession.known_context ?? {}).slice(0, 1200)}.`
@@ -865,7 +876,10 @@ export async function prepareStudiospTurn(args: {
     'Faça no máximo uma pergunta por mensagem. Responda desvios úteis e retome a próxima pergunta depois, sem interrogatório.',
   ].filter((item): item is string => Boolean(item));
 
-  if (reactivationSession && (qualification.complete || reservedAppointment)) {
+  if (
+    reactivationSession &&
+    (reservedAppointment || (qualification.complete && reactivationAffirmed))
+  ) {
     await args.db
       .from('reactivation_sessions')
       .update({
@@ -881,30 +895,37 @@ export async function prepareStudiospTurn(args: {
     opportunityId: opportunity.id,
     grounding,
     reservedAppointment,
-    outboundOverride: availabilityInquiry
-      ? availabilityReply({
-          slots: reservableSlots,
-          latestMessage: latestUserText,
-          nextQuestion: nextQualificationPrompt,
-        })
-      : reservedAppointment
-        ? appointmentConfirmation(reservedAppointment)
-        : reservationFailed
-          ? appointmentReservationFailure()
-          : qualification.complete &&
-              ['neutral', 'playful'].includes(posture) &&
-              reservableSlots[0]
-            ? opportunityInvitation(
-                reservableSlots[0],
-                args.config.completionMessage
-              )
-            : null,
+    outboundOverride: postureReply
+      ? postureReply
+      : availabilityInquiry
+        ? availabilityReply({
+            slots: reservableSlots,
+            latestMessage: latestUserText,
+            nextQuestion: nextQualificationPrompt,
+          })
+        : reservedAppointment
+          ? appointmentConfirmation(reservedAppointment)
+          : reservationFailed
+            ? appointmentReservationFailure()
+            : qualification.complete &&
+                ['neutral', 'playful'].includes(posture) &&
+                (!reactivationSession || reactivationAffirmed) &&
+                reservableSlots[0]
+              ? opportunityInvitation(
+                  reservableSlots[0],
+                  args.config.completionMessage
+                )
+              : null,
     qualificationComplete: qualification.complete,
     nextQualificationPrompt,
     semanticContext: {
       version: 1,
       mode: reactivationSession ? 'reactivation' : 'qualification',
       expectedQuestionKey: nextQuestion ? String(nextQuestion.key) : null,
+      expectedResponseKind:
+        reactivationSession && !reactivationAffirmed
+          ? 'reactivation_interest'
+          : null,
       presentedFacts: confirmedFacts.map(
         (fact) =>
           `${String(fact.label ?? fact.key ?? 'Informação')}: ${JSON.stringify(fact.value)}`

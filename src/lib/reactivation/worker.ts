@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { engineSendText } from '@/lib/flows/meta-send';
 import { waitBetweenAiMessages } from '@/lib/ai/message-parser';
+import { semanticMessageMetadata } from '@/lib/ai/semantic-context';
 import { buildReactivationMessageWithVariant } from './cadence';
 import { waitForReactivationDelay } from './pacing';
 
@@ -98,6 +99,15 @@ export async function sendDueReactivationTouches(
           contactId: lead.contact_id,
           text: part,
           aiGenerated: false,
+          semanticContext:
+            partIndex === message.parts.length - 1
+              ? semanticMessageMetadata({
+                  version: 1,
+                  mode: 'reactivation',
+                  expectedQuestionKey: null,
+                  expectedResponseKind: 'reactivation_interest',
+                })
+              : undefined,
         });
         sentMessageIds.push(result.whatsapp_message_id);
       }

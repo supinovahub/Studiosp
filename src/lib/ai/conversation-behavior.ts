@@ -56,6 +56,7 @@ export interface ConversationTurn {
   latestUserMessage: string;
   previousAssistantMessage: string;
   expectedQuestionKey: string | null;
+  expectedResponseKind: 'reactivation_interest' | null;
 }
 
 export type LeadPosture =
@@ -105,7 +106,8 @@ export function inferExpectedQuestionKey(
 export function conversationTurn(
   messages: ChatMessage[],
   questions: Row[] = [],
-  trustedExpectedQuestionKey?: string | null
+  trustedExpectedQuestionKey?: string | null,
+  trustedExpectedResponseKind?: 'reactivation_interest' | null
 ): ConversationTurn {
   const latestUserIndex = messages.findLastIndex(
     (message) => message.role === 'user'
@@ -125,6 +127,7 @@ export function conversationTurn(
     expectedQuestionKey:
       trustedExpectedQuestionKey ??
       inferExpectedQuestionKey(previousAssistantMessage, questions),
+    expectedResponseKind: trustedExpectedResponseKind ?? null,
   };
 }
 
@@ -132,9 +135,13 @@ export function classifyLeadPosture(args: {
   latestUserMessage: string;
   previousAssistantMessage: string;
   expectedQuestionKey: string | null;
+  expectedResponseKind?: 'reactivation_interest' | null;
   isReactivation: boolean;
 }): LeadPosture {
   const latest = normalizeConversationText(args.latestUserMessage);
+  if (/^\s*(?:\?+|🤔+)\s*$/u.test(args.latestUserMessage)) {
+    return 'confused';
+  }
   if (
     /\b(nao entendi|nao ficou claro|como assim|que voce quer dizer|explica melhor|nao entendi nada)\b/.test(
       latest
@@ -151,8 +158,9 @@ export function classifyLeadPosture(args: {
   }
   if (
     args.isReactivation &&
-    !args.expectedQuestionKey &&
-    /\b(nao sei|talvez|estou em duvida|to em duvida|nao tenho certeza|desisti|repensando)\b/.test(
+    (args.expectedResponseKind === 'reactivation_interest' ||
+      !args.expectedQuestionKey) &&
+    /\b(nao sei|talvez|mais ou menos|depende|acho que sim|mais pra sim|mais pra nao|estou em duvida|to em duvida|nao tenho certeza|repensando)\b/.test(
       latest
     )
   ) {
@@ -170,6 +178,34 @@ export function classifyLeadPosture(args: {
     return 'playful';
   }
   return 'neutral';
+}
+
+export function isExplicitReactivationAffirmation(value: string) {
+  const normalized = normalizeConversationText(value);
+  return (
+    /^(?:sim|s|ainda|claro|com certeza)$/.test(normalized) ||
+    /\b(?:ainda (?:estou|to|quero|pretendo|tenho interesse)|continuo (?:interessado|interessada|avaliando|pesquisando)|quero (?:continuar|retomar|comprar)|vamos (?:continuar|retomar)|podemos (?:continuar|retomar)|faz sentido retomar|continua de pe)\b/.test(
+      normalized
+    )
+  );
+}
+
+export function deterministicPostureReply(args: {
+  posture: LeadPosture;
+  isReactivation: boolean;
+  expectedResponseKind?: 'reactivation_interest' | null;
+}) {
+  if (args.posture === 'reactivation_hesitation') {
+    return 'Entendi. O que está pesando mais nessa dúvida hoje: o momento da compra ou as condições?';
+  }
+  if (
+    args.posture === 'confused' &&
+    args.isReactivation &&
+    args.expectedResponseKind === 'reactivation_interest'
+  ) {
+    return 'Quis saber se essa compra ainda está nos seus planos ou se o cenário mudou desde a nossa última conversa. O que não ficou claro?';
+  }
+  return null;
 }
 
 export function postureInstruction(posture: LeadPosture): string | null {

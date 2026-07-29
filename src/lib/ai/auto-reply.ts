@@ -37,6 +37,7 @@ import {
 } from './response-policy';
 import {
   beginAiOutboxPart,
+  loadAiResponseOutboxForJob,
   markAiOutboxAmbiguous,
   markAiOutboxPartSent,
   prepareAiResponseOutbox,
@@ -369,11 +370,19 @@ export async function dispatchInboundToAiReply(
       operation: [...studiosp.grounding, ...trustedGuidance],
     });
 
-    const { text, handoff, needsGuidance, usage } = await generatePrimaryReply({
-      config,
-      systemPrompt,
-      messages,
-    });
+    const { text, handoff, needsGuidance, usage } =
+      studiosp.outboundOverride !== null
+        ? {
+            text: studiosp.outboundOverride,
+            handoff: false,
+            needsGuidance: false,
+            usage: null,
+          }
+        : await generatePrimaryReply({
+            config,
+            systemPrompt,
+            messages,
+          });
     const generatedResponse =
       studiosp.outboundOverride ??
       guardPrematureMeetingOffer(
@@ -428,7 +437,7 @@ export async function dispatchInboundToAiReply(
         });
       }
     }
-    const responseText = responsePolicy.text;
+    let responseText = responsePolicy.text;
 
     // Record token spend on the account's BYO key. Fire-and-forget so it
     // never adds latency to the customer-facing send: `logAiUsage`
@@ -589,10 +598,9 @@ export async function dispatchInboundToAiReply(
           Date.now() - new Date(resolvingGuidance.created_at).getTime()
         )
       : '';
-    const outboundText = compactAiReply(
+    let outboundText = compactAiReply(
       joinResumePrefix(resumePrefix, responseText)
     );
-    const outboundParts = splitAiMessage(outboundText);
     const semanticContext = semanticMessageMetadata({
       ...studiosp.semanticContext,
       ...(resolvingGuidance
@@ -602,17 +610,86 @@ export async function dispatchInboundToAiReply(
           }
         : {}),
     });
-    let outbox = await prepareAiResponseOutbox({
+    let outbox = await loadAiResponseOutboxForJob({
       db,
       accountId,
-      conversationId,
       jobId,
-      triggerMessageId,
-      contextVersion,
-      responseText: outboundText,
-      parts: outboundParts,
-      semanticContext,
     });
+    if (!outbox || outbox.status === 'cancelled') {
+      let fingerprintClaim = await db.rpc('claim_ai_response_fingerprint', {
+        p_account_id: accountId,
+        p_conversation_id: conversationId,
+        p_fingerprint: responseFingerprint(outboundText),
+        p_window_seconds: 600,
+      });
+      if (fingerprintClaim.error) {
+        return {
+          outcome: 'failed',
+          reason: 'response_fingerprint_claim_failed',
+          retryable: true,
+        };
+      }
+      if (fingerprintClaim.data !== true) {
+        const repaired = await repairDuplicateResponse({
+          config,
+          systemPrompt,
+          messages,
+          previousText: outboundText,
+          latestLeadMessage: latestLeadText,
+          leadName: contact?.name,
+        });
+        if (repaired) {
+          responseText = repaired;
+          outboundText = compactAiReply(
+            joinResumePrefix(resumePrefix, responseText)
+          );
+          fingerprintClaim = await db.rpc('claim_ai_response_fingerprint', {
+            p_account_id: accountId,
+            p_conversation_id: conversationId,
+            p_fingerprint: responseFingerprint(outboundText),
+            p_window_seconds: 600,
+          });
+        }
+        if (
+          !repaired ||
+          fingerprintClaim.error ||
+          fingerprintClaim.data !== true
+        ) {
+          await openOperationalFailure({
+            db,
+            accountId,
+            conversationId,
+            opportunityId: studiosp.opportunityId,
+            triggerMessageId,
+            jobId,
+            reasonCode: 'duplicate_response_blocked',
+            summary:
+              'O Pedro evitou repetir a mesma resposta, mas não conseguiu gerar uma continuação diferente com segurança.',
+            retryable: false,
+            blockConversation: true,
+            context: {
+              duplicate_fingerprint: responseFingerprint(outboundText),
+            },
+          });
+          return {
+            outcome: 'failed',
+            reason: 'duplicate_response_blocked',
+            retryable: false,
+          };
+        }
+      }
+      outbox = await prepareAiResponseOutbox({
+        db,
+        accountId,
+        conversationId,
+        jobId,
+        triggerMessageId,
+        contextVersion,
+        responseText: outboundText,
+        parts: splitAiMessage(outboundText),
+        semanticContext,
+      });
+    }
     if (outbox.status === 'ambiguous') {
       return {
         outcome: 'failed',
@@ -875,4 +952,50 @@ async function repairPolicyViolations({
     messages,
     leadName,
   });
+}
+
+async function repairDuplicateResponse({
+  config,
+  systemPrompt,
+  messages,
+  previousText,
+  latestLeadMessage,
+  leadName,
+}: {
+  config: AiConfig;
+  systemPrompt: string;
+  messages: ChatMessage[];
+  previousText: string;
+  latestLeadMessage: string;
+  leadName?: string | null;
+}) {
+  try {
+    const repair = await generateReply({
+      config,
+      systemPrompt:
+        `${systemPrompt}\n\n` +
+        'A resposta candidata abaixo repete uma mensagem já enviada recentemente e foi bloqueada. ' +
+        'Responda diretamente à mensagem mais recente do lead, avance a conversa de forma natural e não repita a mesma oferta ou pergunta. ' +
+        'Devolva somente uma mensagem curta, com no máximo uma pergunta.',
+      messages: [...messages, { role: 'assistant', content: previousText }],
+    });
+    let policy = enforceOutboundPolicy({
+      text: repair.text,
+      latestLeadMessage,
+      messages,
+      leadName,
+    });
+    if (policy.violations.includes('multiple_questions')) {
+      policy = enforceOutboundPolicy({
+        text: keepFirstQuestion(policy.text),
+        latestLeadMessage,
+        messages,
+        leadName,
+      });
+    }
+    return policy.ok && policy.text.trim() ? policy.text : null;
+  } catch (error) {
+    console.error('[ai auto-reply] duplicate response repair failed:', error);
+    return null;
+  }
 }
