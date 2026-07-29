@@ -3,11 +3,14 @@ import {
   availabilityReply,
   appointmentConfirmation,
   appointmentReservationFailure,
+  closestAvailableSlotReply,
   findExactRequestedSlot,
   isAvailabilityInquiry,
+  isOfferedSlotRejection,
   opportunityInvitation,
   qualificationQuestionPrompt,
   requestedStartFromExtraction,
+  schedulePreferenceQuestion,
   selectAvailabilitySlots,
 } from './scheduling-intent';
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
@@ -692,6 +695,10 @@ export async function prepareStudiospTurn(args: {
     previousSemanticContext,
     latestUserMessage: turn.latestUserMessage,
   });
+  const rejectedOfferedSlot = isOfferedSlotRejection(
+    turn.latestUserMessage,
+    previousSemanticContext?.offeredSlotIds ?? []
+  );
   const explicitlyAcceptedSlot = reservableSlots.find(
     (slot) => slot.id === acceptedSlotId
   );
@@ -897,33 +904,40 @@ export async function prepareStudiospTurn(args: {
     reservedAppointment,
     outboundOverride: postureReply
       ? postureReply
-      : availabilityInquiry
-        ? availabilityReply({
-            slots: reservableSlots,
-            latestMessage: latestUserText,
-            nextQuestion: nextQualificationPrompt,
-          })
-        : reservedAppointment
-          ? appointmentConfirmation(reservedAppointment)
-          : reservationFailed
-            ? appointmentReservationFailure()
-            : qualification.complete &&
-                ['neutral', 'playful'].includes(posture) &&
-                (!reactivationSession || reactivationAffirmed) &&
-                reservableSlots[0]
-              ? opportunityInvitation(
-                  reservableSlots[0],
-                  args.config.completionMessage
-                )
-              : null,
+      : rejectedOfferedSlot
+        ? schedulePreferenceQuestion()
+        : availabilityInquiry
+          ? availabilityReply({
+              slots: reservableSlots,
+              latestMessage: latestUserText,
+              nextQuestion: nextQualificationPrompt,
+            })
+          : reservedAppointment
+            ? appointmentConfirmation(reservedAppointment)
+            : requestedStart && nearbySlots[0]
+              ? closestAvailableSlotReply(nearbySlots[0])
+              : requestedStart
+                ? 'Não encontrei disponibilidade nesse dia dentro da agenda configurada. Você teria outro dia e horário que funcionem para você?'
+                : reservationFailed
+                  ? appointmentReservationFailure()
+                  : qualification.complete &&
+                      ['neutral', 'playful'].includes(posture) &&
+                      (!reactivationSession || reactivationAffirmed) &&
+                      reservableSlots[0]
+                    ? opportunityInvitation(
+                        reservableSlots[0],
+                        args.config.completionMessage
+                      )
+                    : null,
     qualificationComplete: qualification.complete,
     nextQualificationPrompt,
     semanticContext: {
       version: 1,
       mode: reactivationSession ? 'reactivation' : 'qualification',
       expectedQuestionKey: nextQuestion ? String(nextQuestion.key) : null,
-      expectedResponseKind:
-        reactivationSession && !reactivationAffirmed
+      expectedResponseKind: rejectedOfferedSlot
+        ? 'schedule_preference'
+        : reactivationSession && !reactivationAffirmed
           ? 'reactivation_interest'
           : null,
       presentedFacts: confirmedFacts.map(
@@ -932,16 +946,18 @@ export async function prepareStudiospTurn(args: {
       ),
       offeredSlotId:
         reservedAppointment?.guaranteed_slot_id ??
-        (qualification.complete && reservableSlots[0]
+        (!rejectedOfferedSlot && qualification.complete && reservableSlots[0]
           ? String(reservableSlots[0].id)
           : null),
       offeredSlotIds: reservedAppointment?.guaranteed_slot_id
         ? [String(reservedAppointment.guaranteed_slot_id)]
-        : availabilitySlots.length
-          ? availabilitySlots.map((slot) => String(slot.id))
-          : qualification.complete && reservableSlots[0]
-            ? [String(reservableSlots[0].id)]
-            : [],
+        : rejectedOfferedSlot
+          ? []
+          : availabilitySlots.length
+            ? availabilitySlots.map((slot) => String(slot.id))
+            : qualification.complete && reservableSlots[0]
+              ? [String(reservableSlots[0].id)]
+              : [],
     },
   };
 }

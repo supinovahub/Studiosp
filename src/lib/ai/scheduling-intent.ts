@@ -91,6 +91,41 @@ export function isAvailabilityInquiry(value: string) {
   return AVAILABILITY_INQUIRY_PATTERN.test(value);
 }
 
+export function isOfferedSlotRejection(
+  value: string,
+  offeredSlotIds: string[] = []
+) {
+  if (!offeredSlotIds.length) return false;
+  const normalized = value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('pt-BR');
+  return (
+    /\b(nao consigo|nao posso|nao funciona|nao da|outro horario|outro dia|melhor outro|nenhum desses|nao nesse|esse nao)\b/.test(
+      normalized
+    ) || /^(nao|n|negativo)\b/.test(normalized.trim())
+  );
+}
+
+export function schedulePreferenceQuestion() {
+  return 'Sem problema. Qual seria o melhor dia e horário para você?';
+}
+
+export function closestAvailableSlotReply(slot: Slot) {
+  if (typeof slot.starts_at !== 'string') return null;
+  const start = new Date(slot.starts_at);
+  if (!Number.isFinite(start.getTime())) return null;
+  const formatted = new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  }).format(start);
+  return `Nesse dia, o horário disponível mais próximo é ${formatted}. Esse horário funciona para você?`;
+}
+
 export function guardPrematureMeetingOffer(
   generatedText: string,
   qualificationComplete: boolean,

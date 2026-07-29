@@ -29,6 +29,18 @@ transformou uma falha transitória do provedor em pausa permanente da conversa.
 - erros não transitórios e entregas ambíguas permanecem bloqueantes para
   evitar mensagens duplicadas.
 
+### Rejeição de horário
+
+- a rejeição de um slot oferecido passou a ser um evento determinístico;
+- o slot rejeitado não é oferecido novamente no turno seguinte;
+- o agente pergunta: “Qual seria o melhor dia e horário para você?”;
+- a resposta seguinte do lead é tratada como preferência de agenda;
+- existindo disponibilidade exata, o fluxo usa a reserva normal;
+- sem disponibilidade exata, o sistema apresenta o horário mais próximo
+  daquele dia e aguarda confirmação;
+- sem qualquer slot no dia pedido, solicita outra preferência sem inventar ou
+  confirmar um horário.
+
 ## Garantias preservadas
 
 - o fallback acontece antes da criação e do envio do outbox;
@@ -39,7 +51,7 @@ transformou uma falha transitória do provedor em pausa permanente da conversa.
 
 ## Validação
 
-- 41 testes direcionados aprovados;
+- 856 testes aprovados;
 - TypeScript aprovado sem erros;
 - build de produção do Next.js concluído;
 - nenhuma validação foi feita por controle do Chrome, conforme o guardrail do
