@@ -48,7 +48,6 @@ import {
 } from './delivery';
 import { semanticMessageMetadata } from './semantic-context';
 import type { AiConfig, ChatMessage } from './types';
-import { inferExpectedQuestionKey } from './conversation-behavior';
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -394,12 +393,7 @@ export async function dispatchInboundToAiReply(
         studiosp.qualificationComplete,
         studiosp.nextQualificationPrompt
       );
-    const generatedResponse = alignQualificationQuestion({
-      generatedText: guardedResponse,
-      qualificationComplete: studiosp.qualificationComplete,
-      nextQuestion: studiosp.nextQualificationPrompt,
-      expectedQuestionKey: studiosp.semanticContext.expectedQuestionKey,
-    });
+    const generatedResponse = guardedResponse;
     const { data: contact } = await db
       .from('contacts')
       .select('name')
@@ -932,29 +926,6 @@ export function responseFingerprint(text: string) {
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
   return createHash('sha256').update(normalized).digest('hex');
-}
-
-export function alignQualificationQuestion(args: {
-  generatedText: string;
-  qualificationComplete: boolean;
-  nextQuestion: string | null;
-  expectedQuestionKey?: string | null;
-}) {
-  if (
-    args.qualificationComplete ||
-    !args.nextQuestion ||
-    !args.expectedQuestionKey
-  ) {
-    return args.generatedText;
-  }
-  const generatedQuestionKey = inferExpectedQuestionKey(args.generatedText);
-  if (
-    !generatedQuestionKey ||
-    generatedQuestionKey !== args.expectedQuestionKey
-  ) {
-    return args.nextQuestion;
-  }
-  return args.generatedText;
 }
 
 async function generatePrimaryReply(
