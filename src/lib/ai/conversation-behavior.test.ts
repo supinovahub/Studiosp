@@ -81,6 +81,17 @@ describe('conversation behavior', () => {
     ).toBe('reactivation_hesitation');
   });
 
+  it('keeps an ambivalent short answer on the same qualification subject', () => {
+    expect(
+      classifyLeadPosture({
+        latestUserMessage: 'mais ou menos',
+        previousAssistantMessage: 'Você ainda pretende seguir com a compra?',
+        expectedQuestionKey: 'purchase_objective',
+        isReactivation: true,
+      })
+    ).toBe('ambivalent');
+  });
+
   it('recognizes canonical questions in natural language', () => {
     expect(
       inferExpectedQuestionKey('Qual parcela mensal fica confortável pra você?')

@@ -51,6 +51,8 @@ export interface StudiospAttention {
   created_at: string;
   lead?: StudiospLead | null;
   incident?: Record<string, unknown> | null;
+  incidentEvents?: Record<string, unknown>[];
+  conversationState?: Record<string, unknown> | null;
   guidanceRequest?: Record<string, unknown> | null;
   guidanceMessages?: Record<string, unknown>[];
   conversationMessages?: Record<string, unknown>[];

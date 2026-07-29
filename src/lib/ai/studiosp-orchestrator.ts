@@ -28,7 +28,6 @@ import {
   loadPreviousAssistantSemanticContext,
   type AiSemanticContext,
 } from './semantic-context';
-import { openOperationalFailure } from './guidance';
 import { nextAllowedFollowupAt } from './followup-window';
 import { upsertOwnerAttention } from '@/lib/studiosp/attention';
 
@@ -454,6 +453,7 @@ export async function prepareStudiospTurn(args: {
       messages: args.messages,
       jsonMode: true,
       maxOutputTokens: 1800,
+      requestTimeoutMs: 10_000,
     });
     extraction = parseObject(generated.text);
     const latestUserText = turn.latestUserMessage;
@@ -647,20 +647,6 @@ export async function prepareStudiospTurn(args: {
         })
         .eq('id', runId);
     }
-    await openOperationalFailure({
-      db: args.db,
-      accountId: args.accountId,
-      conversationId: args.conversationId,
-      opportunityId: String(opportunity.id),
-      triggerMessageId: args.triggerMessageId,
-      reasonCode: 'qualification_extraction_failed',
-      summary: 'A extração estruturada da qualificação falhou neste turno.',
-      retryable: true,
-      context: {
-        sanitized_error:
-          error instanceof Error ? error.message.slice(0, 500) : 'unknown',
-      },
-    });
   }
 
   const finalization = await args.db.rpc(

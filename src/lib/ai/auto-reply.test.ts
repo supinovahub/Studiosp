@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as Record<string, unknown>[],
     automationReplySteps: [] as { id: string }[],
+    rateClaim: true as boolean,
     claim: true as boolean,
     fingerprintClaim: true as boolean,
     updatePayload: null as Record<string, unknown> | null,
@@ -41,7 +42,31 @@ vi.mock('./context', () => ({
 }));
 vi.mock('./knowledge', () => ({ retrieveKnowledge: h.retrieveKnowledge }));
 vi.mock('./generate', () => ({ generateReply: h.generateReply }));
-vi.mock('./sdr-classify', () => ({ classifySdrTurn: h.classifySdrTurn }));
+vi.mock('./sdr-classify', () => ({
+  classifySdrTurn: h.classifySdrTurn,
+  emptySdrClassification: () => ({
+    primaryIntent: 'other',
+    intents: ['other'],
+    leadStage: 'new',
+    temperature: 'cold',
+    score: 0,
+    budgetMin: null,
+    budgetMax: null,
+    preferredCities: [],
+    preferredNeighborhoods: [],
+    propertyTypes: [],
+    minBedrooms: null,
+    minAreaM2: null,
+    needsParking: null,
+    financingInterest: null,
+    purchaseTimeframe: null,
+    wantsPhotos: false,
+    summary: '',
+    nextBestAction: '',
+    confidence: 0,
+    requiresHandoff: false,
+  }),
+}));
 vi.mock('./studiosp-orchestrator', () => ({
   prepareStudiospTurn: h.prepareStudiospTurn,
   scheduleStudiospFollowups: h.scheduleStudiospFollowups,
@@ -150,9 +175,11 @@ vi.mock('./admin-client', () => ({
       h.state.rpcCalls.push({ name, args });
       return Promise.resolve({
         data:
-          name === 'claim_ai_response_fingerprint'
-            ? h.state.fingerprintClaim
-            : h.state.claim,
+          name === 'studiosp_claim_ai_account_rate_slot'
+            ? h.state.rateClaim
+            : name === 'claim_ai_response_fingerprint'
+              ? h.state.fingerprintClaim
+              : h.state.claim,
         error: null,
       });
     },
@@ -201,6 +228,7 @@ beforeEach(() => {
   };
   h.state.autoResponders = [];
   h.state.automationReplySteps = [];
+  h.state.rateClaim = true;
   h.state.claim = true;
   h.state.fingerprintClaim = true;
   h.state.updatePayload = null;
@@ -332,6 +360,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
   it('claims a slot and sends on the happy path', async () => {
     await dispatchInboundToAiReply(ARGS);
     expect(h.state.rpcCalls.map((call) => call.name)).toEqual([
+      'studiosp_claim_ai_account_rate_slot',
       'claim_ai_reply_slot',
     ]);
     expect(h.engineSendText).toHaveBeenCalledWith(
@@ -473,8 +502,41 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.state.claim = false;
     await dispatchInboundToAiReply(ARGS);
     // Renova o orçamento uma vez, mas não envia se a segunda disputa falhar.
-    expect(h.state.rpcCalls).toHaveLength(2);
+    expect(h.state.rpcCalls.map((call) => call.name)).toEqual([
+      'studiosp_claim_ai_account_rate_slot',
+      'claim_ai_reply_slot',
+      'claim_ai_reply_slot',
+    ]);
     expect(h.engineSendText).not.toHaveBeenCalled();
+  });
+
+  it('continues the main reply when auxiliary classification fails', async () => {
+    h.classifySdrTurn.mockRejectedValueOnce(new Error('empty_response'));
+
+    const result = await dispatchInboundToAiReply(ARGS);
+
+    expect(result).toEqual({ outcome: 'completed' });
+    expect(h.engineSendText).toHaveBeenCalled();
+    expect(h.openOperationalFailure).not.toHaveBeenCalled();
+  });
+
+  it('keeps only the first question instead of escalating a style defect', async () => {
+    h.generateReply.mockResolvedValue({
+      text: 'Entendi. Qual bairro você prefere? E qual valor pretende investir?',
+      handoff: false,
+      needsGuidance: false,
+    });
+
+    const result = await dispatchInboundToAiReply(ARGS);
+
+    expect(result).toEqual({ outcome: 'completed' });
+    expect(h.generateReply).toHaveBeenCalledTimes(1);
+    expect(h.engineSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Entendi. Qual bairro você prefere?',
+      })
+    );
+    expect(h.openGuidanceRequest).not.toHaveBeenCalled();
   });
 
   it('does not resend a durable response already marked as sent', async () => {
@@ -560,6 +622,7 @@ describe('dispatchInboundToAiReply — owner guidance', () => {
     const result = await dispatchInboundToAiReply(ARGS);
     expect(h.engineSendText).not.toHaveBeenCalled();
     expect(h.state.rpcCalls.map((call) => call.name)).toEqual([
+      'studiosp_claim_ai_account_rate_slot',
       'studiosp_apply_opportunity_event',
     ]);
     expect(h.openGuidanceRequest).toHaveBeenCalledWith(

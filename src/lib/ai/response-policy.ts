@@ -129,6 +129,18 @@ export function questionCount(value: string) {
   return Math.min(interrogatives.length, 2);
 }
 
+/**
+ * A second model pass is unnecessary when the only defect is two questions.
+ * Keep the conversational setup and the first complete question, which is the
+ * next decision the lead can actually answer.
+ */
+export function keepFirstQuestion(value: string) {
+  const text = value.trim();
+  const firstQuestionEnd = text.indexOf('?');
+  if (firstQuestionEnd < 0) return text;
+  return text.slice(0, firstQuestionEnd + 1).trim();
+}
+
 export function removeRepeatedLeadName(args: {
   text: string;
   leadName?: string | null;

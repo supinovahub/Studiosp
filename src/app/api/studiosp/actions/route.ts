@@ -416,7 +416,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ conversation: result.data });
     }
 
-    if (action === 'retry_ai_failure') {
+    if (
+      action === 'retry_ai_failure' ||
+      action === 'continue_ai_conversation'
+    ) {
       const conversationId = text(body.conversationId);
       const incidentId = text(body.incidentId);
       const admin = supabaseAdmin();
@@ -424,7 +427,10 @@ export async function POST(request: NextRequest) {
         admin,
         accountId,
         conversationId,
-        reason: 'owner_retry',
+        reason:
+          action === 'continue_ai_conversation'
+            ? 'owner_continue'
+            : 'owner_retry',
       });
       if (incidentId) {
         await admin
@@ -432,7 +438,8 @@ export async function POST(request: NextRequest) {
           .update({
             status: 'resolving',
             owner_profile_id: profileId,
-            owner_action: 'retry',
+            owner_action:
+              action === 'continue_ai_conversation' ? 'continue' : 'retry',
           })
           .eq('account_id', accountId)
           .eq('id', incidentId)
@@ -440,6 +447,128 @@ export async function POST(request: NextRequest) {
       }
       await triggerAiReplyProcessor(0);
       return NextResponse.json({ queued });
+    }
+
+    if (action === 'pause_ai_conversation') {
+      const conversationId = text(body.conversationId);
+      const incidentId = text(body.incidentId);
+      if (!conversationId) {
+        return NextResponse.json(
+          { error: 'Informe a conversa que deve permanecer pausada.' },
+          { status: 400 }
+        );
+      }
+      const admin = supabaseAdmin();
+      const pausedAt = new Date().toISOString();
+      const paused = await admin
+        .from('conversations')
+        .update({
+          assigned_agent_id: null,
+          ai_autoreply_disabled: true,
+          ai_control_mode: 'paused',
+          ai_control_reason: 'owner_kept_paused',
+          ai_control_changed_at: pausedAt,
+          ai_processing_status: 'paused',
+          ai_processing_reason: 'owner_kept_paused',
+        })
+        .eq('account_id', accountId)
+        .eq('id', conversationId)
+        .select('id')
+        .maybeSingle();
+      actionError(paused.error);
+      if (!paused.data) {
+        return NextResponse.json(
+          { error: 'Conversa não encontrada.' },
+          { status: 404 }
+        );
+      }
+      await Promise.all([
+        admin
+          .from('ai_reply_jobs')
+          .update({
+            status: 'skipped',
+            completed_at: pausedAt,
+            claimed_at: null,
+            lease_expires_at: null,
+            outcome_reason: 'owner_kept_paused',
+          })
+          .eq('account_id', accountId)
+          .eq('conversation_id', conversationId)
+          .in('status', ['queued', 'retrying', 'processing']),
+        incidentId
+          ? admin
+              .from('ai_incidents')
+              .update({
+                status: 'open',
+                owner_profile_id: profileId,
+                owner_action: 'pause',
+              })
+              .eq('account_id', accountId)
+              .eq('id', incidentId)
+          : Promise.resolve(),
+      ]);
+      return NextResponse.json({ conversation: paused.data });
+    }
+
+    if (action === 'archive_ai_case') {
+      const conversationId = text(body.conversationId);
+      const attentionId = text(body.attentionId);
+      const incidentId = text(body.incidentId);
+      if (!conversationId || !attentionId) {
+        return NextResponse.json(
+          { error: 'Não foi possível identificar este caso.' },
+          { status: 400 }
+        );
+      }
+      const admin = supabaseAdmin();
+      const archivedAt = new Date().toISOString();
+      const { data: conversation } = await admin
+        .from('conversations')
+        .select('ai_control_mode')
+        .eq('account_id', accountId)
+        .eq('id', conversationId)
+        .maybeSingle();
+      if (conversation?.ai_control_mode === 'paused_failure') {
+        await admin
+          .from('conversations')
+          .update({
+            ai_autoreply_disabled: true,
+            ai_control_mode: 'paused',
+            ai_control_reason: 'owner_archived_case_kept_paused',
+            ai_control_changed_at: archivedAt,
+            ai_processing_status: 'paused',
+            ai_processing_reason: 'owner_archived_case_kept_paused',
+          })
+          .eq('account_id', accountId)
+          .eq('id', conversationId);
+      }
+      await Promise.all([
+        admin
+          .from('attention_items')
+          .update({
+            status: 'resolved',
+            resolved_at: archivedAt,
+            resolved_by: profileId,
+            resolution: { outcome: 'owner_archived_ai_case' },
+          })
+          .eq('account_id', accountId)
+          .eq('id', attentionId)
+          .in('status', ['open', 'snoozed']),
+        incidentId
+          ? admin
+              .from('ai_incidents')
+              .update({
+                status: 'resolved',
+                resolved_at: archivedAt,
+                owner_profile_id: profileId,
+                owner_action: 'archive',
+              })
+              .eq('account_id', accountId)
+              .eq('id', incidentId)
+              .in('status', ['open', 'resolving'])
+          : Promise.resolve(),
+      ]);
+      return NextResponse.json({ archived: true });
     }
 
     if (action === 'schedule_manual_appointment') {
@@ -1178,108 +1307,20 @@ async function queueOwnerAiRetry(args: {
   admin: ReturnType<typeof supabaseAdmin>;
   accountId: string;
   conversationId: string;
-  reason: 'owner_guidance' | 'owner_retry';
+  reason: 'owner_guidance' | 'owner_retry' | 'owner_continue';
 }) {
-  const { data: conversation, error: conversationError } = await args.admin
-    .from('conversations')
-    .select('id, contact_id, user_id, ai_context_version, contacts(phone)')
-    .eq('account_id', args.accountId)
-    .eq('id', args.conversationId)
-    .maybeSingle();
-  actionError(conversationError);
-  if (!conversation) throw new Error('Conversa não encontrada.');
-
-  const { data: trigger, error: triggerError } = await args.admin
-    .from('messages')
-    .select('id')
-    .eq('account_id', args.accountId)
-    .eq('conversation_id', args.conversationId)
-    .eq('sender_type', 'customer')
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  actionError(triggerError);
-  if (!trigger) {
-    throw new Error('Não há mensagem do lead para reenfileirar.');
+  const queued = await args.admin.rpc('studiosp_enqueue_ai_owner_retry', {
+    p_account_id: args.accountId,
+    p_conversation_id: args.conversationId,
+    p_reason: args.reason,
+  });
+  actionError(queued.error);
+  if (!queued.data?.id) {
+    throw new Error('Não foi possível colocar esta conversa na fila.');
   }
-
-  const { data: existing } = await args.admin
-    .from('ai_reply_jobs')
-    .select('id')
-    .eq('account_id', args.accountId)
-    .eq('trigger_message_id', trigger.id)
-    .maybeSingle();
-  let jobId = existing?.id ?? null;
-  if (jobId) {
-    const { data: outbox } = await args.admin
-      .from('ai_response_outbox')
-      .select('id, status')
-      .eq('job_id', jobId)
-      .maybeSingle();
-    if (outbox?.status === 'sent') {
-      throw new Error(
-        'Esta resposta já foi enviada. Abra a conversa antes de iniciar uma nova ação.'
-      );
-    }
-    if (outbox) {
-      await args.admin
-        .from('ai_response_outbox')
-        .update({ status: 'cancelled', lease_expires_at: null })
-        .eq('id', outbox.id);
-    }
-    const reset = await args.admin
-      .from('ai_reply_jobs')
-      .update({
-        status: 'queued',
-        attempt_count: 0,
-        context_version: Number(conversation.ai_context_version),
-        available_at: new Date().toISOString(),
-        claimed_at: null,
-        lease_expires_at: null,
-        completed_at: null,
-        outcome_reason: args.reason,
-        last_error: null,
-      })
-      .eq('id', jobId);
-    actionError(reset.error);
-  } else {
-    const contact = Array.isArray(conversation.contacts)
-      ? conversation.contacts[0]
-      : conversation.contacts;
-    const enqueue = await args.admin.rpc('enqueue_ai_reply_job', {
-      p_account_id: args.accountId,
-      p_conversation_id: args.conversationId,
-      p_contact_id: conversation.contact_id,
-      p_trigger_message_id: trigger.id,
-      p_config_owner_user_id: conversation.user_id,
-      p_sender_phone: contact?.phone ?? '',
-    });
-    actionError(enqueue.error);
-    jobId = String(enqueue.data?.id ?? '');
-    await args.admin
-      .from('ai_reply_jobs')
-      .update({
-        available_at: new Date().toISOString(),
-        outcome_reason: args.reason,
-      })
-      .eq('id', jobId);
-  }
-
-  const resumed = await args.admin
-    .from('conversations')
-    .update({
-      assigned_agent_id: null,
-      ai_autoreply_disabled: false,
-      ai_control_mode: 'ai_active',
-      ai_control_reason: null,
-      ai_control_changed_at: new Date().toISOString(),
-      ai_processing_status: 'queued',
-      ai_processing_reason: args.reason,
-      ai_processing_job_id: jobId,
-    })
-    .eq('account_id', args.accountId)
-    .eq('id', args.conversationId);
-  actionError(resumed.error);
-  return { jobId, triggerMessageId: trigger.id };
+  return {
+    jobId: String(queued.data.id),
+    triggerMessageId: String(queued.data.trigger_message_id),
+    retryGeneration: Number(queued.data.retry_generation ?? 0),
+  };
 }

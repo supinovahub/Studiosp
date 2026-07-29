@@ -66,6 +66,13 @@ export async function POST(
 
     let queued = 0;
     const failures: string[] = [];
+    const results: Array<{
+      row: number;
+      name: string | null;
+      phone: string;
+      status: 'queued' | 'blocked';
+      reason?: string;
+    }> = [];
     for (const lead of leads as Row[]) {
       let createdSessionId: string | null = null;
       try {
@@ -75,6 +82,15 @@ export async function POST(
           lead,
           campaignId: id,
         });
+        const reconciliation = await db.rpc(
+          'studiosp_reconcile_stale_reactivation_sessions',
+          {
+            p_account_id: accountId,
+            p_contact_id: contact.id,
+            p_campaign_id: null,
+          }
+        );
+        if (reconciliation.error) throw reconciliation.error;
         const { data: latestSession, error: activeSessionError } = await db
           .from('reactivation_sessions')
           .select('campaign_id,status')
@@ -209,6 +225,12 @@ export async function POST(
           throw leadUpdateError;
         }
         queued++;
+        results.push({
+          row: Number(lead.row_number),
+          name: lead.name ? String(lead.name) : null,
+          phone: String(lead.phone_e164 ?? ''),
+          status: 'queued',
+        });
       } catch (error) {
         if (createdSessionId) {
           await db
@@ -220,16 +242,21 @@ export async function POST(
             .eq('id', createdSessionId)
             .eq('status', 'active');
         }
-        failures.push(
-          `${String(lead.row_number)}: ${
-            error instanceof Error ? error.message : 'falha desconhecida'
-          }`
-        );
+        const reason =
+          error instanceof Error ? error.message : 'falha desconhecida';
+        failures.push(`${String(lead.row_number)}: ${reason}`);
+        results.push({
+          row: Number(lead.row_number),
+          name: lead.name ? String(lead.name) : null,
+          phone: String(lead.phone_e164 ?? ''),
+          status: 'blocked',
+          reason,
+        });
       }
     }
     if (!queued)
       return NextResponse.json(
-        { error: 'Nenhum lead pôde ser preparado.', failures },
+        { error: 'Nenhum lead pôde ser preparado.', failures, results },
         { status: 409 }
       );
     await Promise.all([
@@ -260,6 +287,7 @@ export async function POST(
       queued,
       sent,
       failures,
+      results,
       deliveryFailures: deliveryFailures ?? [],
     });
   } catch (error) {

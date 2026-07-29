@@ -180,11 +180,20 @@ export async function PATCH(
       .single();
     if (error) throw error;
     if (action === 'cancel' || action === 'archive') {
-      await db
-        .from('reactivation_touches')
-        .update({ status: 'cancelled' })
-        .eq('campaign_id', id)
-        .eq('status', 'scheduled');
+      const [touchCancellation, reconciliation] = await Promise.all([
+        db
+          .from('reactivation_touches')
+          .update({ status: 'cancelled' })
+          .eq('campaign_id', id)
+          .eq('status', 'scheduled'),
+        db.rpc('studiosp_reconcile_stale_reactivation_sessions', {
+          p_account_id: accountId,
+          p_contact_id: null,
+          p_campaign_id: id,
+        }),
+      ]);
+      if (touchCancellation.error) throw touchCancellation.error;
+      if (reconciliation.error) throw reconciliation.error;
     }
     await db.from('reactivation_events').insert({
       account_id: accountId,

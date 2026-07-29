@@ -3,12 +3,15 @@
 import Link from 'next/link';
 import {
   AlertTriangle,
+  Archive,
   Check,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   Info,
   MessageSquareText,
-  RefreshCw,
+  Pause,
+  Play,
   SendHorizontal,
   Sparkles,
   UserRoundCheck,
@@ -32,20 +35,21 @@ import { PageHeader } from './page-header';
 import { EmptyState, ErrorState, LoadingState } from './operational-state';
 import { StatusBadge } from './status-badge';
 
-type AttentionFilter = 'all' | 'ai' | 'critical' | 'overdue';
+type AttentionFilter = 'action' | 'recovering' | 'paused' | 'history';
 
 const filterLabels: Record<AttentionFilter, string> = {
-  all: 'Todas',
-  ai: 'Pedro',
-  critical: 'Críticas',
-  overdue: 'Vencidas',
+  action: 'Ação necessária',
+  recovering: 'Em recuperação',
+  paused: 'Conversas pausadas',
+  history: 'Histórico',
 };
 
 export function AttentionPage() {
   const { data, loading, error, reload } = useStudiospData('attention');
   const [savingId, setSavingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<AttentionFilter>('all');
+  const [filter, setFilter] = useState<AttentionFilter>('action');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [guidanceItem, setGuidanceItem] = useState<StudiospAttention | null>(
     null
   );
@@ -56,33 +60,9 @@ export function AttentionPage() {
   const [renderedAt] = useState(() => Date.now());
 
   const items = useMemo(() => data?.attention ?? [], [data?.attention]);
-  const overdueCount = items.filter(
-    (item) => item.due_at && new Date(item.due_at).getTime() < renderedAt
-  ).length;
-  const criticalCount = items.filter(
-    (item) => item.severity === 'critical'
-  ).length;
-  const aiDecisionCount = items.filter((item) =>
-    [
-      'ai_needs_guidance',
-      'ai_operational_failure',
-      'ai_partial_reply',
-    ].includes(item.kind)
-  ).length;
-  const visibleItems = items.filter((item) => {
-    if (filter === 'ai')
-      return [
-        'ai_needs_guidance',
-        'ai_operational_failure',
-        'ai_partial_reply',
-      ].includes(item.kind);
-    if (filter === 'critical') return item.severity === 'critical';
-    if (filter === 'overdue')
-      return Boolean(
-        item.due_at && new Date(item.due_at).getTime() < renderedAt
-      );
-    return true;
-  });
+  const countByFilter = (key: AttentionFilter) =>
+    items.filter((item) => attentionBucket(item) === key).length;
+  const visibleItems = items.filter((item) => attentionBucket(item) === filter);
 
   if (loading) return <LoadingState label="Priorizando pendências..." />;
   if (error || !data)
@@ -143,13 +123,13 @@ export function AttentionPage() {
     }
   }
 
-  async function retryFailure(item: StudiospAttention) {
+  async function continueWithPedro(item: StudiospAttention) {
     const conversationId = String(item.context?.conversation_id ?? '');
     if (!conversationId) return;
     setSavingId(item.id);
     setActionError(null);
     try {
-      await runStudiospAction('retry_ai_failure', {
+      await runStudiospAction('continue_ai_conversation', {
         conversationId,
         incidentId: String(
           item.incident?.id ?? item.context?.incident_id ?? ''
@@ -160,7 +140,55 @@ export function AttentionPage() {
       setActionError(
         err instanceof Error
           ? err.message
-          : 'Não foi possível tentar novamente.'
+          : 'Não foi possível continuar com o Pedro.'
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function keepPaused(item: StudiospAttention) {
+    const conversationId = String(item.context?.conversation_id ?? '');
+    if (!conversationId) return;
+    setSavingId(item.id);
+    setActionError(null);
+    try {
+      await runStudiospAction('pause_ai_conversation', {
+        conversationId,
+        incidentId: String(
+          item.incident?.id ?? item.context?.incident_id ?? ''
+        ),
+      });
+      setFilter('paused');
+      await reload();
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível manter a conversa pausada.'
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function archiveCase(item: StudiospAttention) {
+    const conversationId = String(item.context?.conversation_id ?? '');
+    if (!conversationId) return;
+    setSavingId(item.id);
+    setActionError(null);
+    try {
+      await runStudiospAction('archive_ai_case', {
+        conversationId,
+        attentionId: item.id,
+        incidentId: String(
+          item.incident?.id ?? item.context?.incident_id ?? ''
+        ),
+      });
+      await reload();
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : 'Não foi possível arquivar.'
       );
     } finally {
       setSavingId(null);
@@ -199,38 +227,32 @@ export function AttentionPage() {
         className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
       >
         <SummaryCard
-          label="Pendências abertas"
-          value={items.length}
-          detail="Total da sua visão atual"
+          label="Ação necessária"
+          value={countByFilter('action')}
+          detail="Precisam de uma decisão sua"
+          icon={AlertTriangle}
+          tone={countByFilter('action') ? 'warning' : 'success'}
+        />
+        <SummaryCard
+          label="Em recuperação"
+          value={countByFilter('recovering')}
+          detail="Pedro já está retomando"
           icon={Sparkles}
           tone="primary"
         />
         <SummaryCard
-          label="Pedro precisa de decisão"
-          value={aiDecisionCount}
-          detail={
-            aiDecisionCount
-              ? 'Contexto ou decisão pendente'
-              : 'Atendimento fluindo'
-          }
-          icon={MessageSquareText}
-          tone={aiDecisionCount ? 'warning' : 'success'}
+          label="Pausadas"
+          value={countByFilter('paused')}
+          detail="Aguardam liberação ou humano"
+          icon={Pause}
+          tone={countByFilter('paused') ? 'neutral' : 'success'}
         />
         <SummaryCard
-          label="Críticas"
-          value={criticalCount}
-          detail={
-            criticalCount ? 'Exigem decisão prioritária' : 'Nenhuma no momento'
-          }
-          icon={AlertTriangle}
-          tone={criticalCount ? 'danger' : 'neutral'}
-        />
-        <SummaryCard
-          label="Prazo vencido"
-          value={overdueCount}
-          detail={overdueCount ? 'Precisam de revisão' : 'Prazos sob controle'}
-          icon={Clock3}
-          tone={overdueCount ? 'warning' : 'success'}
+          label="Histórico"
+          value={countByFilter('history')}
+          detail="Casos concluídos e auditáveis"
+          icon={Archive}
+          tone="neutral"
         />
       </section>
 
@@ -252,10 +274,10 @@ export function AttentionPage() {
           <div className="border-border/65 flex flex-col gap-3 border-b px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <div>
               <h3 className="text-foreground text-sm font-semibold">
-                Fila de decisão
+                {filterLabels[filter]}
               </h3>
               <p className="text-muted-foreground mt-0.5 text-xs">
-                Comece pelos itens críticos e com prazo vencido
+                Um caso por conversa, com todo o histórico técnico preservado
               </p>
             </div>
             <div
@@ -274,7 +296,7 @@ export function AttentionPage() {
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {filterLabels[key]}
+                  {filterLabels[key]} · {countByFilter(key)}
                 </button>
               ))}
             </div>
@@ -285,6 +307,19 @@ export function AttentionPage() {
               {visibleItems.map((item) => {
                 const overdue =
                   item.due_at && new Date(item.due_at).getTime() < renderedAt;
+                const isAiCase = [
+                  'ai_needs_guidance',
+                  'ai_operational_failure',
+                  'ai_partial_reply',
+                ].includes(item.kind);
+                const deliveryUnsafe = ['ambiguous', 'partially_sent'].includes(
+                  String(
+                    item.incident?.delivery_state ??
+                      item.context?.delivery_state ??
+                      ''
+                  )
+                );
+                const needsGuidance = item.kind === 'ai_needs_guidance';
                 return (
                   <article
                     key={item.id}
@@ -350,14 +385,13 @@ export function AttentionPage() {
                             antes de liberar outra tentativa.
                           </p>
                         ) : null}
+                        {expandedId === item.id ? (
+                          <IncidentTimeline item={item} />
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 pl-11 lg:pl-0">
-                      {[
-                        'ai_needs_guidance',
-                        'ai_operational_failure',
-                        'ai_partial_reply',
-                      ].includes(item.kind) ? (
+                      {isAiCase && filter === 'action' && needsGuidance ? (
                         <Button
                           onClick={() => {
                             setGuidanceItem(item);
@@ -366,37 +400,36 @@ export function AttentionPage() {
                           }}
                         >
                           <MessageSquareText />
-                          Orientar e retomar
+                          Orientar o Pedro
                         </Button>
                       ) : null}
-                      {['ai_operational_failure', 'ai_partial_reply'].includes(
-                        item.kind
-                      ) ? (
+                      {isAiCase &&
+                      !deliveryUnsafe &&
+                      (filter === 'action' || filter === 'paused') &&
+                      !needsGuidance ? (
+                        <Button
+                          onClick={() => void continueWithPedro(item)}
+                          disabled={savingId === item.id}
+                        >
+                          <Play />
+                          {savingId === item.id
+                            ? 'Colocando na fila...'
+                            : 'Continuar com Pedro'}
+                        </Button>
+                      ) : null}
+                      {isAiCase && filter === 'action' ? (
                         <Button
                           variant="outline"
-                          onClick={() => void retryFailure(item)}
+                          onClick={() => void keepPaused(item)}
                           disabled={savingId === item.id}
                         >
-                          <RefreshCw />
-                          Tentar novamente
-                        </Button>
-                      ) : null}
-                      {[
-                        'ai_needs_guidance',
-                        'ai_operational_failure',
-                        'ai_partial_reply',
-                      ].includes(item.kind) ? (
-                        <Button
-                          onClick={() => void takeOver(item)}
-                          disabled={savingId === item.id}
-                        >
-                          <UserRoundCheck />
-                          Manter pausada e assumir
+                          <Pause />
+                          Manter Pedro pausado
                         </Button>
                       ) : null}
                       {item.context?.conversation_id ? (
                         <Button
-                          variant="outline"
+                          variant={deliveryUnsafe ? 'default' : 'outline'}
                           render={
                             <Link
                               href={`/inbox?c=${String(item.context.conversation_id)}`}
@@ -404,6 +437,45 @@ export function AttentionPage() {
                           }
                         >
                           Abrir conversa
+                        </Button>
+                      ) : null}
+                      {isAiCase ? (
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            setExpandedId((current) =>
+                              current === item.id ? null : item.id
+                            )
+                          }
+                          aria-expanded={expandedId === item.id}
+                        >
+                          <ChevronDown
+                            className={
+                              expandedId === item.id ? 'rotate-180' : ''
+                            }
+                          />
+                          Detalhes
+                        </Button>
+                      ) : null}
+                      {isAiCase && filter === 'paused' ? (
+                        <Button
+                          variant="outline"
+                          onClick={() => void takeOver(item)}
+                          disabled={savingId === item.id}
+                        >
+                          <UserRoundCheck />
+                          Assumir conversa
+                        </Button>
+                      ) : null}
+                      {isAiCase &&
+                      (filter === 'action' || filter === 'paused') ? (
+                        <Button
+                          variant="ghost"
+                          onClick={() => void archiveCase(item)}
+                          disabled={savingId === item.id}
+                        >
+                          <Archive />
+                          Arquivar caso
                         </Button>
                       ) : null}
                       {item.opportunity_id ? (
@@ -416,20 +488,9 @@ export function AttentionPage() {
                           Abrir contexto
                         </Button>
                       ) : null}
-                      {![
-                        'ai_needs_guidance',
-                        'ai_operational_failure',
-                        'ai_partial_reply',
-                      ].includes(item.kind) ? (
+                      {!isAiCase && filter !== 'history' ? (
                         <Button
-                          variant={
-                            [
-                              'ai_operational_failure',
-                              'ai_partial_reply',
-                            ].includes(item.kind)
-                              ? 'ghost'
-                              : 'default'
-                          }
+                          variant="default"
                           onClick={() => resolve(item.id)}
                           disabled={savingId === item.id}
                         >
@@ -475,6 +536,81 @@ export function AttentionPage() {
         onSubmit={() => void provideGuidance()}
       />
     </div>
+  );
+}
+
+function attentionBucket(item: StudiospAttention): AttentionFilter {
+  if (['resolved', 'cancelled'].includes(item.status)) return 'history';
+  const controlMode = String(item.conversationState?.ai_control_mode ?? '');
+  const processingStatus = String(
+    item.conversationState?.ai_processing_status ?? ''
+  );
+  const incidentStatus = String(item.incident?.status ?? '');
+  const ownerAction = String(item.incident?.owner_action ?? '');
+  if (ownerAction === 'pause' || controlMode === 'paused') return 'paused';
+  if (
+    incidentStatus === 'resolving' ||
+    ['queued', 'processing', 'retrying'].includes(processingStatus)
+  ) {
+    return 'recovering';
+  }
+  return 'action';
+}
+
+function IncidentTimeline({ item }: { item: StudiospAttention }) {
+  const events = item.incidentEvents ?? [];
+  return (
+    <div className="border-border/70 bg-muted/25 mt-3 rounded-xl border p-3">
+      <p className="text-foreground text-xs font-semibold">
+        Histórico técnico do caso
+      </p>
+      <p className="text-muted-foreground mt-1 text-[11px] leading-4">
+        Os eventos ficam preservados para auditoria, mesmo quando o caso é
+        arquivado.
+      </p>
+      <div className="mt-3 space-y-2">
+        {events.length ? (
+          events.map((event) => (
+            <div
+              key={String(event.id)}
+              className="border-border/60 border-l-2 pl-3"
+            >
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-foreground text-[11px] font-semibold">
+                  {incidentReasonLabel(String(event.reason_code ?? 'falha'))}
+                </span>
+                <span className="text-muted-foreground text-tabular text-[10px]">
+                  {formatDateTime(String(event.created_at))}
+                </span>
+              </div>
+              <p className="text-muted-foreground mt-0.5 text-[11px] leading-4">
+                {String(event.summary ?? 'Evento registrado.')}
+              </p>
+            </div>
+          ))
+        ) : (
+          <p className="text-muted-foreground text-[11px]">
+            Nenhum evento adicional foi registrado.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function incidentReasonLabel(reason: string) {
+  const labels: Record<string, string> = {
+    ai_reply_delayed: 'Resposta atrasada',
+    ambiguous_delivery: 'Envio sem confirmação',
+    account_rate_limited: 'Limite temporário da conta',
+    response_policy_blocked: 'Resposta bloqueada pela proteção',
+    guidance_resume_failed: 'Retomada com orientação falhou',
+  };
+  return (
+    labels[reason] ??
+    reason
+      .replace(/_/g, ' ')
+      .replace(/^./, (letter) => letter.toLocaleUpperCase('pt-BR'))
   );
 }
 

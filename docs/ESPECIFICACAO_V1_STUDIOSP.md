@@ -1488,8 +1488,14 @@ A V1 está pronta quando os doze cenários de aceite funcionarem de ponta a pont
 - falhas transitórias recebem no máximo três tentativas com espaçamento;
 - falhas definitivas, conflito de estado e envio ambíguo abrem um incidente
   operacional deduplicado;
-- a Central de atenção oferece `Orientar e retomar`, `Tentar novamente` e
-  `Manter pausada e assumir`;
+- a Central de atenção apresenta um caso por conversa nas áreas `Ação
+necessária`, `Em recuperação`, `Conversas pausadas` e `Histórico`;
+- `Continuar com Pedro` cria uma nova geração segura somente para aquela
+  conversa; cliques repetidos não duplicam job nem envio;
+- eventos técnicos repetidos aparecem na linha do tempo do caso, sem criar
+  cartões duplicados;
+- `Manter Pedro pausado`, `Assumir conversa` e `Arquivar caso` preservam a
+  auditoria e deixam explícito quem controla o atendimento;
 - orientação do dono volta à mesma fila segura; a requisição do painel não
   chama o modelo nem envia diretamente ao WhatsApp;
 - ao retomar depois de uma espera, a justificativa é proporcional ao tempo e
@@ -1501,6 +1507,16 @@ A V1 está pronta quando os doze cenários de aceite funcionarem de ponta a pont
 - o Pedro não afirma ser IA nem humano, não repete o nome do lead
   mecanicamente e não avança para outra pergunta quando o lead demonstra
   dúvida, confusão ou frustração;
+- falhas de classificação e extração são auxiliares: ficam nos logs e nunca
+  silenciam, por si só, a resposta principal;
+- respostas ambivalentes como “mais ou menos” permanecem no mesmo assunto até
+  serem esclarecidas;
+- defeitos editoriais simples, como duas perguntas no mesmo texto, são
+  corrigidos deterministicamente sem pedir ajuda ao dono;
+- até quatro conversas independentes podem ser processadas ao mesmo tempo;
+  uma falha ou espera em um lead não bloqueia os demais;
+- o texto evita cadência robótica, confirmações automáticas, recapitulações e
+  listas desnecessárias, adaptando o ritmo ao lead sem forçar gírias;
 - conteúdo do lead, histórico, documentos e preferências editáveis continuam
   sendo dados não confiáveis e não podem alterar instruções, acessar outro
   contato ou revelar segredos.

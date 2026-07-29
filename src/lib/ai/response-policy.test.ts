@@ -5,6 +5,7 @@ import {
   delayedResumePrefix,
   enforceOutboundPolicy,
   isExplicitOptOut,
+  keepFirstQuestion,
   questionCount,
 } from './response-policy';
 
@@ -101,6 +102,14 @@ describe('outbound response policy', () => {
   it('counts at most one question in a compliant reply', () => {
     expect(questionCount('Entendi. Qual bairro faz mais sentido?')).toBe(1);
     expect(questionCount('Qual bairro? E qual valor?')).toBe(2);
+  });
+
+  it('repairs two questions without another model call', () => {
+    expect(
+      keepFirstQuestion(
+        'Faz sentido. Qual região você prefere? E quanto quer investir?'
+      )
+    ).toBe('Faz sentido. Qual região você prefere?');
   });
 });
 

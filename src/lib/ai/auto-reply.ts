@@ -8,7 +8,7 @@ import { buildHandoffSummary } from './handoff';
 import { logAiUsage } from './usage';
 import { latestUserMessage } from './query';
 import { engineSendText } from '@/lib/flows/meta-send';
-import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { RATE_LIMITS } from '@/lib/rate-limit';
 import { classifySdrTurn, emptySdrClassification } from './sdr-classify';
 import { persistSdrClassification } from './sdr-store';
 import { createHash } from 'node:crypto';
@@ -32,6 +32,7 @@ import {
   enforceOutboundPolicy,
   isExplicitOptOut,
   joinResumePrefix,
+  keepFirstQuestion,
   type OutboundPolicyResult,
 } from './response-policy';
 import {
@@ -231,18 +232,32 @@ export async function dispatchInboundToAiReply(
       message: latestLeadText,
     });
 
-    // Account-wide throttle on the shared BYO key. The per-conversation
-    // cap bounds one thread; this bounds a burst across many threads (a
-    // marketing blast landing 200 replies at once) so we never run the
-    // owner's key past the provider's rate limit. Over the limit → skip
-    // the auto-reply; the inbound still sits in the inbox for a human.
-    const acctLimit = checkRateLimit(
-      `ai-autoreply:${accountId}`,
-      RATE_LIMITS.aiAutoReplyAccount
+    // This limiter lives in Postgres so simultaneous Vercel instances share
+    // the same account budget.
+    const accountRateSlot = await db.rpc(
+      'studiosp_claim_ai_account_rate_slot',
+      {
+        p_account_id: accountId,
+        p_limit: RATE_LIMITS.aiAutoReplyAccount.limit,
+        p_window_seconds: Math.ceil(
+          RATE_LIMITS.aiAutoReplyAccount.windowMs / 1000
+        ),
+      }
     );
-    if (!acctLimit.success) {
+    if (accountRateSlot.error) {
+      console.error(
+        '[ai auto-reply] durable account rate limiter failed:',
+        accountRateSlot.error
+      );
+      return {
+        outcome: 'failed',
+        reason: 'account_rate_limit_lookup_failed',
+        retryable: true,
+      };
+    }
+    if (accountRateSlot.data !== true) {
       console.warn(
-        `[ai auto-reply] account ${accountId} hit the per-account rate limit — skipping this inbound.`
+        `[ai auto-reply] account ${accountId} hit the durable per-account rate limit.`
       );
       return {
         outcome: 'failed',
@@ -260,18 +275,8 @@ export async function dispatchInboundToAiReply(
     );
 
     const classification = await classifySdrTurn({ config, messages }).catch(
-      async (err) => {
+      (err) => {
         console.error('[ai auto-reply] SDR classification failed:', err);
-        await openOperationalFailure({
-          db,
-          accountId,
-          conversationId,
-          triggerMessageId: triggerMessage?.id ?? triggerMessageId,
-          reasonCode: 'sdr_classification_failed',
-          summary:
-            'A classificação do turno falhou, mas o atendimento principal continuou.',
-          retryable: true,
-        });
         return emptySdrClassification();
       }
     );
@@ -364,7 +369,7 @@ export async function dispatchInboundToAiReply(
       operation: [...studiosp.grounding, ...trustedGuidance],
     });
 
-    const { text, handoff, needsGuidance, usage } = await generateReply({
+    const { text, handoff, needsGuidance, usage } = await generatePrimaryReply({
       config,
       systemPrompt,
       messages,
@@ -389,6 +394,17 @@ export async function dispatchInboundToAiReply(
       leadName: contact?.name,
     });
     if (
+      responsePolicy.violations.length === 1 &&
+      responsePolicy.violations[0] === 'multiple_questions'
+    ) {
+      responsePolicy = enforceOutboundPolicy({
+        text: keepFirstQuestion(responsePolicy.text),
+        latestLeadMessage: latestLeadText,
+        messages,
+        leadName: contact?.name,
+      });
+    }
+    if (
       !studiosp.outboundOverride &&
       !needsGuidance &&
       !handoff &&
@@ -403,6 +419,14 @@ export async function dispatchInboundToAiReply(
         latestLeadMessage: latestLeadText,
         leadName: contact?.name,
       });
+      if (responsePolicy.violations.includes('multiple_questions')) {
+        responsePolicy = enforceOutboundPolicy({
+          text: keepFirstQuestion(responsePolicy.text),
+          latestLeadMessage: latestLeadText,
+          messages,
+          leadName: contact?.name,
+        });
+      }
     }
     const responseText = responsePolicy.text;
 
@@ -795,6 +819,18 @@ export function responseFingerprint(text: string) {
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
   return createHash('sha256').update(normalized).digest('hex');
+}
+
+async function generatePrimaryReply(args: Parameters<typeof generateReply>[0]) {
+  const first = await generateReply(args);
+  if (first.text.trim() || first.handoff || first.needsGuidance) return first;
+  console.warn('[ai auto-reply] empty primary response; retrying once');
+  return generateReply({
+    ...args,
+    systemPrompt:
+      `${args.systemPrompt}\n\n` +
+      'A tentativa anterior voltou vazia. Responda agora com uma única mensagem curta e natural, sem preâmbulo.',
+  });
 }
 
 async function repairPolicyViolations({

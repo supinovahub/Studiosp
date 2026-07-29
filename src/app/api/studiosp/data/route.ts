@@ -142,9 +142,14 @@ export async function GET(request: NextRequest) {
         .from('attention_items')
         .select('*')
         .eq('account_id', accountId)
-        .in('status', ['open', 'snoozed'])
-        .order('due_at', { ascending: true, nullsFirst: false })
-        .limit(100);
+        .order(view === 'attention' ? 'updated_at' : 'due_at', {
+          ascending: view !== 'attention',
+          nullsFirst: false,
+        })
+        .limit(view === 'attention' ? 250 : 100);
+      if (view !== 'attention') {
+        attentionQuery = attentionQuery.in('status', ['open', 'snoozed']);
+      }
       if (view === 'lead' && id)
         attentionQuery = attentionQuery.eq('opportunity_id', id);
       if (role === 'agent' && profileId) {
@@ -155,7 +160,9 @@ export async function GET(request: NextRequest) {
       let guidanceRequests: Row[] = [];
       let guidanceMessages: Row[] = [];
       let incidents: Row[] = [];
+      let incidentEvents: Row[] = [];
       let conversationMessages: Row[] = [];
+      let conversationStates: Row[] = [];
       if (role !== 'agent' && attention.length) {
         const guidanceIds = attention
           .map((item) => String(item.context?.guidance_request_id ?? ''))
@@ -167,18 +174,29 @@ export async function GET(request: NextRequest) {
               .filter(Boolean)
           ),
         ];
-        const incidentIds = attention
-          .map((item) => String(item.context?.incident_id ?? ''))
-          .filter(Boolean);
-        if (incidentIds.length) {
+        if (conversationIds.length) {
           incidents = assertQuery<Row[]>(
             await supabase
               .from('ai_incidents')
               .select('*')
               .eq('account_id', accountId)
-              .in('id', incidentIds),
+              .in('conversation_id', conversationIds)
+              .order('last_detected_at', { ascending: false }),
             'incidentes do atendimento'
           );
+          const incidentIds = incidents.map((incident) => incident.id);
+          if (incidentIds.length) {
+            incidentEvents = assertQuery<Row[]>(
+              await supabase
+                .from('ai_incident_events')
+                .select('*')
+                .eq('account_id', accountId)
+                .in('incident_id', incidentIds)
+                .order('created_at', { ascending: false })
+                .limit(500),
+              'histórico dos incidentes'
+            );
+          }
         }
         if (guidanceIds.length) {
           guidanceRequests = assertQuery<Row[]>(
@@ -200,8 +218,8 @@ export async function GET(request: NextRequest) {
           );
         }
         if (conversationIds.length) {
-          conversationMessages = assertQuery<Row[]>(
-            await supabase
+          const [messageResult, stateResult] = await Promise.all([
+            supabase
               .from('messages')
               .select(
                 'id, conversation_id, sender_type, content_type, content_text, created_at'
@@ -210,7 +228,21 @@ export async function GET(request: NextRequest) {
               .in('conversation_id', conversationIds)
               .order('created_at', { ascending: false })
               .limit(Math.min(500, conversationIds.length * 20)),
+            supabase
+              .from('conversations')
+              .select(
+                'id, ai_control_mode, ai_processing_status, ai_processing_reason, assigned_agent_id'
+              )
+              .eq('account_id', accountId)
+              .in('id', conversationIds),
+          ]);
+          conversationMessages = assertQuery<Row[]>(
+            messageResult,
             'contexto das conversas'
+          );
+          conversationStates = assertQuery<Row[]>(
+            stateResult,
+            'estado das conversas'
           );
         }
       }
@@ -218,15 +250,35 @@ export async function GET(request: NextRequest) {
         guidanceRequests.map((item) => [item.id, item])
       );
       const incidentMap = new Map(incidents.map((item) => [item.id, item]));
+      const incidentByConversation = new Map<string, Row>();
+      incidents.forEach((incident) => {
+        const conversationId = String(incident.conversation_id ?? '');
+        if (conversationId && !incidentByConversation.has(conversationId)) {
+          incidentByConversation.set(conversationId, incident);
+        }
+      });
+      const conversationStateMap = new Map(
+        conversationStates.map((item) => [item.id, item])
+      );
       response.attention = attention.map((item) => {
         const guidanceId = String(item.context?.guidance_request_id ?? '');
         const incidentId = String(item.context?.incident_id ?? '');
         const conversationId = String(item.context?.conversation_id ?? '');
+        const incident =
+          incidentMap.get(incidentId) ??
+          incidentByConversation.get(conversationId) ??
+          null;
         return {
           ...item,
           lead: leadMap.get(item.opportunity_id) ?? null,
           guidanceRequest: guidanceMap.get(guidanceId) ?? null,
-          incident: incidentMap.get(incidentId) ?? null,
+          incident,
+          incidentEvents: incident
+            ? incidentEvents.filter(
+                (event) => event.incident_id === incident.id
+              )
+            : [],
+          conversationState: conversationStateMap.get(conversationId) ?? null,
           guidanceMessages: guidanceMessages.filter(
             (message) => message.request_id === guidanceId
           ),

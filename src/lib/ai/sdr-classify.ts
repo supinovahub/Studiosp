@@ -156,6 +156,7 @@ export async function classifySdrTurn(args: {
     config: args.config,
     systemPrompt: CLASSIFIER_PROMPT,
     messages: args.messages,
+    requestTimeoutMs: 8_000,
   });
   return parseSdrClassification(result.text);
 }

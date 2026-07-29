@@ -874,6 +874,10 @@ As chaves e relações escolhidas permitem adicionar essas capacidades sem reesc
 ### `ai_reply_jobs`
 
 - `context_version` congela a versão da conversa que pode ser respondida;
+- `retry_generation` torna cada retomada do dono uma execução nova e
+  imutável;
+- `retry_of_job_id` liga a nova geração à tentativa anterior sem reescrever
+  jobs nem tentativas;
 - jobs de uma versão anterior terminam sem enviar;
 - a recuperação de lease nunca reivindica automaticamente um job cujo outbox
   está em envio, enviado ou ambíguo.
@@ -889,19 +893,39 @@ As chaves e relações escolhidas permitem adicionar essas capacidades sem reesc
 
 ### `ai_incidents`
 
-- uma ocorrência aberta por conta, conversa e causa;
+- um caso operacional ativo por conta e conversa, independentemente da
+  quantidade de falhas técnicas detectadas;
+- `occurrence_count` mostra reincidência sem multiplicar cartões na Central;
 - vincula mensagem de origem, job, outbox e oportunidade quando disponíveis;
 - distingue `safe_to_retry`, `partially_sent` e `ambiguous`;
 - registra decisão do dono: orientação, nova tentativa ou controle humano;
 - incidentes são visíveis somente a administradores; escrita e funções
   operacionais ficam restritas ao `service_role`.
 
+### `ai_incident_events`
+
+- linha do tempo append-only de todas as causas observadas dentro do caso;
+- preserva resumo, severidade, estado de entrega e contexto técnico;
+- continua auditável depois que o caso é recuperado, pausado ou arquivado.
+
+### `ai_account_rate_windows`
+
+- orçamento por conta compartilhado entre todas as instâncias serverless;
+- evita que uma rajada de respostas de campanha dependa de memória local;
+- acesso e mutação exclusivos do `service_role`.
+
 ### Funções
 
 - `studiosp_upsert_attention_item`: deduplicação compatível com o índice
   parcial de pendências abertas;
 - `studiosp_open_ai_incident`: registra o incidente, pausa a conversa quando
-  necessário e cria a pendência do dono;
+  necessário, acrescenta um evento e mantém uma única pendência do dono;
+- `studiosp_enqueue_ai_owner_retry`: cria uma geração nova, recusa reenvio
+  confirmado ou ambíguo e é idempotente enquanto a retomada está ativa;
+- `studiosp_claim_ai_account_rate_slot`: reserva atomicamente o orçamento
+  compartilhado da conta;
+- `studiosp_reconcile_stale_reactivation_sessions`: encerra sessões de
+  campanhas canceladas, concluídas ou arquivadas antes de uma nova ativação;
 - `studiosp_cancel_reactivation_on_inbound`: cancela a cadência no primeiro
   inbound sem encerrar prematuramente o contexto de reativação;
 - `enqueue_ai_reply_job`: captura a versão de contexto e consolida rajadas de

@@ -118,25 +118,43 @@ export async function openGuidanceRequest(args: {
     .eq('conversation_id', args.conversationId)
     .in('status', ['open', 'resolving'])
     .maybeSingle();
-  if (existing.data) return existing.data;
-
-  const inserted = await args.db
-    .from('ai_guidance_requests')
-    .insert({
-      account_id: args.accountId,
-      conversation_id: args.conversationId,
-      contact_id: args.contactId,
-      opportunity_id: args.opportunityId ?? null,
-      trigger_message_id: args.triggerMessageId ?? null,
-      reason_code: args.reasonCode,
-      missing_context_summary: args.summary.slice(0, 2000),
-      lead_message_excerpt: args.leadMessage.slice(0, 1200),
-      context: args.context ?? {},
-    })
-    .select()
-    .single();
-  if (inserted.error || !inserted.data) {
-    throw inserted.error ?? new Error('guidance_request_not_created');
+  let request = existing.data;
+  if (!request) {
+    const inserted = await args.db
+      .from('ai_guidance_requests')
+      .insert({
+        account_id: args.accountId,
+        conversation_id: args.conversationId,
+        contact_id: args.contactId,
+        opportunity_id: args.opportunityId ?? null,
+        trigger_message_id: args.triggerMessageId ?? null,
+        reason_code: args.reasonCode,
+        missing_context_summary: args.summary.slice(0, 2000),
+        lead_message_excerpt: args.leadMessage.slice(0, 1200),
+        context: args.context ?? {},
+      })
+      .select()
+      .single();
+    if (inserted.error || !inserted.data) {
+      throw inserted.error ?? new Error('guidance_request_not_created');
+    }
+    request = inserted.data;
+  } else if (request.status === 'resolving') {
+    const reopened = await args.db
+      .from('ai_guidance_requests')
+      .update({
+        status: 'open',
+        reason_code: args.reasonCode,
+        missing_context_summary: args.summary.slice(0, 2000),
+        lead_message_excerpt: args.leadMessage.slice(0, 1200),
+      })
+      .eq('id', request.id)
+      .select()
+      .single();
+    if (reopened.error || !reopened.data) {
+      throw reopened.error ?? new Error('guidance_request_not_reopened');
+    }
+    request = reopened.data;
   }
 
   await Promise.all([
@@ -151,12 +169,6 @@ export async function openGuidanceRequest(args: {
       })
       .eq('account_id', args.accountId)
       .eq('id', args.conversationId),
-    args.db.from('ai_guidance_messages').insert({
-      account_id: args.accountId,
-      request_id: inserted.data.id,
-      role: 'system',
-      content: args.summary.slice(0, 5000),
-    }),
     upsertOwnerAttention(args.db, {
       accountId: args.accountId,
       opportunityId: args.opportunityId ?? null,
@@ -165,15 +177,23 @@ export async function openGuidanceRequest(args: {
       title: 'Pedro precisa de contexto para responder',
       context: {
         conversation_id: args.conversationId,
-        guidance_request_id: inserted.data.id,
+        guidance_request_id: request.id,
         trigger_message_id: args.triggerMessageId ?? null,
         lead_message_excerpt: args.leadMessage.slice(0, 1200),
       },
       dueAt: new Date().toISOString(),
-      deduplicationKey: `ai-guidance:${args.conversationId}`,
+      deduplicationKey: `ai-case:${args.conversationId}`,
     }),
   ]);
-  return inserted.data;
+  if (!existing.data) {
+    await args.db.from('ai_guidance_messages').insert({
+      account_id: args.accountId,
+      request_id: request.id,
+      role: 'system',
+      content: args.summary.slice(0, 5000),
+    });
+  }
+  return request;
 }
 
 export async function openOperationalFailure(args: {
@@ -271,7 +291,7 @@ export async function resolveGuidanceAfterReply(args: {
         },
       })
       .eq('account_id', args.accountId)
-      .eq('deduplication_key', `ai-guidance:${args.conversationId}`)
+      .eq('deduplication_key', `ai-case:${args.conversationId}`)
       .in('status', ['open', 'snoozed']),
   ]);
 }

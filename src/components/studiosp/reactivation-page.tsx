@@ -118,6 +118,7 @@ export function ReactivationPage() {
 
   useEffect(() => {
     // Carregamento inicial sincroniza a tela com o backend.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
@@ -209,6 +210,13 @@ export function ReactivationPage() {
         ]
           .filter(Boolean)
           .join(' ')
+      );
+    } else if (Array.isArray(payload.failures) && payload.failures.length) {
+      setSuccess(
+        `${Number(payload.queued ?? 0)} lead${Number(payload.queued ?? 0) === 1 ? '' : 's'} preparado${Number(payload.queued ?? 0) === 1 ? '' : 's'}; ${payload.failures.length} bloqueado${payload.failures.length === 1 ? '' : 's'}.`
+      );
+      setError(
+        `Leads não ativados: ${payload.failures.filter(Boolean).join(' ')}`
       );
     } else if (
       Array.isArray(payload.deliveryFailures) &&

@@ -88,21 +88,41 @@ export async function processAiReplyQueue(
 ): Promise<number> {
   await reconcileAmbiguousDeliveries(db);
   await flagDelayedAiReplies(db);
-  const { data, error } = await db.rpc('claim_ai_reply_jobs', {
-    p_limit: limit,
-    p_lease_seconds: 330,
-  });
-  if (error) {
-    console.error(
-      JSON.stringify({ event: 'ai_reply_claim_failed', error: error.message })
-    );
-    return 0;
-  }
 
   let processed = 0;
-  for (const job of (data ?? []) as AiReplyJob[]) {
-    await processClaimedJob(db, job);
-    processed += 1;
+  const concurrency = 4;
+  while (processed < limit) {
+    const { data, error } = await db.rpc('claim_ai_reply_jobs', {
+      p_limit: Math.min(concurrency, limit - processed),
+      p_lease_seconds: 330,
+    });
+    if (error) {
+      console.error(
+        JSON.stringify({ event: 'ai_reply_claim_failed', error: error.message })
+      );
+      break;
+    }
+    const jobs = (data ?? []) as AiReplyJob[];
+    if (!jobs.length) break;
+    const results = await Promise.allSettled(
+      jobs.map((job) => processClaimedJob(db, job))
+    );
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(
+          JSON.stringify({
+            event: 'ai_reply_worker_rejected',
+            job_id: jobs[index].id,
+            conversation_id: jobs[index].conversation_id,
+            error:
+              result.reason instanceof Error
+                ? result.reason.message
+                : String(result.reason),
+          })
+        );
+      }
+    });
+    processed += jobs.length;
   }
   return processed;
 }
@@ -115,7 +135,7 @@ async function flagDelayedAiReplies(db: Db) {
       'id, account_id, conversation_id, trigger_message_id, correlation_id'
     )
     .in('status', ['queued', 'retrying'])
-    .lte('created_at', threshold)
+    .lte('available_at', threshold)
     .limit(20);
 
   for (const job of delayed ?? []) {
@@ -414,7 +434,7 @@ async function resolveConversationIncidents(db: Db, job: AiReplyJob) {
     .eq('status', 'resolving')
     .select('reason_code');
   const deduplicationKeys = (incidents ?? []).map(
-    (incident) => `ai-incident:${job.conversation_id}:${incident.reason_code}`
+    () => `ai-case:${job.conversation_id}`
   );
   if (!deduplicationKeys.length) return;
   await db

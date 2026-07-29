@@ -44,7 +44,7 @@ const FINANCIAL_KEYS = new Set([
 ]);
 
 const CONTEXT_DEPENDENT_SHORT_REPLY =
-  /^(?:sim|s|n[aã]o|n|isso|exato|correto|continua|ainda|n[aã]o sei|sei n[aã]o|talvez|tanto faz|qualquer um|um e meio|dois|tr[eê]s|quatro|cinco)$/i;
+  /^(?:sim|s|n[aã]o|n|isso|exato|correto|continua|ainda|n[aã]o sei|sei n[aã]o|talvez|mais ou menos|depende|acho que sim|n[aã]o tenho certeza|tanto faz|qualquer um|um e meio|dois|tr[eê]s|quatro|cinco)$/i;
 
 const UNKNOWN_REPLY =
   /^(?:n[aã]o sei(?: ainda)?|sei n[aã]o|ainda n[aã]o sei|n[aã]o tenho (?:ideia|prefer[eê]ncia)|sem prefer[eê]ncia|qualquer (?:bairro|regi[aã]o|lugar)|tanto faz)$/i;
@@ -59,7 +59,12 @@ export interface ConversationTurn {
 }
 
 export type LeadPosture =
-  'neutral' | 'reactivation_hesitation' | 'confused' | 'frustrated' | 'playful';
+  | 'neutral'
+  | 'ambivalent'
+  | 'reactivation_hesitation'
+  | 'confused'
+  | 'frustrated'
+  | 'playful';
 
 export function normalizeConversationText(value: unknown) {
   return String(value ?? '')
@@ -153,6 +158,14 @@ export function classifyLeadPosture(args: {
   ) {
     return 'reactivation_hesitation';
   }
+  if (
+    args.expectedQuestionKey &&
+    /^(?:mais ou menos|depende|talvez|acho que sim|n[aã]o tenho certeza|mais pra sim|mais pra n[aã]o)\b/.test(
+      latest
+    )
+  ) {
+    return 'ambivalent';
+  }
   if (/\b(kk+k|rsrs+|haha+|hehe+)\b|[😂🤣]/i.test(args.latestUserMessage)) {
     return 'playful';
   }
@@ -161,6 +174,8 @@ export function classifyLeadPosture(args: {
 
 export function postureInstruction(posture: LeadPosture): string | null {
   switch (posture) {
+    case 'ambivalent':
+      return 'A resposta foi parcial ou ambivalente. Acolha isso em poucas palavras e esclareça o mesmo assunto com uma pergunta simples. Não registre certeza, não presuma o motivo e não avance para outro campo da qualificação neste turno.';
     case 'reactivation_hesitation':
       return 'O lead demonstrou dúvida sobre continuar a compra após uma reativação. Não inicie a qualificação neste turno. Acolha sem pressionar e faça uma pergunta aberta e simples para entender o que mudou ou o que está gerando a dúvida.';
     case 'confused':
