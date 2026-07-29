@@ -1904,3 +1904,31 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 - não houve alteração de banco, migrations, RLS, APIs ou produção;
 - a branch completa foi validada com TypeScript, lint, build e 791 testes
   automatizados antes da homologação visual.
+
+## 24. Cadastro de imóveis por corretores
+
+### Implementado em branch isolada em 29/07/2026
+
+- branch de trabalho: `feature/broker-development-submissions`;
+- o corretor pode cadastrar um empreendimento e sua primeira
+  unidade/condição, mantendo o registro como rascunho próprio;
+- o corretor pode adicionar várias imagens e arquivos somente aos rascunhos
+  criados por ele;
+- ao enviar o cadastro, uma operação transacional muda o imóvel para
+  `pending` e cria uma pendência de revisão atribuída ao dono;
+- enquanto estiver pendente, o corretor pode consultar o cadastro, mas não
+  editá-lo nem publicá-lo;
+- o dono pode aprovar e publicar ou reprovar informando um motivo;
+- a aprovação publica o empreendimento e suas mídias; a reprovação devolve o
+  cadastro ao corretor para correção e novo envio;
+- autorizações são aplicadas na API e nas políticas RLS, sem depender apenas
+  dos botões da interface;
+- a `main` e o Supabase de produção permanecem inalterados até homologação.
+
+### Estado do ambiente de homologação
+
+O projeto Supabase Staging anterior (`vgmmfzdifjhpqaopxfbj`) foi removido por
+outro desenvolvedor. A recriação deve partir de uma branch de banco do projeto
+Studiosp de produção, sem cópia de dados reais. A migration
+`20260729103000_broker_development_submissions.sql` será aplicada somente ao
+novo staging antes do teste ponta a ponta.

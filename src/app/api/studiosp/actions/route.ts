@@ -147,7 +147,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ broker: result.data });
     }
 
-    if (!hasMinRole(role, 'admin')) {
+    const brokerCatalogActions = new Set([
+      'save_development',
+      'submit_development',
+    ]);
+    if (
+      !hasMinRole(role, 'admin') &&
+      !(role === 'agent' && brokerCatalogActions.has(action))
+    ) {
       throw new ForbiddenError(
         'Somente o dono pode alterar esta configuração.'
       );
@@ -321,6 +328,24 @@ export async function POST(request: NextRequest) {
       const developerName = text(body.developerName);
       const neighborhoodName = text(body.neighborhoodName);
 
+      if (role === 'agent' && body.id) {
+        const ownDraft = await supabase
+          .from('developments')
+          .select('id')
+          .eq('account_id', accountId)
+          .eq('id', text(body.id))
+          .eq('created_by', profileId)
+          .eq('status', 'draft')
+          .in('submission_status', ['draft', 'rejected'])
+          .maybeSingle();
+        actionError(ownDraft.error);
+        if (!ownDraft.data) {
+          throw new ForbiddenError(
+            'Você só pode editar seus próprios imóveis antes da revisão.'
+          );
+        }
+      }
+
       if (developerName) {
         const normalized = normalizedName(developerName);
         const existing = await supabase
@@ -343,7 +368,8 @@ export async function POST(request: NextRequest) {
             .select('id')
             .single();
           actionError(created.error);
-          if (!created.data?.id) throw new Error('Falha ao criar incorporadora.');
+          if (!created.data?.id)
+            throw new Error('Falha ao criar incorporadora.');
           developerId = created.data.id;
         }
       }
@@ -390,8 +416,7 @@ export async function POST(request: NextRequest) {
       ) {
         return NextResponse.json(
           {
-            error:
-              'Informe tipologia, metragem e preço da primeira unidade.',
+            error: 'Informe tipologia, metragem e preço da primeira unidade.',
           },
           { status: 400 }
         );
@@ -418,6 +443,14 @@ export async function POST(request: NextRequest) {
               .filter(Boolean),
         knowledge_notes: text(body.knowledgeNotes) || null,
         internal_notes: text(body.internalNotes) || null,
+        ...(role === 'agent'
+          ? {
+              submission_status: 'draft',
+              rejection_reason: null,
+              reviewed_by: null,
+              reviewed_at: null,
+            }
+          : {}),
         updated_by: profileId,
       };
       const result = body.id
@@ -492,6 +525,45 @@ export async function POST(request: NextRequest) {
         development: result.data,
         offer: savedOffer,
       });
+    }
+
+    if (action === 'submit_development') {
+      if (role !== 'agent' || !profileId) {
+        throw new ForbiddenError(
+          'Somente o corretor responsável pode enviar este imóvel para revisão.'
+        );
+      }
+      const developmentId = text(body.developmentId);
+      const submission = await supabase.rpc('studiosp_submit_development', {
+        p_development_id: developmentId,
+      });
+      actionError(submission.error);
+      return NextResponse.json({ submission: submission.data });
+    }
+
+    if (action === 'review_development') {
+      const developmentId = text(body.developmentId);
+      const decision = text(body.decision);
+      const reason = text(body.reason);
+      if (!['approve', 'reject'].includes(decision)) {
+        return NextResponse.json(
+          { error: 'Informe se deseja aprovar ou reprovar.' },
+          { status: 400 }
+        );
+      }
+      if (decision === 'reject' && !reason) {
+        return NextResponse.json(
+          { error: 'Informe o motivo da reprovação.' },
+          { status: 400 }
+        );
+      }
+      const review = await supabase.rpc('studiosp_review_development', {
+        p_development_id: developmentId,
+        p_decision: decision,
+        p_reason: reason || null,
+      });
+      actionError(review.error);
+      return NextResponse.json({ review: review.data });
     }
 
     if (action === 'save_offer') {

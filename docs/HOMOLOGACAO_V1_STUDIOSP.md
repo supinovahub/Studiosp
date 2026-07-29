@@ -166,3 +166,27 @@ Supabase Studiosp Staging:
 Critério: nenhum cadastro aceita WhatsApp inválido, nenhum corretor entra duas
 vezes pelo mesmo retry e nenhum token em texto puro aparece nas tabelas do
 banco.
+
+## Cadastro de imóvel pelo corretor e revisão do dono
+
+1. Entrar no staging como Corretor e abrir **Empreendimentos**.
+2. Criar um imóvel com incorporadora, bairro, endereço, situação, entrega,
+   tipologia, unidade, metragem, vagas e valores.
+3. Adicionar ao menos duas imagens ao imóvel e confirmar que o resultado de
+   cada upload é exibido.
+4. Confirmar que outro corretor não consegue editar nem adicionar mídia ao
+   rascunho.
+5. Clicar em **Enviar para aprovação**.
+6. Confirmar que o imóvel fica bloqueado para edição e continua invisível no
+   catálogo publicado.
+7. Entrar como Dono, abrir **Central de atenção** e localizar a pendência de
+   revisão.
+8. Reprovar com motivo; voltar ao Corretor e confirmar que o motivo aparece,
+   que o cadastro volta a ser editável e pode ser reenviado.
+9. Entrar novamente como Dono e clicar em **Aprovar e publicar**.
+10. Confirmar que empreendimento e imagens aparecem no catálogo publicado e
+    que a pendência foi resolvida.
+
+Resultado esperado: nenhum corretor publica diretamente, revisões não deixam
+estado parcial, mídia pertence ao imóvel correto e todas as permissões também
+são rejeitadas no servidor/RLS.

@@ -13,6 +13,7 @@ function query(data: unknown = []) {
     select: () => builder,
     eq: () => builder,
     neq: () => builder,
+    or: () => builder,
     in: () => builder,
     order: () => builder,
     limit: () => builder,

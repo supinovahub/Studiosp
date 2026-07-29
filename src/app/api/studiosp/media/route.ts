@@ -97,9 +97,9 @@ function safeFilename(name: string) {
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getCurrentAccount();
-    if (!hasMinRole(ctx.role, 'admin')) {
+    if (!hasMinRole(ctx.role, 'agent')) {
       return NextResponse.json(
-        { error: 'Somente o dono pode enviar arquivos.' },
+        { error: 'Seu perfil não pode enviar arquivos.' },
         { status: 403 }
       );
     }
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
 
     const { data: development, error: developmentError } = await ctx.supabase
       .from('developments')
-      .select('id')
+      .select('id, created_by, status, submission_status')
       .eq('account_id', ctx.accountId)
       .eq('id', developmentId)
       .maybeSingle();
@@ -151,6 +151,21 @@ export async function POST(request: NextRequest) {
       .eq('account_id', ctx.accountId)
       .eq('user_id', ctx.userId)
       .maybeSingle();
+
+    if (
+      ctx.role === 'agent' &&
+      (development.created_by !== profile?.id ||
+        development.status !== 'draft' ||
+        !['draft', 'rejected'].includes(development.submission_status))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Você só pode adicionar imagens aos seus próprios rascunhos antes da revisão.',
+        },
+        { status: 403 }
+      );
+    }
 
     const objectPath = `${ctx.accountId}/${developmentId}/${crypto.randomUUID()}-${safeFilename(file.name)}`;
     const bytes = await file.arrayBuffer();
@@ -185,7 +200,7 @@ export async function POST(request: NextRequest) {
         visibility: ['owner_only', 'broker', 'shareable'].includes(visibility)
           ? visibility
           : 'broker',
-        status: 'published',
+        status: ctx.role === 'agent' ? 'draft' : 'published',
         created_by: profile?.id ?? null,
       })
       .select()

@@ -354,7 +354,9 @@ export async function GET(request: NextRequest) {
         .eq('account_id', accountId);
       developmentsQuery =
         role === 'agent'
-          ? developmentsQuery.eq('status', 'published')
+          ? developmentsQuery.or(
+              `status.eq.published,and(status.eq.draft,created_by.eq.${profileId})`
+            )
           : developmentsQuery.neq('status', 'archived');
 
       const [developerResult, neighborhoodResult, developmentResult] =

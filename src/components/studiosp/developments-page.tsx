@@ -40,6 +40,8 @@ export function DevelopmentsPage() {
     text: string;
   } | null>(null);
   const canManage = data?.role === 'owner' || data?.role === 'admin';
+  const isAgent = data?.role === 'agent';
+  const canCreate = canManage || isAgent;
   const editingOffer: Row | null = editing
     ? (((data?.offers ?? []).find(
         (offer) =>
@@ -132,12 +134,14 @@ export function DevelopmentsPage() {
         description={
           canManage
             ? 'Cadastre incorporadora, bairro, metragens, preços, entrada, parcelas e arquivos. A IA consulta essa base para contar oportunidades compatíveis sem recomendar uma unidade ao lead.'
-            : 'Consulte os empreendimentos publicados e as condições que ajudam a preparar a conversa com o lead.'
+            : isAgent
+              ? 'Consulte o catálogo publicado ou cadastre um imóvel para revisão e aprovação do dono.'
+              : 'Consulte os empreendimentos publicados e as condições que ajudam a preparar a conversa com o lead.'
         }
         actions={
-          canManage ? (
+          canCreate ? (
             <div className="flex flex-wrap gap-2">
-              <DocumentAnalysisPanel onApproved={reload} />
+              {canManage ? <DocumentAnalysisPanel onApproved={reload} /> : null}
               <Button
                 onClick={() => {
                   setEditing(null);
@@ -160,9 +164,10 @@ export function DevelopmentsPage() {
         </p>
       ) : null}
 
-      {canManage ? (
+      {canCreate ? (
         <CatalogFoundation
           data={data}
+          canAdmin={canManage}
           saving={saving}
           run={run}
           onUploadResult={async (success, text) => {
@@ -172,7 +177,7 @@ export function DevelopmentsPage() {
         />
       ) : null}
 
-      {canManage && showForm ? (
+      {canCreate && showForm ? (
         <section className="border-primary/25 bg-card overflow-hidden rounded-2xl border">
           <div className="border-border/65 flex items-center justify-between border-b px-4 py-4 sm:px-5">
             <div>
@@ -278,101 +283,101 @@ export function DevelopmentsPage() {
               />
             </Field>
             <>
-                <div className="border-border/70 bg-muted/25 rounded-xl border p-4 md:col-span-2">
-                  <h4 className="text-foreground text-sm font-semibold">
-                    {editing
-                      ? 'Unidade ou tipologia principal'
-                      : 'Primeira unidade ou tipologia'}
-                  </h4>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {editing
-                      ? 'Edite os dados comerciais vinculados a este empreendimento.'
-                      : 'Preencha conforme uma linha do tabelão. Outras unidades poderão ser adicionadas depois ao mesmo empreendimento.'}
-                  </p>
-                </div>
-                <Field label="Tipologia">
-                  <Input
-                    name="typology"
-                    required
-                    placeholder="Studio, 1 dormitório, 2 suítes..."
-                    defaultValue={editingOffer?.typology ?? ''}
-                  />
-                </Field>
-                <Field label="Unidade">
-                  <Input
-                    name="unitCode"
-                    placeholder="Ex.: 22B"
-                    defaultValue={editingOffer?.unit_code ?? ''}
-                  />
-                </Field>
-                <Field label="Metragem (m²)">
-                  <Input
-                    name="areaMin"
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    required
-                    defaultValue={editingOffer?.area_min_sqm ?? ''}
-                  />
-                </Field>
-                <Field label="Metragem máxima (opcional)">
-                  <Input
-                    name="areaMax"
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    defaultValue={editingOffer?.area_max_sqm ?? ''}
-                  />
-                </Field>
-                <Field label="Vagas">
-                  <Input
-                    name="parkingSpaces"
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="0"
-                    defaultValue={editingOffer?.parking_spaces ?? ''}
-                  />
-                </Field>
-                <Field label="Preço de (tabela)">
-                  <Input
-                    name="originalPrice"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    defaultValue={editingOffer?.original_price ?? ''}
-                  />
-                </Field>
-                <Field label="Preço para (oferta)">
-                  <Input
-                    name="priceFrom"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required
-                    defaultValue={editingOffer?.price_from ?? ''}
-                  />
-                </Field>
-                <Field label="Preço por m²">
-                  <Input
-                    name="pricePerSqm"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    defaultValue={editingOffer?.price_per_sqm ?? ''}
-                  />
-                </Field>
-                <Field label="Margem comercial (%)">
-                  <Input
-                    name="marginPercent"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.001"
-                    defaultValue={editingOffer?.margin_percent ?? ''}
-                  />
-                </Field>
-              </>
+              <div className="border-border/70 bg-muted/25 rounded-xl border p-4 md:col-span-2">
+                <h4 className="text-foreground text-sm font-semibold">
+                  {editing
+                    ? 'Unidade ou tipologia principal'
+                    : 'Primeira unidade ou tipologia'}
+                </h4>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {editing
+                    ? 'Edite os dados comerciais vinculados a este empreendimento.'
+                    : 'Preencha conforme uma linha do tabelão. Outras unidades poderão ser adicionadas depois ao mesmo empreendimento.'}
+                </p>
+              </div>
+              <Field label="Tipologia">
+                <Input
+                  name="typology"
+                  required
+                  placeholder="Studio, 1 dormitório, 2 suítes..."
+                  defaultValue={editingOffer?.typology ?? ''}
+                />
+              </Field>
+              <Field label="Unidade">
+                <Input
+                  name="unitCode"
+                  placeholder="Ex.: 22B"
+                  defaultValue={editingOffer?.unit_code ?? ''}
+                />
+              </Field>
+              <Field label="Metragem (m²)">
+                <Input
+                  name="areaMin"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  required
+                  defaultValue={editingOffer?.area_min_sqm ?? ''}
+                />
+              </Field>
+              <Field label="Metragem máxima (opcional)">
+                <Input
+                  name="areaMax"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  defaultValue={editingOffer?.area_max_sqm ?? ''}
+                />
+              </Field>
+              <Field label="Vagas">
+                <Input
+                  name="parkingSpaces"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  defaultValue={editingOffer?.parking_spaces ?? ''}
+                />
+              </Field>
+              <Field label="Preço de (tabela)">
+                <Input
+                  name="originalPrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={editingOffer?.original_price ?? ''}
+                />
+              </Field>
+              <Field label="Preço para (oferta)">
+                <Input
+                  name="priceFrom"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                  defaultValue={editingOffer?.price_from ?? ''}
+                />
+              </Field>
+              <Field label="Preço por m²">
+                <Input
+                  name="pricePerSqm"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={editingOffer?.price_per_sqm ?? ''}
+                />
+              </Field>
+              <Field label="Margem comercial (%)">
+                <Input
+                  name="marginPercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.001"
+                  defaultValue={editingOffer?.margin_percent ?? ''}
+                />
+              </Field>
+            </>
             <Field label="Descrição para o corretor" wide>
               <Textarea
                 name="description"
@@ -457,6 +462,16 @@ export function DevelopmentsPage() {
               'line' in development.address
                 ? String(development.address.line ?? '')
                 : '';
+            const isOwnDraft =
+              isAgent &&
+              development.created_by === data.profileId &&
+              development.status === 'draft';
+            const canEditDevelopment =
+              canManage ||
+              (isOwnDraft &&
+                ['draft', 'rejected'].includes(
+                  String(development.submission_status ?? 'draft')
+                ));
             return (
               <article
                 key={String(development.id)}
@@ -489,9 +504,13 @@ export function DevelopmentsPage() {
                       label={
                         development.status === 'published'
                           ? 'Publicado'
-                          : development.status === 'paused'
-                            ? 'Pausado'
-                            : 'Rascunho'
+                          : development.submission_status === 'pending'
+                            ? 'Aguardando aprovação'
+                            : development.submission_status === 'rejected'
+                              ? 'Reprovado'
+                              : development.status === 'paused'
+                                ? 'Pausado'
+                                : 'Rascunho'
                       }
                       tone={
                         development.status === 'published'
@@ -508,7 +527,16 @@ export function DevelopmentsPage() {
                   </p>
                   {development.status !== 'published' ? (
                     <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-300">
-                      Invisível para corretores até publicar.
+                      {isAgent
+                        ? 'Invisível no catálogo até o dono aprovar e publicar.'
+                        : 'Invisível para corretores até publicar.'}
+                    </p>
+                  ) : null}
+                  {development.submission_status === 'rejected' &&
+                  development.rejection_reason ? (
+                    <p className="mt-2 text-xs text-red-600 dark:text-red-300">
+                      Motivo da reprovação:{' '}
+                      {String(development.rejection_reason)}
                     </p>
                   ) : null}
                 </div>
@@ -590,20 +618,22 @@ export function DevelopmentsPage() {
                     ))}
                   </div>
                 ) : null}
-                {canManage ? (
+                {canManage || isOwnDraft ? (
                   <div className="border-border flex flex-wrap gap-2 border-t p-3">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditing(development);
-                        setShowForm(true);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                    >
-                      <Pencil /> Editar
-                    </Button>
-                    {development.status !== 'published' ? (
+                    {canEditDevelopment ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditing(development);
+                          setShowForm(true);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                      >
+                        <Pencil /> Editar
+                      </Button>
+                    ) : null}
+                    {canManage && development.status !== 'published' ? (
                       <Button
                         size="sm"
                         onClick={() =>
@@ -618,21 +648,41 @@ export function DevelopmentsPage() {
                         <Send /> Publicar
                       </Button>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        run(
-                          'archive_development',
-                          { developmentId: development.id },
-                          'Empreendimento arquivado.'
-                        )
-                      }
-                      disabled={saving}
-                    >
-                      <Archive /> Arquivar
-                    </Button>
-                    {development.status === 'draft' ? (
+                    {isOwnDraft &&
+                    ['draft', 'rejected'].includes(
+                      String(development.submission_status ?? 'draft')
+                    ) ? (
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          run(
+                            'submit_development',
+                            { developmentId: development.id },
+                            'Imóvel enviado para aprovação do dono.'
+                          )
+                        }
+                        disabled={saving}
+                      >
+                        <Send /> Enviar para aprovação
+                      </Button>
+                    ) : null}
+                    {canManage ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          run(
+                            'archive_development',
+                            { developmentId: development.id },
+                            'Empreendimento arquivado.'
+                          )
+                        }
+                        disabled={saving}
+                      >
+                        <Archive /> Arquivar
+                      </Button>
+                    ) : null}
+                    {canManage && development.status === 'draft' ? (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -678,11 +728,13 @@ export function DevelopmentsPage() {
 
 function CatalogFoundation({
   data,
+  canAdmin,
   saving,
   run,
   onUploadResult,
 }: {
   data: NonNullable<ReturnType<typeof useStudiospData>['data']>;
+  canAdmin: boolean;
   saving: boolean;
   run: (
     action: string,
@@ -697,6 +749,15 @@ function CatalogFoundation({
   const [uploadResults, setUploadResults] = useState<
     { name: string; ok: boolean; message: string }[]
   >([]);
+  const uploadableDevelopments = (data.developments ?? []).filter(
+    (item) =>
+      canAdmin ||
+      (item.created_by === data.profileId &&
+        item.status === 'draft' &&
+        ['draft', 'rejected'].includes(
+          String(item.submission_status ?? 'draft')
+        ))
+  );
 
   async function submitSimple(
     event: FormEvent<HTMLFormElement>,
@@ -767,144 +828,156 @@ function CatalogFoundation({
   }
 
   return (
-    <details className="border-border bg-card rounded-lg border">
+    <details
+      className="border-border bg-card rounded-lg border"
+      open={!canAdmin}
+    >
       <summary className="text-foreground cursor-pointer list-none px-4 py-3 text-sm font-semibold">
         Cadastros rápidos e arquivos{' '}
         <span className="text-muted-foreground ml-2 text-xs font-normal">
-          incorporadoras, bairros, opções comerciais e pasta de mídias
+          {canAdmin
+            ? 'incorporadoras, bairros, opções comerciais e pasta de mídias'
+            : 'adicione imagens aos seus imóveis antes de enviar para aprovação'}
         </span>
       </summary>
       <div className="border-border grid gap-4 border-t p-4 lg:grid-cols-2">
-        <form
-          onSubmit={(event) =>
-            submitSimple(event, 'save_developer', 'Incorporadora cadastrada.')
-          }
-          className="border-border space-y-3 rounded-lg border p-3"
-        >
-          <h3 className="text-foreground flex items-center gap-2 text-sm font-medium">
-            <Building2 className="text-primary size-4" /> Nova incorporadora
-          </h3>
-          <Field label="Nome">
-            <Input name="name" required />
-          </Field>
-          <Field label="Site">
-            <Input name="websiteUrl" type="url" placeholder="https://" />
-          </Field>
-          <Button type="submit" size="sm" disabled={saving}>
-            <Plus /> Adicionar
-          </Button>
-        </form>
-        <form
-          onSubmit={(event) =>
-            submitSimple(event, 'save_neighborhood', 'Bairro cadastrado.')
-          }
-          className="border-border space-y-3 rounded-lg border p-3"
-        >
-          <h3 className="text-foreground flex items-center gap-2 text-sm font-medium">
-            <MapPin className="text-primary size-4" /> Novo bairro
-          </h3>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Bairro">
+        {canAdmin ? (
+          <form
+            onSubmit={(event) =>
+              submitSimple(event, 'save_developer', 'Incorporadora cadastrada.')
+            }
+            className="border-border space-y-3 rounded-lg border p-3"
+          >
+            <h3 className="text-foreground flex items-center gap-2 text-sm font-medium">
+              <Building2 className="text-primary size-4" /> Nova incorporadora
+            </h3>
+            <Field label="Nome">
               <Input name="name" required />
             </Field>
-            <Field label="Cidade">
-              <Input name="city" defaultValue="São Paulo" required />
+            <Field label="Site">
+              <Input name="websiteUrl" type="url" placeholder="https://" />
             </Field>
-          </div>
-          <input type="hidden" name="stateCode" value="SP" />
-          <Button type="submit" size="sm" disabled={saving}>
-            <Plus /> Adicionar
-          </Button>
-        </form>
-        <form
-          onSubmit={(event) =>
-            submitSimple(event, 'save_offer', 'Opção comercial cadastrada.')
-          }
-          className="border-border space-y-3 rounded-lg border p-3 lg:col-span-2"
-        >
-          <h3 className="text-foreground flex items-center gap-2 text-sm font-medium">
-            <WalletCards className="text-primary size-4" /> Nova opção comercial
-          </h3>
-          <div className="grid gap-3 md:grid-cols-4">
-            <Field label="Empreendimento">
-              <select
-                name="developmentId"
-                required
-                className="border-input bg-background text-foreground h-9 w-full rounded-lg border px-2 text-sm"
-              >
-                <option value="">Selecione...</option>
-                {(data.developments ?? []).map((item) => (
-                  <option key={String(item.id)} value={String(item.id)}>
-                    {String(item.name)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Nome da opção">
-              <Input name="label" required placeholder="Studio 30 m²" />
-            </Field>
-            <Field label="Tipologia">
+            <Button type="submit" size="sm" disabled={saving}>
+              <Plus /> Adicionar
+            </Button>
+          </form>
+        ) : null}
+        {canAdmin ? (
+          <form
+            onSubmit={(event) =>
+              submitSimple(event, 'save_neighborhood', 'Bairro cadastrado.')
+            }
+            className="border-border space-y-3 rounded-lg border p-3"
+          >
+            <h3 className="text-foreground flex items-center gap-2 text-sm font-medium">
+              <MapPin className="text-primary size-4" /> Novo bairro
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Bairro">
+                <Input name="name" required />
+              </Field>
+              <Field label="Cidade">
+                <Input name="city" defaultValue="São Paulo" required />
+              </Field>
+            </div>
+            <input type="hidden" name="stateCode" value="SP" />
+            <Button type="submit" size="sm" disabled={saving}>
+              <Plus /> Adicionar
+            </Button>
+          </form>
+        ) : null}
+        {canAdmin ? (
+          <form
+            onSubmit={(event) =>
+              submitSimple(event, 'save_offer', 'Opção comercial cadastrada.')
+            }
+            className="border-border space-y-3 rounded-lg border p-3 lg:col-span-2"
+          >
+            <h3 className="text-foreground flex items-center gap-2 text-sm font-medium">
+              <WalletCards className="text-primary size-4" /> Nova opção
+              comercial
+            </h3>
+            <div className="grid gap-3 md:grid-cols-4">
+              <Field label="Empreendimento">
+                <select
+                  name="developmentId"
+                  required
+                  className="border-input bg-background text-foreground h-9 w-full rounded-lg border px-2 text-sm"
+                >
+                  <option value="">Selecione...</option>
+                  {(data.developments ?? []).map((item) => (
+                    <option key={String(item.id)} value={String(item.id)}>
+                      {String(item.name)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Nome da opção">
+                <Input name="label" required placeholder="Studio 30 m²" />
+              </Field>
+              <Field label="Tipologia">
+                <Input
+                  name="typology"
+                  placeholder="Studio, 1 dormitório, 2 suítes..."
+                />
+              </Field>
+              <Field label="Unidade">
+                <Input name="unitCode" placeholder="Ex.: 22B" />
+              </Field>
+              <Field label="Metragem mínima">
+                <Input
+                  name="areaMin"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  required
+                />
+              </Field>
+              <Field label="Metragem máxima">
+                <Input name="areaMax" type="number" min="1" step="0.01" />
+              </Field>
+              <Field label="Vagas">
+                <Input name="parkingSpaces" type="number" min="0" step="1" />
+              </Field>
+              <Field label="Preço de (tabela)">
+                <Input name="originalPrice" type="number" min="0" step="0.01" />
+              </Field>
+              <Field label="Preço a partir de">
+                <Input name="priceFrom" type="number" min="0" />
+              </Field>
+              <Field label="Preço por m²">
+                <Input name="pricePerSqm" type="number" min="0" step="0.01" />
+              </Field>
+              <Field label="Margem comercial (%)">
+                <Input
+                  name="marginPercent"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.001"
+                />
+              </Field>
+              <Field label="Entrada a partir de">
+                <Input name="entryFrom" type="number" min="0" />
+              </Field>
+              <Field label="Parcela a partir de">
+                <Input name="installmentFrom" type="number" min="0" />
+              </Field>
+              <Field label="Validade">
+                <Input name="validUntil" type="date" />
+              </Field>
+            </div>
+            <Field label="Resumo das condições">
               <Input
-                name="typology"
-                placeholder="Studio, 1 dormitório, 2 suítes..."
+                name="termsSummary"
+                placeholder="Condições médias e observações"
               />
             </Field>
-            <Field label="Unidade">
-              <Input name="unitCode" placeholder="Ex.: 22B" />
-            </Field>
-            <Field label="Metragem mínima">
-              <Input
-                name="areaMin"
-                type="number"
-                min="1"
-                step="0.01"
-                required
-              />
-            </Field>
-            <Field label="Metragem máxima">
-              <Input name="areaMax" type="number" min="1" step="0.01" />
-            </Field>
-            <Field label="Vagas">
-              <Input name="parkingSpaces" type="number" min="0" step="1" />
-            </Field>
-            <Field label="Preço de (tabela)">
-              <Input name="originalPrice" type="number" min="0" step="0.01" />
-            </Field>
-            <Field label="Preço a partir de">
-              <Input name="priceFrom" type="number" min="0" />
-            </Field>
-            <Field label="Preço por m²">
-              <Input name="pricePerSqm" type="number" min="0" step="0.01" />
-            </Field>
-            <Field label="Margem comercial (%)">
-              <Input
-                name="marginPercent"
-                type="number"
-                min="0"
-                max="100"
-                step="0.001"
-              />
-            </Field>
-            <Field label="Entrada a partir de">
-              <Input name="entryFrom" type="number" min="0" />
-            </Field>
-            <Field label="Parcela a partir de">
-              <Input name="installmentFrom" type="number" min="0" />
-            </Field>
-            <Field label="Validade">
-              <Input name="validUntil" type="date" />
-            </Field>
-          </div>
-          <Field label="Resumo das condições">
-            <Input
-              name="termsSummary"
-              placeholder="Condições médias e observações"
-            />
-          </Field>
-          <Button type="submit" size="sm" disabled={saving}>
-            <Plus /> Adicionar opção
-          </Button>
-        </form>
+            <Button type="submit" size="sm" disabled={saving}>
+              <Plus /> Adicionar opção
+            </Button>
+          </form>
+        ) : null}
         <div className="border-border space-y-3 rounded-lg border p-3 lg:col-span-2">
           <h3 className="text-foreground flex items-center gap-2 text-sm font-medium">
             <FileUp className="text-primary size-4" /> Enviar pasta de arquivos
@@ -920,7 +993,7 @@ function CatalogFoundation({
               className="border-input bg-background text-foreground h-9 rounded-lg border px-2 text-sm"
             >
               <option value="">Empreendimento...</option>
-              {(data.developments ?? []).map((item) => (
+              {uploadableDevelopments.map((item) => (
                 <option key={String(item.id)} value={String(item.id)}>
                   {String(item.name)}
                 </option>

@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import {
   AlertTriangle,
+  Building2,
   Check,
   CheckCircle2,
   Clock3,
   Info,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -63,6 +65,36 @@ export function AttentionPage() {
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : 'Não foi possível resolver.'
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function reviewDevelopment(
+    attentionId: string,
+    developmentId: string,
+    decision: 'approve' | 'reject'
+  ) {
+    const reason =
+      decision === 'reject'
+        ? window.prompt('Informe o motivo da reprovação para o corretor:')
+        : '';
+    if (decision === 'reject' && !reason?.trim()) return;
+    setSavingId(attentionId);
+    setActionError(null);
+    try {
+      await runStudiospAction('review_development', {
+        developmentId,
+        decision,
+        reason: reason?.trim() ?? '',
+      });
+      await reload();
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível revisar o imóvel.'
       );
     } finally {
       setSavingId(null);
@@ -157,6 +189,11 @@ export function AttentionPage() {
               {visibleItems.map((item) => {
                 const overdue =
                   item.due_at && new Date(item.due_at).getTime() < now;
+                const developmentId =
+                  item.kind === 'development_review' &&
+                  typeof item.context?.development_id === 'string'
+                    ? item.context.development_id
+                    : null;
                 return (
                   <article
                     key={item.id}
@@ -206,6 +243,43 @@ export function AttentionPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 pl-11 lg:pl-0">
+                      {developmentId ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            render={
+                              <Link href={`/imoveis?review=${developmentId}`} />
+                            }
+                          >
+                            <Building2 /> Revisar cadastro
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() =>
+                              reviewDevelopment(
+                                item.id,
+                                developmentId,
+                                'reject'
+                              )
+                            }
+                            disabled={savingId === item.id}
+                          >
+                            <X /> Reprovar
+                          </Button>
+                          <Button
+                            onClick={() =>
+                              reviewDevelopment(
+                                item.id,
+                                developmentId,
+                                'approve'
+                              )
+                            }
+                            disabled={savingId === item.id}
+                          >
+                            <Check /> Aprovar e publicar
+                          </Button>
+                        </>
+                      ) : null}
                       {item.opportunity_id ? (
                         <Button
                           variant="outline"
@@ -216,15 +290,17 @@ export function AttentionPage() {
                           Abrir contexto
                         </Button>
                       ) : null}
-                      <Button
-                        onClick={() => resolve(item.id)}
-                        disabled={savingId === item.id}
-                      >
-                        <Check />
-                        {savingId === item.id
-                          ? 'Salvando...'
-                          : 'Marcar como resolvida'}
-                      </Button>
+                      {!developmentId ? (
+                        <Button
+                          onClick={() => resolve(item.id)}
+                          disabled={savingId === item.id}
+                        >
+                          <Check />
+                          {savingId === item.id
+                            ? 'Salvando...'
+                            : 'Marcar como resolvida'}
+                        </Button>
+                      ) : null}
                     </div>
                   </article>
                 );
