@@ -263,6 +263,14 @@ export function isQualificationCandidateGrounded(args: {
     return false;
   }
 
+  if (
+    args.expectedQuestionKey &&
+    args.expectedQuestionKey !== questionKey &&
+    !QUESTION_FIELD_PATTERNS[questionKey]?.test(args.latestUserMessage)
+  ) {
+    return false;
+  }
+
   if (FINANCIAL_KEYS.has(questionKey)) {
     if (
       NEGATIVE_REPLY.test(args.latestUserMessage.trim()) ||
@@ -326,7 +334,10 @@ export function isQualificationCandidateSemanticallyCompatible(args: {
     case 'total_price_budget':
       return /\d/.test(raw);
     case 'preferred_locations':
-      return !/^(sim|nao|isso|correto|morar|investir|os dois)$/.test(raw);
+      return (
+        !/^(sim|nao|isso|correto|morar|investir|os dois)$/.test(raw) &&
+        !/^(?:r\s*)?\d+(?:\s*(?:mil|k|reais?))?$/.test(raw)
+      );
     default:
       return true;
   }

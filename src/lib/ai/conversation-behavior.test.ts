@@ -192,4 +192,24 @@ describe('semantic qualification invariants', () => {
       })
     ).toBe(true);
   });
+
+  it('rejects a model candidate for a different pending field without explicit evidence', () => {
+    expect(
+      isQualificationCandidateGrounded({
+        candidate: {
+          raw_text: '40 mil',
+          normalized_value: { values: ['40 mil'] },
+        },
+        question: { key: 'preferred_locations' },
+        latestUserMessage: '40 mil',
+        expectedQuestionKey: 'entry_budget',
+      })
+    ).toBe(false);
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'preferred_locations',
+        rawText: '40 mil',
+      })
+    ).toBe(false);
+  });
 });
