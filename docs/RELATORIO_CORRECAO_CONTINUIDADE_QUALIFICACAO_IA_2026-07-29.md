@@ -30,6 +30,23 @@ da compra e parou de responder. O banco e os logs de produção confirmaram:
 - se nenhuma continuação segura estiver disponível, o incidente é registrado
   sem desativar a resposta automática nem pausar permanentemente a conversa.
 
+### Hotfix de alinhamento semântico
+
+Um novo teste real mostrou que o modelo podia interpretar corretamente um valor
+como `50k`, mas associá-lo ao ID de outra pergunta. Também podia formular uma
+pergunta diferente da informação registrada em `expectedQuestionKey`.
+
+O hotfix:
+
+- realinha um candidato ao campo efetivamente perguntado somente quando o texto
+  pertence à última mensagem e o valor normalizado é válido para esse campo;
+- mantém a rejeição quando o tipo é incompatível, evitando gravar prazo como
+  dinheiro ou localização como objetivo;
+- substitui perguntas geradas sobre outro assunto pela próxima pergunta
+  determinística registrada no estado da qualificação;
+- garante que a pergunta visível e a metadata usada no turno seguinte indiquem
+  o mesmo campo.
+
 ## Verificações
 
 - testes direcionados: 40 aprovados;

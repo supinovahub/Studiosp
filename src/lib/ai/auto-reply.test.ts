@@ -196,7 +196,10 @@ vi.mock('./admin-client', () => ({
   }),
 }));
 
-import { dispatchInboundToAiReply } from './auto-reply';
+import {
+  alignQualificationQuestion,
+  dispatchInboundToAiReply,
+} from './auto-reply';
 
 const ARGS = {
   accountId: 'acct-1',
@@ -760,5 +763,31 @@ describe('dispatchInboundToAiReply — owner guidance', () => {
       assigned_agent_id: 'agent-7',
     });
     expect(h.openGuidanceRequest).toHaveBeenCalled();
+  });
+});
+
+describe('alignQualificationQuestion', () => {
+  it('substitui uma pergunta diferente pela próxima pergunta registrada', () => {
+    expect(
+      alignQualificationQuestion({
+        generatedText: 'Você prefere um imóvel na planta ou pronto para morar?',
+        qualificationComplete: false,
+        nextQuestion:
+          'Hoje, mais ou menos quanto você conseguiria usar de entrada?',
+        expectedQuestionKey: 'entry_budget',
+      })
+    ).toBe('Hoje, mais ou menos quanto você conseguiria usar de entrada?');
+  });
+
+  it('preserva uma pergunta alinhada ao campo esperado', () => {
+    expect(
+      alignQualificationQuestion({
+        generatedText: 'Qual faixa de entrada você pretende utilizar?',
+        qualificationComplete: false,
+        nextQuestion:
+          'Hoje, mais ou menos quanto você conseguiria usar de entrada?',
+        expectedQuestionKey: 'entry_budget',
+      })
+    ).toBe('Qual faixa de entrada você pretende utilizar?');
   });
 });

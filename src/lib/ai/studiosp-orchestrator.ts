@@ -510,7 +510,43 @@ export async function prepareStudiospTurn(args: {
     for (const candidate of answerRows) {
       if (!candidate || typeof candidate !== 'object') continue;
       const answer = candidate as Row;
-      const question = questionMap.get(String(answer.question_id));
+      let question = questionMap.get(String(answer.question_id));
+      const expectedQuestion = visibleQuestionsAtTurn.find(
+        (item) => item.key === turn.expectedQuestionKey
+      );
+      if (
+        expectedQuestion &&
+        question?.id !== expectedQuestion.id &&
+        isQualificationCandidateGrounded({
+          candidate: answer,
+          question: expectedQuestion,
+          latestUserMessage: latestUserText,
+          expectedQuestionKey: turn.expectedQuestionKey,
+          currentAnswer: currentMap.get(expectedQuestion.id),
+        })
+      ) {
+        const expectedValue = normalizeQualificationValue({
+          question: expectedQuestion,
+          normalizedValue: answer.normalized_value,
+          options: (options as Row[]).filter(
+            (option) => option.question_id === expectedQuestion.id
+          ),
+        });
+        const expectedOptions = (options as Row[])
+          .filter((option) => option.question_id === expectedQuestion.id)
+          .map((option) => String(option.value));
+        if (
+          isValidQualificationValue(
+            expectedQuestion,
+            expectedValue,
+            expectedOptions
+          )
+        ) {
+          answer.question_id = expectedQuestion.id;
+          answer.normalized_value = expectedValue;
+          question = expectedQuestion;
+        }
+      }
       if (!question || answer.normalized_value === undefined) {
         rejectedCandidateCount++;
         continue;
