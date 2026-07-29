@@ -322,7 +322,7 @@ export function isQualificationCandidateSemanticallyCompatible(args: {
         raw
       );
     case 'property_timing':
-      return /\b(planta|lancamento|pronto|construcao|tanto faz|indiferente)\b/.test(
+      return /\b(planta|lancamento|pront[oa]s?|construcao|tanto faz|indiferente)\b/.test(
         raw
       );
     case 'purchase_urgency':

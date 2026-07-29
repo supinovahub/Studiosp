@@ -96,7 +96,10 @@ describe('deterministic qualification', () => {
         expectedQuestionKey: 'property_timing',
       })
     ).toEqual([
-      expect.objectContaining({ question_id: 'property_timing' }),
+      expect.objectContaining({
+        question_id: 'property_timing',
+        normalized_value: { value: 'pronto' },
+      }),
     ]);
     expect(
       deterministicQualificationCandidates({
