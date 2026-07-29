@@ -4,6 +4,7 @@ import {
   appointmentConfirmation,
   appointmentReservationFailure,
   closestAvailableSlotReply,
+  deriveSchedulingPreference,
   findExactRequestedSlot,
   guardPrematureMeetingOffer,
   isAvailabilityInquiry,
@@ -12,6 +13,7 @@ import {
   qualificationQuestionPrompt,
   requestedStartFromExtraction,
   schedulePreferenceQuestion,
+  selectAvailabilitySlots,
 } from './scheduling-intent';
 
 describe('scheduling intent', () => {
@@ -115,6 +117,45 @@ describe('scheduling intent', () => {
       true
     );
     expect(isAvailabilityInquiry('Pode ser às 14h15')).toBe(false);
+    expect(isAvailabilityInquiry('Tem algo no horário da tarde?')).toBe(true);
+  });
+
+  it('preserves the requested day while the lead changes to the afternoon', () => {
+    const previous = deriveSchedulingPreference({
+      latestMessage: 'amanhã 13:00',
+      extractedStart: '2026-07-30T13:00:00-03:00',
+    });
+    const refined = deriveSchedulingPreference({
+      latestMessage: 'tem algo no horário da tarde?',
+      previous,
+    });
+
+    expect(refined).toMatchObject({
+      dayKey: '2026-07-30',
+      period: 'afternoon',
+      requestedStartAt: '2026-07-30T16:00:00.000Z',
+    });
+  });
+
+  it('lists only afternoon slots on the previously requested day', () => {
+    const slots = selectAvailabilitySlots({
+      latestMessage: 'tem algo no horário da tarde?',
+      preference: {
+        dayKey: '2026-07-30',
+        requestedStartAt: '2026-07-30T16:00:00.000Z',
+      },
+      slots: [
+        { id: 'morning', starts_at: '2026-07-30T12:45:00.000Z' },
+        { id: 'afternoon-1', starts_at: '2026-07-30T16:00:00.000Z' },
+        { id: 'afternoon-2', starts_at: '2026-07-30T17:00:00.000Z' },
+        { id: 'other-day', starts_at: '2026-07-31T16:00:00.000Z' },
+      ],
+    });
+
+    expect(slots.map((slot) => slot.id)).toEqual([
+      'afternoon-1',
+      'afternoon-2',
+    ]);
   });
 
   it('blocks a meeting offer while qualification is incomplete', () => {

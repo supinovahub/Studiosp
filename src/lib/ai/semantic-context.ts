@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SchedulingPeriod } from './scheduling-intent';
 
 export interface AiSemanticContext {
   version: 1;
@@ -8,6 +9,9 @@ export interface AiSemanticContext {
   presentedFacts?: string[];
   offeredSlotId?: string | null;
   offeredSlotIds?: string[];
+  schedulingDayKey?: string | null;
+  schedulingPeriod?: SchedulingPeriod | null;
+  requestedStartAt?: string | null;
   guidanceRequestId?: string | null;
 }
 

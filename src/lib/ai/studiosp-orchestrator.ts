@@ -4,6 +4,7 @@ import {
   appointmentConfirmation,
   appointmentReservationFailure,
   closestAvailableSlotReply,
+  deriveSchedulingPreference,
   findExactRequestedSlot,
   isAvailabilityInquiry,
   isOfferedSlotRejection,
@@ -460,6 +461,16 @@ export async function prepareStudiospTurn(args: {
   const expectedQuestionKeyAtTurn = expectedQuestionAtTurn
     ? String(expectedQuestionAtTurn.key)
     : null;
+  let schedulingPreference = deriveSchedulingPreference({
+    latestMessage: turn.latestUserMessage,
+    previous: previousSemanticContext
+      ? {
+          dayKey: previousSemanticContext.schedulingDayKey,
+          period: previousSemanticContext.schedulingPeriod,
+          requestedStartAt: previousSemanticContext.requestedStartAt,
+        }
+      : null,
+  });
   try {
     const extractionPrompt = buildExtractionPrompt(
       visibleQuestionsAtTurn,
@@ -477,6 +488,17 @@ export async function prepareStudiospTurn(args: {
     });
     extraction = parseObject(generated.text);
     const latestUserText = turn.latestUserMessage;
+    schedulingPreference = deriveSchedulingPreference({
+      latestMessage: latestUserText,
+      extractedStart: extraction.requested_start_at,
+      previous: previousSemanticContext
+        ? {
+            dayKey: previousSemanticContext.schedulingDayKey,
+            period: previousSemanticContext.schedulingPeriod,
+            requestedStartAt: previousSemanticContext.requestedStartAt,
+          }
+        : null,
+    });
     if (isAvailabilityInquiry(latestUserText)) {
       extraction.accepted_slot_id = null;
       extraction.requested_start_at = null;
@@ -518,6 +540,25 @@ export async function prepareStudiospTurn(args: {
           question_id: question.id,
         });
       }
+    }
+    const scheduleQuestion = visibleQuestionsAtTurn.find(
+      (question) => question.key === 'schedule_preference'
+    );
+    if (
+      scheduleQuestion?.id &&
+      (schedulingPreference.requestedStartAt ||
+        schedulingPreference.dayKey ||
+        schedulingPreference.period) &&
+      (turn.expectedResponseKind === 'schedule_preference' ||
+        isAvailabilityInquiry(latestUserText))
+    ) {
+      candidateByQuestion.set(String(scheduleQuestion.id), {
+        question_id: scheduleQuestion.id,
+        raw_text: latestUserText,
+        normalized_value: { text: latestUserText },
+        confidence: 0.99,
+        deterministic: true,
+      });
     }
     for (const candidate of knownReactivationConfirmationCandidates({
       questions: visibleQuestionsAtTurn,
@@ -874,6 +915,11 @@ export async function prepareStudiospTurn(args: {
     ? selectAvailabilitySlots({
         slots: reservableSlots,
         latestMessage: latestUserText,
+        preference: {
+          dayKey: previousSemanticContext?.schedulingDayKey,
+          period: previousSemanticContext?.schedulingPeriod,
+          requestedStartAt: previousSemanticContext?.requestedStartAt,
+        },
       })
     : [];
   const confirmedByQuestion = new Map(
@@ -970,6 +1016,11 @@ export async function prepareStudiospTurn(args: {
               slots: reservableSlots,
               latestMessage: latestUserText,
               nextQuestion: nextQualificationPrompt,
+              preference: {
+                dayKey: previousSemanticContext?.schedulingDayKey,
+                period: previousSemanticContext?.schedulingPeriod,
+                requestedStartAt: previousSemanticContext?.requestedStartAt,
+              },
             })
           : reservedAppointment
             ? appointmentConfirmation(reservedAppointment)
@@ -1007,18 +1058,25 @@ export async function prepareStudiospTurn(args: {
       ),
       offeredSlotId:
         reservedAppointment?.guaranteed_slot_id ??
-        (!rejectedOfferedSlot && qualification.complete && reservableSlots[0]
-          ? String(reservableSlots[0].id)
-          : null),
+        (requestedStart && nearbySlots[0]
+          ? String(nearbySlots[0].id)
+          : !rejectedOfferedSlot && qualification.complete && reservableSlots[0]
+            ? String(reservableSlots[0].id)
+            : null),
       offeredSlotIds: reservedAppointment?.guaranteed_slot_id
         ? [String(reservedAppointment.guaranteed_slot_id)]
         : rejectedOfferedSlot
           ? []
           : availabilitySlots.length
             ? availabilitySlots.map((slot) => String(slot.id))
-            : qualification.complete && reservableSlots[0]
-              ? [String(reservableSlots[0].id)]
-              : [],
+            : requestedStart && nearbySlots.length
+              ? nearbySlots.map((slot) => String(slot.id))
+              : qualification.complete && reservableSlots[0]
+                ? [String(reservableSlots[0].id)]
+                : [],
+      schedulingDayKey: schedulingPreference.dayKey,
+      schedulingPeriod: schedulingPreference.period,
+      requestedStartAt: schedulingPreference.requestedStartAt,
     },
   };
 }
@@ -1144,10 +1202,10 @@ async function loadAvailableSlots(
       new Date(Date.now() + minimumNoticeMinutes * 60_000).toISOString()
     )
     .order('starts_at')
-    .limit(30);
-  return ((data ?? []) as Row[])
-    .filter((slot) => Number(slot.reserved_count) < Number(slot.capacity))
-    .slice(0, 8);
+    .limit(200);
+  return ((data ?? []) as Row[]).filter(
+    (slot) => Number(slot.reserved_count) < Number(slot.capacity)
+  );
 }
 
 async function calculatePropertyMatches(

@@ -4,7 +4,73 @@ const MEETING_OFFER_PATTERN =
   /\b(agend\w*|marc\w*|reserv\w*|reuni[aã]o|conversa\s+r[aá]pida|bate[\s-]*papo|oportunidades?|falar\s+com\s+(?:um\s+)?corretor)\b/i;
 
 const AVAILABILITY_INQUIRY_PATTERN =
-  /\b(disponibilidade|dispon[ií]ve(?:l|is)|quais?\s+hor[aá]rios?|hor[aá]rios?\s+(?:tem|t[eê]m|dispon[ií]ve(?:l|is))|tem\s+hor[aá]rio|pra\s+quando|para\s+quando)\b/i;
+  /\b(disponibilidade|dispon[ií]ve(?:l|is)|quais?\s+hor[aá]rios?|hor[aá]rios?\s+(?:tem|t[eê]m|dispon[ií]ve(?:l|is))|tem\s+hor[aá]rio|tem\s+algo(?:\s+\w+){0,3}\s+hor[aá]rio|algo\s+(?:de\s+)?(?:manh[aã]|tarde|noite)|pra\s+quando|para\s+quando)\b/i;
+
+export type SchedulingPeriod = 'morning' | 'afternoon' | 'evening';
+
+export interface SchedulingPreference {
+  dayKey?: string | null;
+  period?: SchedulingPeriod | null;
+  requestedStartAt?: string | null;
+}
+
+function saoPauloDay(value: Date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(value);
+}
+
+function localHour(value: Date) {
+  return Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(value)
+  );
+}
+
+function periodForHour(hour: number): SchedulingPeriod {
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+}
+
+export function deriveSchedulingPreference(args: {
+  latestMessage: string;
+  extractedStart?: unknown;
+  previous?: SchedulingPreference | null;
+  now?: Date;
+}): SchedulingPreference {
+  const normalized = args.latestMessage
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('pt-BR');
+  const extracted = requestedStartFromExtraction(args.extractedStart);
+  const now = args.now ?? new Date();
+  let dayKey = args.previous?.dayKey ?? null;
+  let period = args.previous?.period ?? null;
+  let requestedStartAt = args.previous?.requestedStartAt ?? null;
+
+  if (extracted) {
+    dayKey = saoPauloDay(extracted);
+    period = periodForHour(localHour(extracted));
+    requestedStartAt = extracted.toISOString();
+  } else {
+    if (/\bhoje\b/.test(normalized)) dayKey = saoPauloDay(now);
+    if (/\bamanha\b/.test(normalized)) {
+      dayKey = saoPauloDay(new Date(now.getTime() + 86_400_000));
+    }
+    if (/\b(?:de\s+)?manha\b/.test(normalized)) period = 'morning';
+    if (/\b(?:a\s+|de\s+)?tarde\b/.test(normalized)) period = 'afternoon';
+    if (/\b(?:a\s+|de\s+)?noite\b/.test(normalized)) period = 'evening';
+  }
+
+  return { dayKey, period, requestedStartAt };
+}
 
 export function requestedStartFromExtraction(value: unknown): Date | null {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -185,6 +251,7 @@ export function availabilityReply(args: {
   slots: Slot[];
   latestMessage: string;
   nextQuestion: string | null;
+  preference?: SchedulingPreference | null;
   now?: Date;
 }) {
   const effective = selectAvailabilitySlots(args);
@@ -254,15 +321,14 @@ export function availabilityReply(args: {
 export function selectAvailabilitySlots<T extends Slot>(args: {
   slots: T[];
   latestMessage: string;
+  preference?: SchedulingPreference | null;
   now?: Date;
 }): Array<T & { starts_at: string }> {
-  const usable = args.slots
-    .filter(
-      (slot): slot is T & { starts_at: string } =>
-        typeof slot.starts_at === 'string' &&
-        Number.isFinite(new Date(slot.starts_at).getTime())
-    )
-    .slice(0, 3);
+  const usable = args.slots.filter(
+    (slot): slot is T & { starts_at: string } =>
+      typeof slot.starts_at === 'string' &&
+      Number.isFinite(new Date(slot.starts_at).getTime())
+  );
   if (!usable.length) return [];
 
   const timezone = 'America/Sao_Paulo';
@@ -274,11 +340,23 @@ export function selectAvailabilitySlots<T extends Slot>(args: {
       month: '2-digit',
       day: '2-digit',
     }).format(value);
-  const asksToday = /\bhoje\b/i.test(args.latestMessage);
-  const selected = asksToday
-    ? usable.filter(
-        (slot) => localDay(new Date(slot.starts_at)) === localDay(now)
-      )
-    : usable;
-  return (selected.length ? selected : usable).slice(0, 3);
+  const preference = deriveSchedulingPreference({
+    latestMessage: args.latestMessage,
+    previous: args.preference,
+    now,
+  });
+  let selected = usable;
+  if (preference.dayKey) {
+    selected = selected.filter(
+      (slot) => localDay(new Date(slot.starts_at)) === preference.dayKey
+    );
+  }
+  if (preference.period) {
+    selected = selected.filter(
+      (slot) =>
+        periodForHour(localHour(new Date(slot.starts_at))) === preference.period
+    );
+  }
+  const hasExplicitPreference = Boolean(preference.dayKey || preference.period);
+  return (hasExplicitPreference ? selected : usable).slice(0, 3);
 }
