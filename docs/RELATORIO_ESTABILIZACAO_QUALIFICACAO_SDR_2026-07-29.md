@@ -39,6 +39,19 @@ Rocha, preservando fila, idempotência, outbox, retries e entrega pelo WhatsApp.
 - ESLint: sem erros, com 38 avisos preexistentes;
 - build de produção Next.js: aprovado.
 
+## Configuração e preparação do teste em produção
+
+- entrada, parcela mensal e preço total foram marcados como obrigatórios na
+  configuração ativa da conta, junto dos demais campos essenciais;
+- o contexto operacional do contato controlado Arthur Rocha foi reiniciado;
+- respostas, estado SDR, sessões de reativação, vínculos de campanha,
+  follow-ups, matching e itens de atenção ficaram zerados;
+- a oportunidade voltou para `not_started` e a conversa para `ai_active` e
+  `idle`, com uma nova versão de contexto;
+- mensagens e eventos históricos protegidos por auditoria foram preservados,
+  mas ficaram antes da nova fronteira de contexto e não serão enviados ao
+  modelo no novo teste.
+
 ## Critérios para homologação manual
 
 1. A resposta `50k` confirma a entrada e não volta a ser perguntada.
@@ -53,4 +66,3 @@ Rocha, preservando fila, idempotência, outbox, retries e entrega pelo WhatsApp.
 
 Reverter o commit desta correção restaura o comportamento anterior sem
 necessidade de rollback de schema. Nenhuma migration foi criada.
-
