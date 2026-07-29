@@ -184,7 +184,10 @@ export function classifyLeadPosture(args: {
 export function isExplicitReactivationAffirmation(value: string) {
   const normalized = normalizeConversationText(value);
   return (
-    /^(?:sim|s|ainda|claro|com certeza)$/.test(normalized) ||
+    /^(?:sim|s|ainda|claro|com certeza|correto|isso mesmo)(?:[,.! ]+(?:ta|esta) correto)?[.! ]*$/.test(
+      normalized
+    ) ||
+    /^(?:sim|isso mesmo)[,.! ]+(?:ta|esta) correto[.! ]*$/.test(normalized) ||
     /\b(?:ainda (?:estou|to|quero|pretendo|tenho interesse)|continuo (?:interessado|interessada|avaliando|pesquisando)|quero (?:continuar|retomar|comprar)|vamos (?:continuar|retomar)|podemos (?:continuar|retomar)|faz sentido retomar|continua de pe)\b/.test(
       normalized
     )

@@ -468,9 +468,7 @@ export async function prepareStudiospTurn(args: {
       extraction.requested_start_at = null;
       extraction.insists_on_requested_time = false;
     }
-    const extractedAnswerRows = Array.isArray(extraction.answers)
-      ? extraction.answers
-      : [];
+    const extractedAnswerRows = normalizeExtractionAnswerRows(extraction);
     const explicitUnknown = explicitUnknownCandidate({
       questions: visibleQuestionsAtTurn,
       latestUserMessage: latestUserText,
@@ -839,7 +837,11 @@ export async function prepareStudiospTurn(args: {
   const currentPostureInstruction = postureInstruction(posture);
   const reactivationAffirmed =
     Boolean(reactivationSession) &&
-    isExplicitReactivationAffirmation(latestUserText);
+    args.messages.some(
+      (message) =>
+        message.role === 'user' &&
+        isExplicitReactivationAffirmation(message.content)
+    );
   const postureReply = deterministicPostureReply({
     posture,
     isReactivation: Boolean(reactivationSession),
@@ -1329,6 +1331,30 @@ function parseObject(raw: string): Row {
   } catch {
     return {};
   }
+}
+
+export function normalizeExtractionAnswerRows(extraction: Row): Row[] {
+  if (Array.isArray(extraction.answers)) {
+    return extraction.answers.filter(
+      (answer): answer is Row =>
+        Boolean(answer) && typeof answer === 'object' && !Array.isArray(answer)
+    );
+  }
+  if (
+    typeof extraction.question_id === 'string' &&
+    extraction.normalized_value !== undefined
+  ) {
+    return [
+      {
+        question_id: extraction.question_id,
+        raw_text:
+          typeof extraction.raw_text === 'string' ? extraction.raw_text : '',
+        normalized_value: extraction.normalized_value,
+        confidence: extraction.confidence,
+      },
+    ];
+  }
+  return [];
 }
 
 function normalize(value: unknown) {

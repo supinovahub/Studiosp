@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   existingReservationForTrigger,
   nearestCompatibleSlots,
+  normalizeExtractionAnswerRows,
 } from './studiosp-orchestrator';
 
 function terminal(data: unknown) {
@@ -73,5 +74,48 @@ describe('nearestCompatibleSlots', () => {
     );
 
     expect(result.map((slot) => slot.id)).toEqual(['closest', 'early']);
+  });
+});
+
+describe('normalizeExtractionAnswerRows', () => {
+  it('preserva o contrato canônico com answers', () => {
+    expect(
+      normalizeExtractionAnswerRows({
+        answers: [
+          {
+            question_id: 'objective',
+            raw_text: 'investir',
+            normalized_value: { value: 'invest', label: 'Investir' },
+            confidence: 1,
+          },
+        ],
+      })
+    ).toHaveLength(1);
+  });
+
+  it('normaliza a resposta única produzida pelo modelo de contingência', () => {
+    expect(
+      normalizeExtractionAnswerRows({
+        question_id: 'objective',
+        raw_text: 'seria para investimento',
+        normalized_value: { value: 'invest', label: 'Investir' },
+        confidence: 1,
+      })
+    ).toEqual([
+      {
+        question_id: 'objective',
+        raw_text: 'seria para investimento',
+        normalized_value: { value: 'invest', label: 'Investir' },
+        confidence: 1,
+      },
+    ]);
+  });
+
+  it('não transforma uma saída sem evidência em resposta', () => {
+    expect(
+      normalizeExtractionAnswerRows({
+        summary: 'Lead interessado em investimento',
+      })
+    ).toEqual([]);
   });
 });

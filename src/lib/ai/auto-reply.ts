@@ -658,6 +658,32 @@ export async function dispatchInboundToAiReply(
           fingerprintClaim.error ||
           fingerprintClaim.data !== true
         ) {
+          const deterministicContinuation =
+            studiosp.nextQualificationPrompt?.trim() &&
+            responseFingerprint(studiosp.nextQualificationPrompt) !==
+              responseFingerprint(outboundText)
+              ? studiosp.nextQualificationPrompt.trim()
+              : null;
+          if (deterministicContinuation) {
+            const continuationClaim = await db.rpc(
+              'claim_ai_response_fingerprint',
+              {
+                p_account_id: accountId,
+                p_conversation_id: conversationId,
+                p_fingerprint: responseFingerprint(deterministicContinuation),
+                p_window_seconds: 600,
+              }
+            );
+            if (!continuationClaim.error && continuationClaim.data === true) {
+              responseText = deterministicContinuation;
+              outboundText = compactAiReply(
+                joinResumePrefix(resumePrefix, responseText)
+              );
+              fingerprintClaim = continuationClaim;
+            }
+          }
+        }
+        if (fingerprintClaim.error || fingerprintClaim.data !== true) {
           await openOperationalFailure({
             db,
             accountId,
@@ -669,7 +695,7 @@ export async function dispatchInboundToAiReply(
             summary:
               'O Pedro evitou repetir a mesma resposta, mas não conseguiu gerar uma continuação diferente com segurança.',
             retryable: false,
-            blockConversation: true,
+            blockConversation: false,
             context: {
               duplicate_fingerprint: responseFingerprint(outboundText),
             },

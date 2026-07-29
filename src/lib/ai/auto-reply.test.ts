@@ -604,7 +604,46 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     );
   });
 
-  it('opens one blocking incident when a duplicate cannot be safely repaired', async () => {
+  it('uses the next deterministic qualification question when duplicate repair is unsafe', async () => {
+    h.state.fingerprintClaims = [false, false, true];
+    h.prepareStudiospTurn.mockResolvedValue({
+      opportunityId: 'opp-1',
+      grounding: [],
+      reservedAppointment: null,
+      outboundOverride: null,
+      qualificationComplete: false,
+      nextQualificationPrompt:
+        'Qual faixa de parcela mensal ficaria confortável para você?',
+      semanticContext: {
+        version: 1,
+        mode: 'qualification',
+        expectedQuestionKey: 'monthly_installment_budget',
+      },
+    });
+    h.generateReply
+      .mockResolvedValueOnce({
+        text: 'Você está buscando esse imóvel pra morar, investir ou os dois?',
+        handoff: false,
+        needsGuidance: false,
+      })
+      .mockResolvedValueOnce({
+        text: 'Você está buscando esse imóvel pra morar, investir ou os dois?',
+        handoff: false,
+        needsGuidance: false,
+      });
+
+    const result = await dispatchInboundToAiReply(ARGS);
+
+    expect(result).toEqual({ outcome: 'completed' });
+    expect(h.engineSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: 'Qual faixa de parcela mensal ficaria confortável para você?',
+      })
+    );
+    expect(h.openOperationalFailure).not.toHaveBeenCalled();
+  });
+
+  it('opens a non-blocking incident when a duplicate cannot be safely repaired', async () => {
     h.state.fingerprintClaims = [false];
     h.generateReply
       .mockResolvedValueOnce({
@@ -625,7 +664,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.openOperationalFailure).toHaveBeenCalledWith(
       expect.objectContaining({
         reasonCode: 'duplicate_response_blocked',
-        blockConversation: true,
+        blockConversation: false,
       })
     );
   });
