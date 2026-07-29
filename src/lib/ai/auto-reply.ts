@@ -2,7 +2,11 @@ import { supabaseAdmin } from './admin-client';
 import { loadAiConfig } from './config';
 import { buildConversationContext } from './context';
 import { retrieveKnowledge } from './knowledge';
-import { generateReply } from './generate';
+import {
+  generateReply,
+  generateReplyWithFallback,
+  isTransientAiError,
+} from './generate';
 import { buildSystemPrompt } from './defaults';
 import { buildHandoffSummary } from './handoff';
 import { logAiUsage } from './usage';
@@ -378,11 +382,10 @@ export async function dispatchInboundToAiReply(
             needsGuidance: false,
             usage: null,
           }
-        : await generatePrimaryReply({
-            config,
-            systemPrompt,
-            messages,
-          });
+        : await generatePrimaryReply(
+            { config, systemPrompt, messages },
+            studiosp.nextQualificationPrompt
+          );
     const generatedResponse =
       studiosp.outboundOverride ??
       guardPrematureMeetingOffer(
@@ -898,11 +901,34 @@ export function responseFingerprint(text: string) {
   return createHash('sha256').update(normalized).digest('hex');
 }
 
-async function generatePrimaryReply(args: Parameters<typeof generateReply>[0]) {
-  const first = await generateReply(args);
+async function generatePrimaryReply(
+  args: Parameters<typeof generateReply>[0],
+  deterministicFallback: string | null
+) {
+  let first;
+  try {
+    first = await generateReplyWithFallback(args);
+  } catch (error) {
+    if (!isTransientAiError(error)) throw error;
+    const fallback =
+      deterministicFallback?.trim() ||
+      'Entendi. Vou registrar essa informação. Pode me contar um pouco mais sobre o que você procura?';
+    console.warn(
+      JSON.stringify({
+        event: 'ai_deterministic_fallback_used',
+        reason: error.code,
+      })
+    );
+    return {
+      text: fallback,
+      handoff: false,
+      needsGuidance: false,
+      usage: null,
+    };
+  }
   if (first.text.trim() || first.handoff || first.needsGuidance) return first;
   console.warn('[ai auto-reply] empty primary response; retrying once');
-  return generateReply({
+  return generateReplyWithFallback({
     ...args,
     systemPrompt:
       `${args.systemPrompt}\n\n` +

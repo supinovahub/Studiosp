@@ -66,6 +66,48 @@ export async function generateReply(
 }
 
 /**
+ * Retry transient OpenAI failures with a smaller fallback model. This stays
+ * inside one durable job, before any outbound side effect, so it cannot create
+ * duplicate WhatsApp messages.
+ */
+export async function generateReplyWithFallback(
+  args: GenerateArgs
+): Promise<GenerateResult> {
+  try {
+    return await generateReply(args);
+  } catch (error) {
+    if (!isTransientAiError(error) || args.config.provider !== 'openai') {
+      throw error;
+    }
+    const fallbackModel =
+      process.env.AI_OPENAI_FALLBACK_MODEL?.trim() || 'gpt-4.1-nano';
+    if (!fallbackModel || fallbackModel === args.config.model) throw error;
+    console.warn(
+      JSON.stringify({
+        event: 'ai_provider_fallback_started',
+        provider: 'openai',
+        primary_model: args.config.model,
+        fallback_model: fallbackModel,
+        reason: error.code,
+      })
+    );
+    return generateReply({
+      ...args,
+      config: { ...args.config, model: fallbackModel },
+    });
+  }
+}
+
+export function isTransientAiError(error: unknown): error is AiError {
+  return (
+    error instanceof AiError &&
+    ['timeout', 'empty_response', 'rate_limited', 'network_error'].includes(
+      error.code
+    )
+  );
+}
+
+/**
  * Split the raw model output into `{ text, handoff, usage }`. The
  * sentinel can appear alone or trailing a partial reply; either way we
  * treat the turn as a handoff and strip the marker from any remaining

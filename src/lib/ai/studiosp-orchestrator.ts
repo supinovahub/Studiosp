@@ -13,7 +13,7 @@ import {
 import { notifyPendingBrokers } from '@/lib/studiosp/broker-notifications';
 import { isValidQualificationValue } from './qualification-validation';
 import { visibleQualificationQuestions } from './qualification-question-config';
-import { generateReply } from './generate';
+import { generateReplyWithFallback } from './generate';
 import type { AiConfig, ChatMessage } from './types';
 import { loadAiConfig } from './config';
 import {
@@ -450,7 +450,7 @@ export async function prepareStudiospTurn(args: {
       availableSlots,
       turn
     );
-    const generated = await generateReply({
+    const generated = await generateReplyWithFallback({
       config: args.config,
       systemPrompt: extractionPrompt,
       messages: args.messages,

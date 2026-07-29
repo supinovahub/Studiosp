@@ -51,7 +51,9 @@ function database() {
     in: () => chain,
     lte: () => chain,
     eq: () => chain,
-    limit: () => Promise.resolve(terminal),
+    order: () => chain,
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+    limit: () => chain,
     then: (
       resolve: (value: typeof terminal) => unknown,
       reject?: (reason: unknown) => unknown

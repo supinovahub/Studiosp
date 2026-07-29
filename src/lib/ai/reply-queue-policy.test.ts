@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { reasonCode, retryDelaySeconds, terminalState } from './reply-queue';
+import {
+  isTransientFailureReason,
+  reasonCode,
+  retryDelaySeconds,
+  terminalState,
+} from './reply-queue';
 
 describe('AI reply durable queue policy', () => {
   it('routes successful replies back to the idle state', () => {
@@ -43,5 +48,21 @@ describe('AI reply durable queue policy', () => {
     expect(reasonCode('Falha temporária: OpenAI 429')).toBe(
       'falha_tempor_ria_openai_429'
     );
+  });
+
+  it('does not permanently pause a conversation after an upstream outage', () => {
+    expect(
+      terminalState({
+        outcome: 'failed',
+        reason: 'A OpenAI retornou uma resposta vazia.',
+        retryable: true,
+      })
+    ).toMatchObject({
+      jobStatus: 'failed',
+      conversationStatus: 'idle',
+    });
+    expect(
+      isTransientFailureReason('O provedor de IA demorou demais para responder.')
+    ).toBe(true);
   });
 });

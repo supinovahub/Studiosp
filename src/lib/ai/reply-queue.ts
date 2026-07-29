@@ -87,6 +87,7 @@ export async function processAiReplyQueue(
   limit = 10
 ): Promise<number> {
   await reconcileAmbiguousDeliveries(db);
+  await recoverTransientPausedConversations(db);
   await flagDelayedAiReplies(db);
 
   let processed = 0;
@@ -167,6 +168,15 @@ async function flagDelayedAiReplies(db: Db) {
 
 async function processClaimedJob(db: Db, job: AiReplyJob) {
   const startedAt = Date.now();
+  const { data: config } = await db
+    .from('ai_configs')
+    .select('provider, model')
+    .eq('account_id', job.account_id)
+    .eq('created_by', job.config_owner_user_id)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
   await Promise.all([
     db.from('ai_reply_attempts').insert({
       account_id: job.account_id,
@@ -175,6 +185,8 @@ async function processClaimedJob(db: Db, job: AiReplyJob) {
       trigger_message_id: job.trigger_message_id,
       attempt_number: job.attempt_count,
       status: 'processing',
+      provider: config?.provider ?? null,
+      model: config?.model ?? null,
     }),
     db
       .from('conversations')
@@ -307,9 +319,69 @@ export function terminalState(result: AiDispatchResult) {
   return {
     jobStatus: 'failed',
     attemptStatus: 'failed',
-    conversationStatus: 'failed',
+    conversationStatus: isTransientFailureReason(result.reason)
+      ? 'idle'
+      : 'failed',
     reason: result.reason,
   } as const;
+}
+
+async function recoverTransientPausedConversations(db: Db) {
+  const threshold = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const { data: paused, error } = await db
+    .from('conversations')
+    .select('id, account_id, ai_control_reason, updated_at')
+    .eq('ai_control_mode', 'paused_failure')
+    .eq('ai_autoreply_disabled', true)
+    .lte('updated_at', threshold)
+    .limit(10);
+  if (error) {
+    console.error(
+      JSON.stringify({
+        event: 'ai_transient_recovery_scan_failed',
+        error: error.message,
+      })
+    );
+    return;
+  }
+  for (const conversation of paused ?? []) {
+    if (!isTransientFailureReason(conversation.ai_control_reason ?? '')) {
+      continue;
+    }
+    const latestJob = await db
+      .from('ai_reply_jobs')
+      .select('retry_generation')
+      .eq('account_id', conversation.account_id)
+      .eq('conversation_id', conversation.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latestJob.error || Number(latestJob.data?.retry_generation ?? 0) >= 1) {
+      continue;
+    }
+    const recovered = await db.rpc('studiosp_enqueue_ai_owner_retry', {
+      p_account_id: conversation.account_id,
+      p_conversation_id: conversation.id,
+      p_reason: 'owner_continue',
+    });
+    if (recovered.error) {
+      console.error(
+        JSON.stringify({
+          event: 'ai_transient_recovery_failed',
+          conversation_id: conversation.id,
+          error: recovered.error.message,
+        })
+      );
+      continue;
+    }
+    console.info(
+      JSON.stringify({
+        event: 'ai_transient_recovery_enqueued',
+        conversation_id: conversation.id,
+        previous_reason: conversation.ai_control_reason,
+      })
+    );
+  }
 }
 
 const pausedSkipReasons = new Set([
@@ -360,6 +432,7 @@ async function updateConversationState(
 }
 
 async function openFailureAttention(db: Db, job: AiReplyJob, reason: string) {
+  const transient = isTransientFailureReason(reason);
   await openOperationalFailure({
     db,
     accountId: job.account_id,
@@ -368,17 +441,30 @@ async function openFailureAttention(db: Db, job: AiReplyJob, reason: string) {
     jobId: job.id,
     reasonCode: reasonCode(reason) || 'ai_reply_terminal_failure',
     summary: sanitizeError(reason),
-    retryable: false,
+    retryable: transient,
     deliveryState: reason.toLowerCase().includes('ambiguous')
       ? 'ambiguous'
       : 'not_started',
-    blockConversation: true,
+    blockConversation: !transient,
     context: {
       correlation_id: job.correlation_id,
       attempt_count: job.attempt_count,
       max_attempts: job.max_attempts,
     },
   });
+}
+
+export function isTransientFailureReason(reason: string) {
+  const code = reasonCode(reason);
+  return [
+    'timeout',
+    'empty_response',
+    'rate_limited',
+    'network_error',
+    'a_openai_retornou_uma_resposta_vazia',
+    'o_provedor_de_ia_demorou_demais_para_responder',
+    'temporary_failure',
+  ].some((candidate) => code === candidate || code.includes(candidate));
 }
 
 async function reconcileAmbiguousDeliveries(db: Db) {
