@@ -191,6 +191,12 @@ describe('semantic qualification invariants', () => {
         rawText: 'em 3 anos',
       })
     ).toBe(true);
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'property_timing',
+        rawText: 'prefiro imóveis prontos mesmo',
+      })
+    ).toBe(true);
   });
 
   it('rejects a model candidate for a different pending field without explicit evidence', () => {

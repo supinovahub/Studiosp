@@ -101,13 +101,20 @@ export function deterministicQualificationCandidates(args: {
   }
 
   if (
-    /\b(na planta|planta|lancamento|em construcao|pronto|prontos|tanto faz|indiferente)\b/.test(
+    /\b(na planta|planta|lancamento|em construcao|pront[oa]s?|tanto faz|indiferente)\b/.test(
       message
     )
   ) {
+    const timingValue = /\b(na planta|planta|lancamento|em construcao)\b/.test(
+      message
+    )
+      ? 'na planta'
+      : /\bpront[oa]s?\b/.test(message)
+        ? 'pronto'
+        : 'tanto faz';
     candidates.set(
       'property_timing',
-      candidate('property_timing', raw, { value: raw })
+      candidate('property_timing', raw, { value: timingValue })
     );
   }
 
