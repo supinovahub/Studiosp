@@ -949,7 +949,7 @@ export function alignQualificationQuestion(args: {
   }
   const generatedQuestionKey = inferExpectedQuestionKey(args.generatedText);
   if (
-    generatedQuestionKey &&
+    !generatedQuestionKey ||
     generatedQuestionKey !== args.expectedQuestionKey
   ) {
     return args.nextQuestion;

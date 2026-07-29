@@ -13,6 +13,21 @@ Especificação da importação segura de conversas antigas:
 
 ## Estado da implementação
 
+### Estabilização da qualificação SDR — 29 de julho de 2026
+
+#### Implementado, aguardando homologação real controlada
+
+- o servidor impede que o texto livre ofereça oportunidades ou reunião
+  enquanto existir informação obrigatória pendente;
+- a pergunta selecionada pelo estado da qualificação prevalece quando o modelo
+  tenta avançar para outro assunto;
+- respostas de prazo retornadas como texto são normalizadas para a opção
+  canônica antes da validação;
+- confirmações naturais da reativação, inclusive `Claro, pode sim`, encerram a
+  etapa inicial;
+- a regressão e as verificações estão documentadas no
+  [Relatório de estabilização da qualificação SDR](./RELATORIO_ESTABILIZACAO_QUALIFICACAO_SDR_2026-07-29.md).
+
 ### Construtor seguro da qualificação — 28 de julho de 2026
 
 #### Implementado em staging, aguardando homologação

@@ -50,6 +50,19 @@ describe('qualification canonical normalization', () => {
     });
   });
 
+  it('normalizes a long purchase horizon returned by the model as text', () => {
+    expect(
+      normalizeQualificationValue({
+        question: { key: 'purchase_urgency', data_type: 'single_choice' },
+        normalizedValue: { text: 'em 3 anos' },
+        options: [{ value: 'over_twelve_months', label: 'Mais de 12 meses' }],
+      })
+    ).toEqual({
+      value: 'over_twelve_months',
+      label: 'Mais de 12 meses',
+    });
+  });
+
   it('does not turn an ambiguous confirmation into a business fact', () => {
     expect(
       normalizeQualificationValue({

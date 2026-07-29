@@ -184,7 +184,7 @@ export function classifyLeadPosture(args: {
 export function isExplicitReactivationAffirmation(value: string) {
   const normalized = normalizeConversationText(value);
   return (
-    /^(?:sim|s|ainda|claro|com certeza|correto|isso mesmo)(?:[,.! ]+(?:ta|esta) correto)?[.! ]*$/.test(
+    /^(?:sim|s|ainda|claro|com certeza|correto|isso mesmo)(?:[,.! ]+(?:pode sim|vamos sim|ta|esta correto))?[.! ]*$/.test(
       normalized
     ) ||
     /^(?:sim|isso mesmo)[,.! ]+(?:ta|esta) correto[.! ]*$/.test(normalized) ||

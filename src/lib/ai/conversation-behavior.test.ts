@@ -132,6 +132,7 @@ describe('conversation behavior', () => {
     ).toBe(true);
     expect(isExplicitReactivationAffirmation('Sim, tá correto')).toBe(true);
     expect(isExplicitReactivationAffirmation('Isso mesmo')).toBe(true);
+    expect(isExplicitReactivationAffirmation('Claro, pode sim')).toBe(true);
     expect(isExplicitReactivationAffirmation('Mais ou menos')).toBe(false);
     expect(isExplicitReactivationAffirmation('?')).toBe(false);
   });

@@ -790,4 +790,17 @@ describe('alignQualificationQuestion', () => {
       })
     ).toBe('Qual faixa de entrada você pretende utilizar?');
   });
+
+  it('impede que texto livre avance para oportunidades sem perguntar o campo pendente', () => {
+    expect(
+      alignQualificationQuestion({
+        generatedText:
+          'Temos algumas oportunidades. Quarta às 17:00 funciona para um bate-papo?',
+        qualificationComplete: false,
+        nextQuestion:
+          'Você pretende comprar em quanto tempo, mais ou menos?',
+        expectedQuestionKey: 'purchase_urgency',
+      })
+    ).toBe('Você pretende comprar em quanto tempo, mais ou menos?');
+  });
 });

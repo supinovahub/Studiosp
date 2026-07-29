@@ -1,7 +1,7 @@
 type Slot = { id?: unknown; starts_at?: unknown };
 
 const MEETING_OFFER_PATTERN =
-  /\b(agend\w*|marc\w*|reserv\w*|reuni[aã]o|conversa\s+r[aá]pida|falar\s+com\s+(?:um\s+)?corretor)\b/i;
+  /\b(agend\w*|marc\w*|reserv\w*|reuni[aã]o|conversa\s+r[aá]pida|bate[\s-]*papo|oportunidades?|falar\s+com\s+(?:um\s+)?corretor)\b/i;
 
 const AVAILABILITY_INQUIRY_PATTERN =
   /\b(disponibilidade|dispon[ií]ve(?:l|is)|quais?\s+hor[aá]rios?|hor[aá]rios?\s+(?:tem|t[eê]m|dispon[ií]ve(?:l|is))|tem\s+hor[aá]rio|pra\s+quando|para\s+quando)\b/i;

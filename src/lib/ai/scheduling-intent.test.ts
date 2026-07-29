@@ -137,6 +137,17 @@ describe('scheduling intent', () => {
     ).toContain('agendar');
   });
 
+  it('blocks opportunity and bate-papo wording while qualification is incomplete', () => {
+    const next = qualificationQuestionPrompt({ key: 'purchase_urgency' })!;
+    expect(
+      guardPrematureMeetingOffer(
+        'Temos algumas oportunidades. Quarta às 17:00 funciona pra um bate-papo?',
+        false,
+        next
+      )
+    ).toBe(next);
+  });
+
   it('uses the configured example only as the deterministic custom fallback', () => {
     expect(
       qualificationQuestionPrompt({

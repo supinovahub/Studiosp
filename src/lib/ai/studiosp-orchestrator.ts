@@ -1625,7 +1625,9 @@ export function normalizeQualificationValue(args: {
   if (value.unknown === true) return value;
 
   if (args.question.data_type === 'single_choice') {
-    const candidate = normalize(String(value.value ?? value.label ?? ''));
+    const candidate = normalize(
+      String(value.value ?? value.label ?? value.text ?? '')
+    );
     const option = (args.options ?? []).find((item) => {
       const aliases = [
         item.value,
