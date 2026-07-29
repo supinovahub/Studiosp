@@ -6,11 +6,36 @@ import {
   explicitUnknownCandidate,
   inferExpectedQuestionKey,
   isExplicitReactivationAffirmation,
+  isPropertyTimingAdviceRequest,
   isQualificationCandidateSemanticallyCompatible,
   isQualificationCandidateGrounded,
 } from './conversation-behavior';
 
 describe('conversation behavior', () => {
+  it('keeps property timing pending when the lead asks for advice', () => {
+    expect(
+      isPropertyTimingAdviceRequest({
+        latestUserMessage: 'Não sei, o que você recomenda?',
+        expectedQuestionKey: 'property_timing',
+      })
+    ).toBe(true);
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'property_timing',
+        rawText: 'Não sei, o que você recomenda?',
+      })
+    ).toBe(false);
+  });
+
+  it('does not persist an off-topic question as a preferred location', () => {
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'preferred_locations',
+        rawText: 'Mas e a receita do brownie?',
+      })
+    ).toBe(false);
+  });
+
   it('uses the last assistant question to interpret a short financial answer', () => {
     const turn = conversationTurn([
       {

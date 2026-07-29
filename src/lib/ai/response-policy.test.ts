@@ -4,9 +4,11 @@ import {
   assessPromptInjection,
   delayedResumePrefix,
   enforceOutboundPolicy,
+  isClearlyOffTopicRequest,
   isExplicitOptOut,
   keepFirstQuestion,
   questionCount,
+  securityBoundaryReply,
 } from './response-policy';
 
 describe('prompt injection defense signals', () => {
@@ -26,6 +28,13 @@ describe('prompt injection defense signals', () => {
         'Não entendi, você pode explicar melhor essa pergunta sobre entrada?'
       ).detected
     ).toBe(false);
+  });
+
+  it('identifies an off-topic continuation and redirects to the pending flow', () => {
+    expect(isClearlyOffTopicRequest('Mas e a receita do brownie?')).toBe(true);
+    expect(securityBoundaryReply('Qual bairro ou região você prefere?')).toBe(
+      'Consigo te ajudar com a busca do imóvel. Qual bairro ou região você prefere?'
+    );
   });
 
   it('does not let model-like text opt a lead out without an explicit request', () => {

@@ -26,10 +26,16 @@ import {
   deterministicPostureReply,
   explicitUnknownCandidate,
   isExplicitReactivationAffirmation,
+  isPropertyTimingAdviceRequest,
   isQualificationCandidateSemanticallyCompatible,
   isQualificationCandidateGrounded,
+  propertyTimingAdviceReply,
   postureInstruction,
 } from './conversation-behavior';
+import {
+  isClearlyOffTopicRequest,
+  securityBoundaryReply,
+} from './response-policy';
 import {
   deterministicQualificationCandidates,
   resolveQualificationQuestion,
@@ -272,6 +278,7 @@ export async function prepareStudiospTurn(args: {
   triggerMessageId?: string | null;
   config: AiConfig;
   messages: ChatMessage[];
+  promptInjectionDetected?: boolean;
 }): Promise<StudiospTurnContext> {
   const empty: StudiospTurnContext = {
     opportunityId: null,
@@ -440,11 +447,16 @@ export async function prepareStudiospTurn(args: {
     conversationId: args.conversationId,
     triggerMessageId: args.triggerMessageId,
   });
+  const expectedResponseKind =
+    confirmedAnswersAtTurn.length > 0 ||
+    Boolean(previousSemanticContext?.expectedQuestionKey)
+      ? null
+      : previousSemanticContext?.expectedResponseKind;
   const turn = conversationTurn(
     args.messages,
     questions as Row[],
     previousSemanticContext?.expectedQuestionKey,
-    previousSemanticContext?.expectedResponseKind
+    expectedResponseKind
   );
   const posture = classifyLeadPosture({
     ...turn,
@@ -461,6 +473,10 @@ export async function prepareStudiospTurn(args: {
   const expectedQuestionKeyAtTurn = expectedQuestionAtTurn
     ? String(expectedQuestionAtTurn.key)
     : null;
+  const unsafeTurn =
+    Boolean(args.promptInjectionDetected) ||
+    (Boolean(previousSemanticContext?.securityBoundaryActive) &&
+      isClearlyOffTopicRequest(turn.latestUserMessage));
   let schedulingPreference = deriveSchedulingPreference({
     latestMessage: turn.latestUserMessage,
     previous: previousSemanticContext
@@ -487,6 +503,16 @@ export async function prepareStudiospTurn(args: {
       requestTimeoutMs: 10_000,
     });
     extraction = parseObject(generated.text);
+    if (unsafeTurn) {
+      extraction = {
+        answers: [],
+        summary: '',
+        call_brief: null,
+        accepted_slot_id: null,
+        requested_start_at: null,
+        insists_on_requested_time: false,
+      };
+    }
     const latestUserText = turn.latestUserMessage;
     schedulingPreference = deriveSchedulingPreference({
       latestMessage: latestUserText,
@@ -575,7 +601,7 @@ export async function prepareStudiospTurn(args: {
         explicitUnknown
       );
     }
-    const answerRows = [...candidateByQuestion.values()];
+    const answerRows = unsafeTurn ? [] : [...candidateByQuestion.values()];
     const currentMap = new Map(
       ((currentAnswers ?? []) as Row[]).map((answer) => [
         answer.question_id,
@@ -683,7 +709,14 @@ export async function prepareStudiospTurn(args: {
       }
     }
 
-    if (typeof extraction.summary === 'string' && extraction.summary.trim()) {
+    if (
+      !unsafeTurn &&
+      typeof extraction.summary === 'string' &&
+      extraction.summary.trim() &&
+      !isClearlyOffTopicRequest(
+        `${extraction.summary} ${JSON.stringify(extraction.call_brief ?? '')}`
+      )
+    ) {
       const callBrief = sanitizeCallBrief(extraction.call_brief);
       await args.db
         .from('opportunities')
@@ -942,7 +975,25 @@ export async function prepareStudiospTurn(args: {
     posture,
     isReactivation: Boolean(reactivationSession),
     expectedResponseKind: turn.expectedResponseKind,
+    expectedQuestionKey: turn.expectedQuestionKey,
   });
+  const propertyTimingAdvice = isPropertyTimingAdviceRequest({
+    latestUserMessage: latestUserText,
+    expectedQuestionKey: turn.expectedQuestionKey,
+  })
+    ? propertyTimingAdviceReply()
+    : null;
+  const securityReply = unsafeTurn
+    ? securityBoundaryReply(
+        qualificationQuestionPrompt(
+          missingQuestions.find(
+            (question) =>
+              String(question.key) ===
+              (turn.expectedQuestionKey ?? expectedQuestionKeyAtTurn)
+          ) ?? missingQuestions[0]
+        )
+      )
+    : null;
   const deterministicNextQuestion =
     !qualification.complete &&
     nextQualificationPrompt &&
@@ -1007,40 +1058,44 @@ export async function prepareStudiospTurn(args: {
     opportunityId: opportunity.id,
     grounding,
     reservedAppointment,
-    outboundOverride: postureReply
-      ? postureReply
-      : rejectedOfferedSlot
-        ? schedulePreferenceQuestion()
-        : availabilityInquiry
-          ? availabilityReply({
-              slots: reservableSlots,
-              latestMessage: latestUserText,
-              nextQuestion: nextQualificationPrompt,
-              preference: {
-                dayKey: previousSemanticContext?.schedulingDayKey,
-                period: previousSemanticContext?.schedulingPeriod,
-                requestedStartAt: previousSemanticContext?.requestedStartAt,
-              },
-            })
-          : reservedAppointment
-            ? appointmentConfirmation(reservedAppointment)
-            : requestedStart && nearbySlots[0]
-              ? closestAvailableSlotReply(nearbySlots[0])
-              : requestedStart
-                ? 'Não encontrei disponibilidade nesse dia dentro da agenda configurada. Você teria outro dia e horário que funcionem para você?'
-                : reservationFailed
-                  ? appointmentReservationFailure()
-                  : deterministicNextQuestion
-                    ? deterministicNextQuestion
-                    : qualification.complete &&
-                        ['neutral', 'playful'].includes(posture) &&
-                        (!reactivationSession || reactivationAffirmed) &&
-                        reservableSlots[0]
-                      ? opportunityInvitation(
-                          reservableSlots[0],
-                          args.config.completionMessage
-                        )
-                      : null,
+    outboundOverride: securityReply
+      ? securityReply
+      : propertyTimingAdvice
+        ? propertyTimingAdvice
+        : postureReply
+          ? postureReply
+          : rejectedOfferedSlot
+            ? schedulePreferenceQuestion()
+            : availabilityInquiry
+              ? availabilityReply({
+                  slots: reservableSlots,
+                  latestMessage: latestUserText,
+                  nextQuestion: nextQualificationPrompt,
+                  preference: {
+                    dayKey: previousSemanticContext?.schedulingDayKey,
+                    period: previousSemanticContext?.schedulingPeriod,
+                    requestedStartAt: previousSemanticContext?.requestedStartAt,
+                  },
+                })
+              : reservedAppointment
+                ? appointmentConfirmation(reservedAppointment)
+                : requestedStart && nearbySlots[0]
+                  ? closestAvailableSlotReply(nearbySlots[0])
+                  : requestedStart
+                    ? 'Não encontrei disponibilidade nesse dia dentro da agenda configurada. Você teria outro dia e horário que funcionem para você?'
+                    : reservationFailed
+                      ? appointmentReservationFailure()
+                      : deterministicNextQuestion
+                        ? deterministicNextQuestion
+                        : qualification.complete &&
+                            ['neutral', 'playful'].includes(posture) &&
+                            (!reactivationSession || reactivationAffirmed) &&
+                            reservableSlots[0]
+                          ? opportunityInvitation(
+                              reservableSlots[0],
+                              args.config.completionMessage
+                            )
+                          : null,
     qualificationComplete: qualification.complete,
     nextQualificationPrompt,
     semanticContext: {
@@ -1049,7 +1104,10 @@ export async function prepareStudiospTurn(args: {
       expectedQuestionKey: nextQuestion ? String(nextQuestion.key) : null,
       expectedResponseKind: rejectedOfferedSlot
         ? 'schedule_preference'
-        : reactivationSession && !reactivationAffirmed
+        : reactivationSession &&
+            !reactivationAffirmed &&
+            confirmedFacts.length === 0 &&
+            !nextQuestion
           ? 'reactivation_interest'
           : null,
       presentedFacts: confirmedFacts.map(
@@ -1077,6 +1135,7 @@ export async function prepareStudiospTurn(args: {
       schedulingDayKey: schedulingPreference.dayKey,
       schedulingPeriod: schedulingPreference.period,
       requestedStartAt: schedulingPreference.requestedStartAt,
+      securityBoundaryActive: unsafeTurn,
     },
   };
 }

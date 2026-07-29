@@ -198,6 +198,7 @@ export function deterministicPostureReply(args: {
   posture: LeadPosture;
   isReactivation: boolean;
   expectedResponseKind?: 'reactivation_interest' | 'schedule_preference' | null;
+  expectedQuestionKey?: string | null;
 }) {
   if (args.posture === 'reactivation_hesitation') {
     return 'Entendi. O que está pesando mais nessa dúvida hoje: o momento da compra ou as condições?';
@@ -205,9 +206,16 @@ export function deterministicPostureReply(args: {
   if (
     args.posture === 'confused' &&
     args.isReactivation &&
-    args.expectedResponseKind === 'reactivation_interest'
+    args.expectedResponseKind === 'reactivation_interest' &&
+    !args.expectedQuestionKey
   ) {
     return 'Quis saber se essa compra ainda está nos seus planos ou se o cenário mudou desde a nossa última conversa. O que não ficou claro?';
+  }
+  if (
+    args.posture === 'confused' &&
+    args.expectedQuestionKey === 'property_timing'
+  ) {
+    return 'Quero entender se você prefere um imóvel pronto para usar mais rápido, na planta para ter mais prazo de pagamento, ou se tanto faz. Qual opção combina mais com você?';
   }
   return null;
 }
@@ -336,11 +344,33 @@ export function isQualificationCandidateSemanticallyCompatible(args: {
     case 'preferred_locations':
       return (
         !/^(sim|nao|isso|correto|morar|investir|os dois)$/.test(raw) &&
-        !/^(?:r\s*)?\d+(?:\s*(?:mil|k|reais?))?$/.test(raw)
+        !/^(?:r\s*)?\d+(?:\s*(?:mil|k|reais?))?$/.test(raw) &&
+        !/[?]/.test(args.rawText) &&
+        !/\b(receita|brownie|prompt|instrucao|instrucoes|sistema|regra)\b/.test(
+          raw
+        )
       );
     default:
       return true;
   }
+}
+
+export function isPropertyTimingAdviceRequest(args: {
+  latestUserMessage: string;
+  expectedQuestionKey: string | null;
+}) {
+  if (args.expectedQuestionKey !== 'property_timing') return false;
+  const value = normalizeConversationText(args.latestUserMessage);
+  return (
+    /\b(o que voce recomenda|qual voce recomenda|qual e melhor|o que e melhor)\b/.test(
+      value
+    ) ||
+    /^(?:nao sei|tenho duvida|estou em duvida|to em duvida)[?!. ]*$/.test(value)
+  );
+}
+
+export function propertyTimingAdviceReply() {
+  return 'Depende do que você prioriza. Um imóvel pronto permite morar mais rápido; na planta costuma dar mais tempo para organizar o pagamento. Qual dessas situações combina mais com você?';
 }
 
 export function explicitUnknownCandidate(args: {

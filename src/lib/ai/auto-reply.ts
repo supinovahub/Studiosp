@@ -229,7 +229,7 @@ export async function dispatchInboundToAiReply(
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
-    await recordPromptInjectionSignal({
+    const promptInjectionAssessment = await recordPromptInjectionSignal({
       db,
       accountId,
       conversationId,
@@ -345,6 +345,7 @@ export async function dispatchInboundToAiReply(
       triggerMessageId: triggerMessage?.id ?? null,
       config,
       messages,
+      promptInjectionDetected: promptInjectionAssessment.detected,
     });
     if (!studiosp.opportunityId) {
       await openOperationalFailure({

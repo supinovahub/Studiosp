@@ -13,6 +13,7 @@ export interface AiSemanticContext {
   schedulingPeriod?: SchedulingPeriod | null;
   requestedStartAt?: string | null;
   guidanceRequestId?: string | null;
+  securityBoundaryActive?: boolean;
 }
 
 export function semanticMessageMetadata(context: AiSemanticContext) {

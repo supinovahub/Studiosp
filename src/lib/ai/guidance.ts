@@ -20,7 +20,7 @@ export async function recordPromptInjectionSignal(args: {
     event_type: 'prompt_injection_signal',
     severity: assessment.severity,
     signals: assessment.signals,
-    metadata: { action: 'logged_without_automatic_block' },
+    metadata: { action: 'blocked_and_redirected_to_business_flow' },
   });
   if (error && error.code !== '23505') {
     console.error(

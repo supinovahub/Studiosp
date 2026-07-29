@@ -74,6 +74,20 @@ export function assessPromptInjection(
   };
 }
 
+const CLEARLY_OFF_TOPIC_PATTERNS = [
+  /\b(receita|brownie|bolo|brigadeiro|lasanha|pizza)\b/i,
+  /\b(escreva|conte|invente).{0,25}\b(poema|piada|hist[oó]ria)\b/i,
+];
+
+export function isClearlyOffTopicRequest(message: string) {
+  return CLEARLY_OFF_TOPIC_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+export function securityBoundaryReply(nextQuestion?: string | null) {
+  const redirect = 'Consigo te ajudar com a busca do imóvel.';
+  return nextQuestion ? `${redirect} ${nextQuestion}` : redirect;
+}
+
 export function isIdentityQuestion(message: string) {
   return IDENTITY_QUESTION.test(message);
 }
