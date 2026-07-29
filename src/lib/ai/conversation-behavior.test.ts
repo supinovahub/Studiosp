@@ -6,6 +6,7 @@ import {
   explicitUnknownCandidate,
   inferExpectedQuestionKey,
   isExplicitReactivationAffirmation,
+  isQualificationCandidateSemanticallyCompatible,
   isQualificationCandidateGrounded,
 } from './conversation-behavior';
 
@@ -155,5 +156,40 @@ describe('conversation behavior', () => {
     expect(
       inferExpectedQuestionKey('Você prefere algo na planta ou pronto?')
     ).toBe('property_timing');
+  });
+});
+
+describe('semantic qualification invariants', () => {
+  it('never accepts a neighborhood as a purchase objective', () => {
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'purchase_objective',
+        rawText: 'vila madalena',
+      })
+    ).toBe(false);
+  });
+
+  it('accepts the same neighborhood only as a location', () => {
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'preferred_locations',
+        rawText: 'vila madalena',
+      })
+    ).toBe(true);
+  });
+
+  it('keeps explicit objective and purchase horizon evidence valid', () => {
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'purchase_objective',
+        rawText: 'para morar',
+      })
+    ).toBe(true);
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'purchase_urgency',
+        rawText: 'em 3 anos',
+      })
+    ).toBe(true);
   });
 });

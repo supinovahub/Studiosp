@@ -17,16 +17,18 @@ Especificação da importação segura de conversas antigas:
 
 #### Implementado, aguardando homologação real controlada
 
-- o servidor impede que o texto livre ofereça oportunidades ou reunião
-  enquanto existir informação obrigatória pendente;
-- a pergunta selecionada pelo estado da qualificação prevalece quando o modelo
-  tenta avançar para outro assunto;
-- respostas de prazo retornadas como texto são normalizadas para a opção
-  canônica antes da validação;
-- confirmações naturais da reativação, inclusive `Claro, pode sim`, encerram a
-  etapa inicial;
+- a versão de produção que funcionava corretamente em 28/07/2026 às 13:18,
+  commit `f10cb76`, é a referência comportamental da qualificação;
+- foi removido o realinhamento automático que podia atribuir uma resposta ao
+  campo esperado mesmo quando o modelo a havia classificado em outro campo;
+- a extração voltou a registrar apenas respostas explícitas e correções, sem
+  transformar metadados de turno em evidência do lead;
+- o servidor rejeita combinações semanticamente impossíveis, como um bairro
+  sendo persistido como objetivo de compra, antes de gravar no banco;
+- fila persistida, idempotência, retries, limites operacionais e demais
+  proteções de entrega atuais foram preservados;
 - a regressão e as verificações estão documentadas no
-  [Relatório de estabilização da qualificação SDR](./RELATORIO_ESTABILIZACAO_QUALIFICACAO_SDR_2026-07-29.md).
+  [Relatório de restauração da qualificação SDR](./RELATORIO_RESTAURACAO_QUALIFICACAO_SDR_2026-07-29.md).
 
 ### Construtor seguro da qualificação — 28 de julho de 2026
 

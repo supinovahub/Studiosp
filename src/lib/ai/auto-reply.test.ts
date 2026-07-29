@@ -197,7 +197,6 @@ vi.mock('./admin-client', () => ({
 }));
 
 import {
-  alignQualificationQuestion,
   dispatchInboundToAiReply,
 } from './auto-reply';
 
@@ -360,7 +359,7 @@ beforeEach(() => {
   });
 });
 
-describe('dispatchInboundToAiReply — eligibility gates', () => {
+describe('dispatchInboundToAiReply â€” eligibility gates', () => {
   it('does not call the provider for a number outside the allowlist', async () => {
     vi.stubEnv('AI_AUTOREPLY_ALLOWED_NUMBERS', '5527998303052');
 
@@ -385,7 +384,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 
   it('sends a long answer in short humanized WhatsApp blocks', async () => {
     h.generateReply.mockResolvedValue({
-      text: 'Olá! Encontrei uma opção. Qual bairro você prefere?',
+      text: 'OlÃ¡! Encontrei uma opÃ§Ã£o. Qual bairro vocÃª prefere?',
       handoff: false,
       needsGuidance: false,
     });
@@ -394,15 +393,15 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 
     expect(h.engineSendText).toHaveBeenCalledTimes(1);
     expect(h.engineSendText.mock.calls[0][0].text).toBe(
-      'Olá! Encontrei uma opção. Qual bairro você prefere?'
+      'OlÃ¡! Encontrei uma opÃ§Ã£o. Qual bairro vocÃª prefere?'
     );
   });
 
   it('splits content that exceeds a natural WhatsApp block', async () => {
     h.generateReply.mockResolvedValue({
-      text: `${'Encontrei oportunidades compatíveis para o seu perfil. '.repeat(
+      text: `${'Encontrei oportunidades compatÃ­veis para o seu perfil. '.repeat(
         4
-      )}Qual período funciona melhor para você?`,
+      )}Qual perÃ­odo funciona melhor para vocÃª?`,
       handoff: false,
       needsGuidance: false,
     });
@@ -423,13 +422,13 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       grounding: [],
       reservedAppointment: { id: 'appointment-1' },
       outboundOverride:
-        'Sua conversa está confirmada para terça-feira, 28/07, 10:00.',
+        'Sua conversa estÃ¡ confirmada para terÃ§a-feira, 28/07, 10:00.',
       qualificationComplete: true,
       nextQualificationPrompt: null,
       semanticContext: { version: 1, mode: 'qualification' },
     });
     h.generateReply.mockResolvedValue({
-      text: 'Um corretor entrará em contato para confirmar.',
+      text: 'Um corretor entrarÃ¡ em contato para confirmar.',
       handoff: false,
       needsGuidance: false,
     });
@@ -438,7 +437,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: 'Sua conversa está confirmada para terça-feira, 28/07, 10:00.',
+        text: 'Sua conversa estÃ¡ confirmada para terÃ§a-feira, 28/07, 10:00.',
       })
     );
   });
@@ -451,7 +450,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       outboundOverride: null,
       qualificationComplete: false,
       nextQualificationPrompt:
-        'Antes de avançarmos, qual faixa de parcela mensal ficaria confortável para você?',
+        'Antes de avanÃ§armos, qual faixa de parcela mensal ficaria confortÃ¡vel para vocÃª?',
       semanticContext: {
         version: 1,
         mode: 'qualification',
@@ -459,7 +458,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       },
     });
     h.generateReply.mockResolvedValue({
-      text: 'Encontrei algumas oportunidades. Vamos agendar uma conversa rápida com um corretor?',
+      text: 'Encontrei algumas oportunidades. Vamos agendar uma conversa rÃ¡pida com um corretor?',
       handoff: false,
       needsGuidance: false,
     });
@@ -468,7 +467,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: 'Antes de avançarmos, qual faixa de parcela mensal ficaria confortável para você?',
+        text: 'Antes de avanÃ§armos, qual faixa de parcela mensal ficaria confortÃ¡vel para vocÃª?',
       })
     );
   });
@@ -516,7 +515,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
   it('does not send when the atomic slot claim loses the race', async () => {
     h.state.claim = false;
     await dispatchInboundToAiReply(ARGS);
-    // Renova o orçamento uma vez, mas não envia se a segunda disputa falhar.
+    // Renova o orÃ§amento uma vez, mas nÃ£o envia se a segunda disputa falhar.
     expect(h.state.rpcCalls.map((call) => call.name)).toEqual([
       'studiosp_claim_ai_account_rate_slot',
       'claim_ai_reply_slot',
@@ -537,7 +536,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
 
   it('keeps only the first question instead of escalating a style defect', async () => {
     h.generateReply.mockResolvedValue({
-      text: 'Entendi. Qual bairro você prefere? E qual valor pretende investir?',
+      text: 'Entendi. Qual bairro vocÃª prefere? E qual valor pretende investir?',
       handoff: false,
       needsGuidance: false,
     });
@@ -548,7 +547,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.generateReply).toHaveBeenCalledTimes(1);
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: 'Entendi. Qual bairro você prefere?',
+        text: 'Entendi. Qual bairro vocÃª prefere?',
       })
     );
     expect(h.openGuidanceRequest).not.toHaveBeenCalled();
@@ -587,7 +586,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
         needsGuidance: false,
       })
       .mockResolvedValueOnce({
-        text: 'Entendi. O que mudou para você desde a nossa última conversa?',
+        text: 'Entendi. O que mudou para vocÃª desde a nossa Ãºltima conversa?',
         handoff: false,
         needsGuidance: false,
       });
@@ -602,7 +601,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     ).toHaveLength(2);
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: 'Entendi. O que mudou para você desde a nossa última conversa?',
+        text: 'Entendi. O que mudou para vocÃª desde a nossa Ãºltima conversa?',
       })
     );
   });
@@ -616,7 +615,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
       outboundOverride: null,
       qualificationComplete: false,
       nextQualificationPrompt:
-        'Qual faixa de parcela mensal ficaria confortável para você?',
+        'Qual faixa de parcela mensal ficaria confortÃ¡vel para vocÃª?',
       semanticContext: {
         version: 1,
         mode: 'qualification',
@@ -625,12 +624,12 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     });
     h.generateReply
       .mockResolvedValueOnce({
-        text: 'Você está buscando esse imóvel pra morar, investir ou os dois?',
+        text: 'VocÃª estÃ¡ buscando esse imÃ³vel pra morar, investir ou os dois?',
         handoff: false,
         needsGuidance: false,
       })
       .mockResolvedValueOnce({
-        text: 'Você está buscando esse imóvel pra morar, investir ou os dois?',
+        text: 'VocÃª estÃ¡ buscando esse imÃ³vel pra morar, investir ou os dois?',
         handoff: false,
         needsGuidance: false,
       });
@@ -640,7 +639,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(result).toEqual({ outcome: 'completed' });
     expect(h.engineSendText).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: 'Qual faixa de parcela mensal ficaria confortável para você?',
+        text: 'Qual faixa de parcela mensal ficaria confortÃ¡vel para vocÃª?',
       })
     );
     expect(h.openOperationalFailure).not.toHaveBeenCalled();
@@ -726,7 +725,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
   });
 });
 
-describe('dispatchInboundToAiReply — owner guidance', () => {
+describe('dispatchInboundToAiReply â€” owner guidance', () => {
   it('opens an owner guidance request and does not send on model handoff', async () => {
     h.generateReply.mockResolvedValue({
       text: '',
@@ -763,44 +762,5 @@ describe('dispatchInboundToAiReply — owner guidance', () => {
       assigned_agent_id: 'agent-7',
     });
     expect(h.openGuidanceRequest).toHaveBeenCalled();
-  });
-});
-
-describe('alignQualificationQuestion', () => {
-  it('substitui uma pergunta diferente pela próxima pergunta registrada', () => {
-    expect(
-      alignQualificationQuestion({
-        generatedText: 'Você prefere um imóvel na planta ou pronto para morar?',
-        qualificationComplete: false,
-        nextQuestion:
-          'Hoje, mais ou menos quanto você conseguiria usar de entrada?',
-        expectedQuestionKey: 'entry_budget',
-      })
-    ).toBe('Hoje, mais ou menos quanto você conseguiria usar de entrada?');
-  });
-
-  it('preserva uma pergunta alinhada ao campo esperado', () => {
-    expect(
-      alignQualificationQuestion({
-        generatedText: 'Qual faixa de entrada você pretende utilizar?',
-        qualificationComplete: false,
-        nextQuestion:
-          'Hoje, mais ou menos quanto você conseguiria usar de entrada?',
-        expectedQuestionKey: 'entry_budget',
-      })
-    ).toBe('Qual faixa de entrada você pretende utilizar?');
-  });
-
-  it('impede que texto livre avance para oportunidades sem perguntar o campo pendente', () => {
-    expect(
-      alignQualificationQuestion({
-        generatedText:
-          'Temos algumas oportunidades. Quarta às 17:00 funciona para um bate-papo?',
-        qualificationComplete: false,
-        nextQuestion:
-          'Você pretende comprar em quanto tempo, mais ou menos?',
-        expectedQuestionKey: 'purchase_urgency',
-      })
-    ).toBe('Você pretende comprar em quanto tempo, mais ou menos?');
   });
 });

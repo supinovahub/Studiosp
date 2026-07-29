@@ -301,6 +301,37 @@ export function isQualificationCandidateGrounded(args: {
   return true;
 }
 
+export function isQualificationCandidateSemanticallyCompatible(args: {
+  questionKey: string;
+  rawText: string;
+}) {
+  const raw = normalizeConversationText(args.rawText);
+  if (!raw) return false;
+
+  switch (args.questionKey) {
+    case 'purchase_objective':
+      return /\b(morar|moradia|investir|investimento|uso proprio|os dois|ambos)\b/.test(
+        raw
+      );
+    case 'property_timing':
+      return /\b(planta|lancamento|pronto|construcao|tanto faz|indiferente)\b/.test(
+        raw
+      );
+    case 'purchase_urgency':
+      return /\b(dia|dias|semana|semanas|mes|meses|ano|anos|pressa|pesquisando|agora)\b/.test(
+        raw
+      );
+    case 'entry_budget':
+    case 'monthly_installment_budget':
+    case 'total_price_budget':
+      return /\d/.test(raw);
+    case 'preferred_locations':
+      return !/^(sim|nao|isso|correto|morar|investir|os dois)$/.test(raw);
+    default:
+      return true;
+  }
+}
+
 export function explicitUnknownCandidate(args: {
   questions: Row[];
   latestUserMessage: string;
