@@ -24,6 +24,10 @@ BEGIN
   );
 
   IF v_fixed_definition = v_definition THEN
+    IF v_definition LIKE '%if v_offer.expires_at <= now() then%'
+       AND v_definition LIKE '%return v_offer;%' THEN
+      RETURN;
+    END IF;
     RAISE EXCEPTION 'Expected late-response exception was not found';
   END IF;
 

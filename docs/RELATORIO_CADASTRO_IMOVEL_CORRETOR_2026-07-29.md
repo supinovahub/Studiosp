@@ -27,9 +27,17 @@ A migration
 adiciona os estados de submissão, metadados de revisão, índices, políticas RLS
 e as funções transacionais de envio e decisão.
 
-O Supabase Staging anterior foi excluído durante o desenvolvimento. A migration
-não foi aplicada em produção. O próximo passo operacional é recriar o staging
-como branch isolada do projeto Studiosp e aplicar a migration nele.
+O Supabase Staging anterior foi excluído durante o desenvolvimento. Um novo
+projeto gratuito e isolado foi criado em São Paulo:
+`ffeyrxsdlgcfwgnsnwlj`. As 90 migrations existentes e as migrations desta
+entrega foram aplicadas nele. Produção não recebeu mudanças.
+
+Durante o bootstrap foram corrigidos dois problemas de reprodutibilidade:
+
+- migrations históricas que falhavam quando a função alvo já possuía o estado
+  final passaram a ser idempotentes;
+- o valor padrão do intervalo de agenda passou de 5 para 10 minutos, alinhado
+  à restrição atual e permitindo que novas contas sejam criadas.
 
 ## Validações locais
 
@@ -43,7 +51,7 @@ como branch isolada do projeto Studiosp e aplicar a migration nele.
 
 ## Homologação pendente
 
-Depois da recriação do staging:
+No novo staging:
 
 1. testar cadastro e duas imagens como Corretor;
 2. testar reprovação com motivo e reenvio;

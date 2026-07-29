@@ -26,6 +26,9 @@ BEGIN
   );
 
   IF v_without_whatsapp_guard = v_definition THEN
+    IF v_definition LIKE '%else ''dashboard''%' THEN
+      RETURN;
+    END IF;
     RAISE EXCEPTION 'Expected WhatsApp eligibility guard was not found';
   END IF;
 

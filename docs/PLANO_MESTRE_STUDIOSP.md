@@ -1928,7 +1928,8 @@ As versões representam horizontes de complexidade, não compromissos imutáveis
 ### Estado do ambiente de homologação
 
 O projeto Supabase Staging anterior (`vgmmfzdifjhpqaopxfbj`) foi removido por
-outro desenvolvedor. A recriação deve partir de uma branch de banco do projeto
-Studiosp de produção, sem cópia de dados reais. A migration
-`20260729103000_broker_development_submissions.sql` será aplicada somente ao
-novo staging antes do teste ponta a ponta.
+outro desenvolvedor. Em 29/07/2026 foi criado um novo projeto gratuito e
+isolado, **Studiosp Staging** (`ffeyrxsdlgcfwgnsnwlj`), sem cópia de dados
+reais. As migrations do repositório e a migration
+`20260729103000_broker_development_submissions.sql` foram aplicadas nesse novo
+ambiente.
