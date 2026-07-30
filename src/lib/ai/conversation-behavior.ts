@@ -1,4 +1,5 @@
 import type { ChatMessage } from './types';
+import { deterministicPropertyTimingValue } from './deterministic-qualification';
 
 type Row = Record<string, unknown>;
 
@@ -187,7 +188,7 @@ export function classifyLeadPosture(args: {
     return 'confused';
   }
   if (
-    /\b(ja falei|ja respondi|de novo|voce perguntou isso|nao leu|presta atencao|uai|po)\b/.test(
+    /\b(ja falei|ja respondi|de novo|voce perguntou isso|nao leu|presta atencao|uai)\b/.test(
       latest
     )
   ) {
@@ -274,9 +275,11 @@ export function postureInstruction(posture: LeadPosture): string | null {
 }
 
 export function isExplicitUnknownReply(value: string) {
+  const normalized = normalizeConversationText(value);
   return (
     UNKNOWN_REPLY.test(value.trim()) ||
-    /^(?:nao sei|ainda nao sei)\b/.test(normalizeConversationText(value))
+    /^(?:nao sei|ainda nao sei)\b/.test(normalized) ||
+    /^(?:nao conheco (?:nada|muito)|conheco nada)\b/.test(normalized)
   );
 }
 
@@ -366,9 +369,7 @@ export function isQualificationCandidateSemanticallyCompatible(args: {
         raw
       );
     case 'property_timing':
-      return /\b(planta|lancamento|pront[oa]s?|construcao|tanto faz|indiferente)\b/.test(
-        raw
-      );
+      return deterministicPropertyTimingValue(raw) !== null;
     case 'purchase_urgency':
       return /\b(dia|dias|semana|semanas|mes|meses|ano|anos|pressa|pesquisando|agora)\b/.test(
         raw

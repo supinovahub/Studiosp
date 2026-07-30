@@ -123,6 +123,33 @@ describe('conversation behavior', () => {
     );
   });
 
+  it('stores natural lack of location knowledge as an explicit unknown', () => {
+    expect(
+      explicitUnknownCandidate({
+        questions: [{ id: 'location', key: 'preferred_locations' }],
+        latestUserMessage: 'Conheço nada aí de São Paulo',
+        expectedQuestionKey: 'preferred_locations',
+      })
+    ).toEqual(
+      expect.objectContaining({
+        question_id: 'location',
+        normalized_value: { values: [], unknown: true },
+      })
+    );
+  });
+
+  it('does not treat a casual pô as frustration', () => {
+    expect(
+      classifyLeadPosture({
+        latestUserMessage: 'Pô pode ser 5 mil',
+        previousAssistantMessage:
+          'Qual valor de parcela por mês fica confortável?',
+        expectedQuestionKey: 'monthly_installment_budget',
+        isReactivation: false,
+      })
+    ).toBe('neutral');
+  });
+
   it('distinguishes hesitation in a reactivation from a qualification answer', () => {
     expect(
       classifyLeadPosture({
@@ -210,6 +237,15 @@ describe('conversation behavior', () => {
 });
 
 describe('semantic qualification invariants', () => {
+  it('recognizes a completed property as ready inventory', () => {
+    expect(
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: 'property_timing',
+        rawText: 'Prefiro imóveis já terminados',
+      })
+    ).toBe(true);
+  });
+
   it('never accepts a neighborhood as a purchase objective', () => {
     expect(
       isQualificationCandidateSemanticallyCompatible({

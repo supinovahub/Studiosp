@@ -67,22 +67,51 @@ export function qualificationEvidenceMessage(args: {
   messages: Row[];
 }) {
   const raw = evidenceComparableText(args.rawText);
-  const compatible = [...args.messages]
-    .reverse()
-    .filter((message) =>
+  const recentFirst = [...args.messages].reverse();
+  if (raw) {
+    const exactMatches = recentFirst.filter((message) => {
+      const content = evidenceComparableText(message.content_text);
+      return content && (content.includes(raw) || raw.includes(content));
+    });
+    const semanticExactMatch = exactMatches.find((message) =>
       isQualificationCandidateSemanticallyCompatible({
         questionKey: args.questionKey,
         rawText: String(message.content_text ?? ''),
       })
     );
-  if (!compatible.length) return null;
-  if (!raw) return compatible[0];
+    if (semanticExactMatch) return semanticExactMatch;
+    if (exactMatches.length === 1) return exactMatches[0];
+  }
   return (
-    compatible.find((message) => {
-      const content = evidenceComparableText(message.content_text);
-      return content && (content.includes(raw) || raw.includes(content));
-    }) ?? null
+    recentFirst.find((message) =>
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: args.questionKey,
+        rawText: String(message.content_text ?? ''),
+      })
+    ) ?? null
   );
+}
+
+export function selectNextQualificationQuestion(args: {
+  missingQuestions: Row[];
+  expectedQuestionKey: string | null;
+  posture: string;
+}) {
+  const unansweredExpectedQuestion = args.expectedQuestionKey
+    ? args.missingQuestions.find(
+        (question) => String(question.key) === args.expectedQuestionKey
+      )
+    : undefined;
+  if (unansweredExpectedQuestion) return unansweredExpectedQuestion;
+  if (args.posture === 'frustrated') {
+    return args.missingQuestions.find(
+      (question) => question.key !== args.expectedQuestionKey
+    );
+  }
+  if (['confused', 'reactivation_hesitation'].includes(args.posture)) {
+    return undefined;
+  }
+  return args.missingQuestions[0];
 }
 
 async function loadCurrentLeadTurnMessages(args: {
@@ -688,6 +717,7 @@ export async function prepareStudiospTurn(args: {
       ])
     );
     const acceptedQuestionIds: string[] = [];
+    const rejectedCandidateReasons: string[] = [];
     let rejectedCandidateCount = 0;
     for (const candidate of answerRows) {
       if (!candidate || typeof candidate !== 'object') continue;
@@ -695,15 +725,7 @@ export async function prepareStudiospTurn(args: {
       const question = questionMap.get(String(answer.question_id));
       if (!question || answer.normalized_value === undefined) {
         rejectedCandidateCount++;
-        continue;
-      }
-      if (
-        !isQualificationCandidateSemanticallyCompatible({
-          questionKey: String(question.key ?? ''),
-          rawText: String(answer.raw_text ?? ''),
-        })
-      ) {
-        rejectedCandidateCount++;
+        rejectedCandidateReasons.push('unknown_question_or_missing_value');
         continue;
       }
       if (
@@ -717,6 +739,9 @@ export async function prepareStudiospTurn(args: {
         })
       ) {
         rejectedCandidateCount++;
+        rejectedCandidateReasons.push(
+          `not_grounded:${String(question.key ?? 'unknown')}`
+        );
         continue;
       }
       const current = currentMap.get(question.id);
@@ -742,6 +767,25 @@ export async function prepareStudiospTurn(args: {
           question.key
         );
         rejectedCandidateCount++;
+        rejectedCandidateReasons.push(
+          `invalid_value:${String(question.key ?? 'unknown')}`
+        );
+        continue;
+      }
+      const semanticallyCompatible =
+        isQualificationCandidateSemanticallyCompatible({
+          questionKey: String(question.key ?? ''),
+          rawText: String(answer.raw_text ?? ''),
+        });
+      const modelInterpretedExpectedChoice =
+        answer.deterministic !== true &&
+        question.data_type === 'single_choice' &&
+        expectedQuestionKeyAtTurn === String(question.key);
+      if (!semanticallyCompatible && !modelInterpretedExpectedChoice) {
+        rejectedCandidateCount++;
+        rejectedCandidateReasons.push(
+          `semantic_mismatch:${String(question.key ?? 'unknown')}`
+        );
         continue;
       }
       const confidence = Math.max(
@@ -753,6 +797,9 @@ export async function prepareStudiospTurn(args: {
       );
       if (confidence < 0.55) {
         rejectedCandidateCount++;
+        rejectedCandidateReasons.push(
+          `low_confidence:${String(question.key ?? 'unknown')}`
+        );
         continue;
       }
       if (
@@ -769,6 +816,9 @@ export async function prepareStudiospTurn(args: {
       });
       if (!evidenceMessage?.id) {
         rejectedCandidateCount++;
+        rejectedCandidateReasons.push(
+          `evidence_not_found:${String(question.key ?? 'unknown')}`
+        );
         continue;
       }
       const answerResult = await args.db.rpc(
@@ -788,6 +838,10 @@ export async function prepareStudiospTurn(args: {
         }
       );
       if (answerResult.error) {
+        rejectedCandidateCount++;
+        rejectedCandidateReasons.push(
+          `database_rejected:${String(question.key ?? 'unknown')}`
+        );
         console.error(
           '[Studiosp/IA] resposta de qualificação rejeitada:',
           answerResult.error
@@ -840,6 +894,7 @@ export async function prepareStudiospTurn(args: {
             },
             accepted_question_ids: acceptedQuestionIds,
             rejected_candidate_count: rejectedCandidateCount,
+            rejected_candidate_reasons: rejectedCandidateReasons.slice(0, 20),
           },
           input_tokens: extractionInputTokens,
           output_tokens: extractionOutputTokens,
@@ -1032,14 +1087,11 @@ export async function prepareStudiospTurn(args: {
   );
   const missingQuestions = qualification.missingQuestions;
   const missing = missingQuestions.map((question) => question.label);
-  const nextQuestion =
-    posture === 'frustrated'
-      ? missingQuestions.find(
-          (question) => question.key !== turn.expectedQuestionKey
-        )
-      : ['confused', 'reactivation_hesitation'].includes(posture)
-        ? undefined
-        : missingQuestions[0];
+  const nextQuestion = selectNextQualificationQuestion({
+    missingQuestions,
+    expectedQuestionKey: turn.expectedQuestionKey,
+    posture,
+  });
   const nextQualificationPrompt = qualificationQuestionPrompt(nextQuestion);
   const latestUserText = turn.latestUserMessage;
   const availabilityInquiry = isAvailabilityInquiry(latestUserText);

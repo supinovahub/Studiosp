@@ -1,15 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
   deterministicQualificationCandidates,
+  deterministicPropertyTimingValue,
   resolveQualificationQuestion,
 } from './deterministic-qualification';
 import {
   normalizeQualificationValue,
   qualificationEvidenceMessage,
+  selectNextQualificationQuestion,
 } from './studiosp-orchestrator';
 import { isValidQualificationValue } from './qualification-validation';
 
 describe('deterministic qualification', () => {
+  it.each([
+    ['Prefiro imóveis já terminados', 'ready'],
+    ['Quero um apartamento finalizado', 'ready'],
+    ['Pode ser um imóvel já entregue', 'ready'],
+    ['Quero comprar na planta', 'off_plan'],
+    ['Pode estar em obras', 'off_plan'],
+    ['Qualquer um dos dois', 'indifferent'],
+  ])('normalizes natural property timing: %s', (message, expected) => {
+    expect(deterministicPropertyTimingValue(message)).toBe(expected);
+  });
+
   it('binds a fact to the exact message that contains its evidence', () => {
     const messages = [
       { id: 'm1', content_text: 'Seria para morar mesmo' },
@@ -45,6 +58,22 @@ describe('deterministic qualification', () => {
       raw_text: 'na real 40',
       normalized_value: { min: 40, max: 40, currency: 'BRL' },
     });
+  });
+
+  it('does not advance when the field just asked was not persisted', () => {
+    const propertyTiming = {
+      id: 'property-timing',
+      key: 'property_timing',
+    };
+    const urgency = { id: 'urgency', key: 'purchase_urgency' };
+
+    expect(
+      selectNextQualificationQuestion({
+        missingQuestions: [propertyTiming, urgency],
+        expectedQuestionKey: 'property_timing',
+        posture: 'neutral',
+      })
+    ).toBe(propertyTiming);
   });
 
   it('resolves both canonical keys and database ids', () => {
@@ -138,7 +167,7 @@ describe('deterministic qualification', () => {
     ).toEqual([
       expect.objectContaining({
         question_id: 'property_timing',
-        normalized_value: { value: 'pronto' },
+        normalized_value: { value: 'ready' },
       }),
     ]);
     expect(
@@ -186,6 +215,7 @@ describe('deterministic qualification', () => {
       ['150 mil de preço total', 'entry_budget'],
       ['e até 5 mil de parcela', 'entry_budget'],
       ['40 mil', 'entry_budget'],
+      ['Prefiro imóveis já terminados', 'property_timing'],
       ['prefiro imóveis prontos mesmo', 'property_timing'],
       ['seria em até 3 anos mesmo', 'purchase_urgency'],
     ] as const;

@@ -72,6 +72,32 @@ function candidate(
   };
 }
 
+export function deterministicPropertyTimingValue(value: string) {
+  const message = normalizedText(value);
+  if (
+    /\b(na planta|planta|lancamento|em construcao|em obras|obra em andamento|pre lancamento|pre-lancamento|entrega futura)\b/.test(
+      message
+    )
+  ) {
+    return 'off_plan';
+  }
+  if (
+    /\b(pront[oa]s?|terminad[oa]s?|finalizad[oa]s?|concluid[oa]s?|entregues?|ja construid[oa]s?|chaves? na mao)\b/.test(
+      message
+    )
+  ) {
+    return 'ready';
+  }
+  if (
+    /\b(tanto faz|indiferente|qualquer um|qualquer dos dois|sem preferencia)\b/.test(
+      message
+    )
+  ) {
+    return 'indifferent';
+  }
+  return null;
+}
+
 export function deterministicQualificationCandidates(args: {
   latestUserMessage: string;
   expectedQuestionKey?: string | null;
@@ -100,18 +126,8 @@ export function deterministicQualificationCandidates(args: {
     );
   }
 
-  if (
-    /\b(na planta|planta|lancamento|em construcao|pront[oa]s?|tanto faz|indiferente)\b/.test(
-      message
-    )
-  ) {
-    const timingValue = /\b(na planta|planta|lancamento|em construcao)\b/.test(
-      message
-    )
-      ? 'na planta'
-      : /\bpront[oa]s?\b/.test(message)
-        ? 'pronto'
-        : 'tanto faz';
+  const timingValue = deterministicPropertyTimingValue(message);
+  if (timingValue) {
     candidates.set(
       'property_timing',
       candidate('property_timing', raw, { value: timingValue })
