@@ -69,4 +69,27 @@ describe('hybrid inbound domain policy', () => {
       reason: 'prompt_injection_signal',
     });
   });
+
+  it('does not let a semantic false positive reject a trusted monetary answer', () => {
+    expect(
+      combineInboundDomainDecisions({
+        deterministic: {
+          allowed: true,
+          domain: 'qualification_answer',
+          reason: 'monetary_qualification_answer',
+        },
+        semantic: {
+          classification: 'off_topic',
+          confidence: 0.7,
+          containsValidLeadAnswer: false,
+          containsExternalRequest: false,
+          reason: 'Resposta curta sem contexto suficiente.',
+        },
+      })
+    ).toMatchObject({
+      allowed: true,
+      domain: 'qualification_answer',
+      reason: 'trusted_monetary_qualification_answer',
+    });
+  });
 });

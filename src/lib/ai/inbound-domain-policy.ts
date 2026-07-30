@@ -46,7 +46,9 @@ const OPT_OUT_LANGUAGE =
 const GREETING_LANGUAGE =
   /^(oi|ola|hi|hello|bom dia|boa tarde|boa noite|tudo bem|e ai|opa)[!,. ]*$/;
 const CONTEXTUAL_LANGUAGE =
-  /^(sim|nao|isso|correto|exato|pode ser|claro|ainda|continua|nao sei|talvez|depende|tanto faz|qualquer um|como assim|\?+)[!,.? ]*$/;
+  /^(sim|nao|isso|correto|exato|pode ser|podemos sim|vamos sim|claro|com certeza|faz sentido|ainda|continua|nao sei|talvez|depende|tanto faz|qualquer um|como assim|\?+)[!,.? ]*$/;
+const MONETARY_ANSWER =
+  /^(?:seria\s+)?(?:de\s+)?(?:ate\s+)?(?:r\s+)?\d+(?:\s+\d{3})*(?:[.,]\d+)?\s*(?:mil|milhao|milhoes|k|reais?)?(?:\s*(?:de\s+)?(?:preco|valor|entrada|parcela|total))?[!,. ]*$/;
 const COMMAND_LANGUAGE =
   /\b(esqueca|ignore|desconsidere|revele|mostre|repita|finja|aja como|me ensine|me fale como|me diga como|escreva|execute|acesse)\b/;
 const EXTERNAL_TOPIC_LANGUAGE =
@@ -89,6 +91,9 @@ export function classifyInboundDomain(args: {
   if (BUSINESS_LANGUAGE.test(normalized)) {
     return allowed('business', 'business_language');
   }
+  if (MONETARY_ANSWER.test(normalized)) {
+    return allowed('qualification_answer', 'monetary_qualification_answer');
+  }
   if (
     args.expectedQuestionKey &&
     isQualificationCandidateSemanticallyCompatible({
@@ -101,13 +106,11 @@ export function classifyInboundDomain(args: {
   if (CONTEXTUAL_LANGUAGE.test(normalized)) {
     return allowed('qualification_answer', 'contextual_reply');
   }
-  if (args.securityBoundaryActive) {
-    return blocked('off_topic', 'restricted_mode_not_business');
-  }
-
-  // Fail closed for a message that has no relation to the commercial domain
-  // and is not compatible with the server-owned pending question.
-  return blocked('off_topic', 'domain_not_recognized');
+  // Ambiguous language is not enough evidence to punish a real lead. The
+  // semantic classifier may still deny an actual off-topic request, while
+  // explicit external topics and prompt manipulation were already blocked
+  // above. If the provider is unavailable, preserve the commercial flow.
+  return allowed('qualification_answer', 'ambiguous_contextual_fallback');
 }
 
 function allowed(domain: InboundDomain, reason: string): InboundDomainDecision {

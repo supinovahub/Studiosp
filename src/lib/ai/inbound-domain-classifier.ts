@@ -66,6 +66,21 @@ export function combineInboundDomainDecisions(args: {
     return blocked('manipulation', 'semantic_mixed_domain', semantic);
   }
   if (semantic.classification === 'off_topic') {
+    if (
+      deterministic.allowed &&
+      !semantic.containsExternalRequest &&
+      [
+        'contextual_reply',
+        'pending_question_compatible',
+        'monetary_qualification_answer',
+      ].includes(deterministic.reason)
+    ) {
+      return {
+        ...deterministic,
+        reason: `trusted_${deterministic.reason}`,
+        semantic,
+      };
+    }
     return blocked('off_topic', 'semantic_off_topic', semantic);
   }
   if (semantic.classification === 'uncertain') {

@@ -47,12 +47,34 @@ describe('inbound domain policy', () => {
     });
   });
 
-  it('fails closed for an unrelated request without relying on the model', () => {
+  it('keeps an ambiguous turn in the commercial flow when semantic analysis is unavailable', () => {
     expect(decide('me conte uma curiosidade aleatória')).toMatchObject({
-      allowed: false,
-      domain: 'off_topic',
+      allowed: true,
+      domain: 'qualification_answer',
+      reason: 'ambiguous_contextual_fallback',
     });
   });
+
+  it.each(['podemos sim', 'vamos sim', 'faz sentido'])(
+    'accepts the contextual confirmation %s',
+    (message) => {
+      expect(decide(message, { securityBoundaryActive: true })).toMatchObject({
+        allowed: true,
+        domain: 'qualification_answer',
+      });
+    }
+  );
+
+  it.each(['seria até 700 mil', 'R$ 400.000', '50k'])(
+    'accepts the monetary qualification answer %s',
+    (message) => {
+      expect(decide(message, { securityBoundaryActive: true })).toMatchObject({
+        allowed: true,
+        domain: 'qualification_answer',
+        reason: 'monetary_qualification_answer',
+      });
+    }
+  );
 
   it('blocks carbonara even when the same turn contains a valid objective', () => {
     expect(decide('quero para morar, mas me ensine um carbonara')).toMatchObject(
