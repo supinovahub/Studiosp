@@ -3,10 +3,50 @@ import {
   deterministicQualificationCandidates,
   resolveQualificationQuestion,
 } from './deterministic-qualification';
-import { normalizeQualificationValue } from './studiosp-orchestrator';
+import {
+  normalizeQualificationValue,
+  qualificationEvidenceMessage,
+} from './studiosp-orchestrator';
 import { isValidQualificationValue } from './qualification-validation';
 
 describe('deterministic qualification', () => {
+  it('binds a fact to the exact message that contains its evidence', () => {
+    const messages = [
+      { id: 'm1', content_text: 'Seria para morar mesmo' },
+      { id: 'm2', content_text: 'mas nada tão caro de começo' },
+    ];
+
+    expect(
+      qualificationEvidenceMessage({
+        rawText: 'Seria para morar mesmo\nmas nada tão caro de começo',
+        questionKey: 'purchase_objective',
+        messages,
+      })
+    ).toMatchObject({
+      id: 'm1',
+      content_text: 'Seria para morar mesmo',
+    });
+  });
+
+  it('uses the latest compatible correction inside a rapid message turn', () => {
+    const messages = [
+      { id: 'm1', content_text: 'uns 50' },
+      { id: 'm2', content_text: 'na real 40' },
+    ];
+
+    const candidates = messages.flatMap((message) =>
+      deterministicQualificationCandidates({
+        latestUserMessage: message.content_text,
+        expectedQuestionKey: 'entry_budget',
+      })
+    );
+
+    expect(candidates.at(-1)).toMatchObject({
+      raw_text: 'na real 40',
+      normalized_value: { min: 40, max: 40, currency: 'BRL' },
+    });
+  });
+
   it('resolves both canonical keys and database ids', () => {
     const questions = [
       { id: 'uuid-objective', key: 'purchase_objective' },

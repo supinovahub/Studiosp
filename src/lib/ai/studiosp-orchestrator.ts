@@ -53,6 +53,76 @@ import { upsertOwnerAttention } from '@/lib/studiosp/attention';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
+function evidenceComparableText(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+export function qualificationEvidenceMessage(args: {
+  rawText: unknown;
+  questionKey: string;
+  messages: Row[];
+}) {
+  const raw = evidenceComparableText(args.rawText);
+  const compatible = [...args.messages]
+    .reverse()
+    .filter((message) =>
+      isQualificationCandidateSemanticallyCompatible({
+        questionKey: args.questionKey,
+        rawText: String(message.content_text ?? ''),
+      })
+    );
+  if (!compatible.length) return null;
+  if (!raw) return compatible[0];
+  return (
+    compatible.find((message) => {
+      const content = evidenceComparableText(message.content_text);
+      return content && (content.includes(raw) || raw.includes(content));
+    }) ?? null
+  );
+}
+
+async function loadCurrentLeadTurnMessages(args: {
+  db: SupabaseClient;
+  conversationId: string;
+  triggerMessageId: string | null;
+}) {
+  if (!args.triggerMessageId) return [] as Row[];
+  const trigger = await args.db
+    .from('messages')
+    .select('id, created_at')
+    .eq('conversation_id', args.conversationId)
+    .eq('id', args.triggerMessageId)
+    .eq('sender_type', 'customer')
+    .maybeSingle();
+  if (!trigger.data) return [] as Row[];
+
+  const previousAssistant = await args.db
+    .from('messages')
+    .select('created_at')
+    .eq('conversation_id', args.conversationId)
+    .in('sender_type', ['agent', 'bot'])
+    .lt('created_at', trigger.data.created_at)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let query = args.db
+    .from('messages')
+    .select('id, content_text, created_at')
+    .eq('conversation_id', args.conversationId)
+    .eq('sender_type', 'customer')
+    .lte('created_at', trigger.data.created_at);
+  if (previousAssistant.data?.created_at) {
+    query = query.gt('created_at', previousAssistant.data.created_at);
+  }
+  const currentTurn = await query.order('created_at', { ascending: true });
+  return (currentTurn.data ?? []) as Row[];
+}
+
 export async function transcribeStudiospAudio(args: {
   db: SupabaseClient;
   accountId: string;
@@ -478,6 +548,11 @@ export async function prepareStudiospTurn(args: {
   const expectedQuestionKeyAtTurn = expectedQuestionAtTurn
     ? String(expectedQuestionAtTurn.key)
     : null;
+  const currentLeadTurnMessages = await loadCurrentLeadTurnMessages({
+    db: args.db,
+    conversationId: args.conversationId,
+    triggerMessageId: args.triggerMessageId ?? null,
+  });
   const unsafeTurn =
     args.inboundDomainDecision?.allowed === false ||
     (Boolean(previousSemanticContext?.securityBoundaryActive) &&
@@ -551,19 +626,24 @@ export async function prepareStudiospTurn(args: {
         });
       }
     }
-    for (const candidate of deterministicQualificationCandidates({
-      latestUserMessage: latestUserText,
-      expectedQuestionKey: expectedQuestionKeyAtTurn,
-    })) {
-      const question = resolveQualificationQuestion(
-        visibleQuestionsAtTurn,
-        candidate.question_id
-      );
-      if (question?.id) {
-        candidateByQuestion.set(String(question.id), {
-          ...candidate,
-          question_id: question.id,
-        });
+    const deterministicMessages = currentLeadTurnMessages.length
+      ? currentLeadTurnMessages
+      : [{ content_text: latestUserText }];
+    for (const turnMessage of deterministicMessages) {
+      for (const candidate of deterministicQualificationCandidates({
+        latestUserMessage: String(turnMessage.content_text ?? ''),
+        expectedQuestionKey: expectedQuestionKeyAtTurn,
+      })) {
+        const question = resolveQualificationQuestion(
+          visibleQuestionsAtTurn,
+          candidate.question_id
+        );
+        if (question?.id) {
+          candidateByQuestion.set(String(question.id), {
+            ...candidate,
+            question_id: question.id,
+          });
+        }
       }
     }
     const scheduleQuestion = visibleQuestionsAtTurn.find(
@@ -682,16 +762,25 @@ export async function prepareStudiospTurn(args: {
       ) {
         continue;
       }
+      const evidenceMessage = qualificationEvidenceMessage({
+        rawText: answer.raw_text,
+        questionKey: String(question.key ?? ''),
+        messages: currentLeadTurnMessages,
+      });
+      if (!evidenceMessage?.id) {
+        rejectedCandidateCount++;
+        continue;
+      }
       const answerResult = await args.db.rpc(
         'studiosp_record_qualification_answer',
         {
           p_opportunity_id: opportunity.id,
           p_question_id: question.id,
-          p_raw_text: String(answer.raw_text ?? ''),
+          p_raw_text: String(evidenceMessage.content_text ?? ''),
           p_normalized_value: answer.normalized_value,
           p_confidence: confidence,
           p_status: confidence >= 0.8 ? 'confirmed' : 'provisional',
-          p_source_message_id: args.triggerMessageId ?? null,
+          p_source_message_id: String(evidenceMessage.id),
           p_ai_run_id: runId,
           p_idempotency_key: args.triggerMessageId
             ? `${args.triggerMessageId}:${question.id}`
