@@ -96,6 +96,69 @@ export function findExactRequestedSlot<T extends Slot>(
   );
 }
 
+export function findAcceptedOfferedSlotByText<T extends Slot>(args: {
+  slots: T[];
+  offeredSlotIds?: string[];
+  latestMessage: string;
+}): T | null {
+  const offeredIds = new Set(args.offeredSlotIds ?? []);
+  if (!offeredIds.size) return null;
+  const offered = args.slots.filter(
+    (slot) =>
+      typeof slot.id === 'string' &&
+      offeredIds.has(slot.id) &&
+      typeof slot.starts_at === 'string' &&
+      Number.isFinite(new Date(slot.starts_at).getTime())
+  );
+  if (!offered.length) return null;
+
+  const normalized = args.latestMessage
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('pt-BR');
+  const explicitTime = normalized.match(
+    /\b(?:as\s+)?([01]?\d|2[0-3])(?:\s*(?::|h)\s*([0-5]\d)?)\b/
+  );
+  if (explicitTime) {
+    const requestedHour = Number(explicitTime[1]);
+    const requestedMinute = Number(explicitTime[2] ?? 0);
+    return (
+      offered.find((slot) => {
+        const start = new Date(String(slot.starts_at));
+        return (
+          localHour(start) === requestedHour &&
+          Number(
+            new Intl.DateTimeFormat('en-US', {
+              timeZone: 'America/Sao_Paulo',
+              minute: '2-digit',
+            }).format(start)
+          ) === requestedMinute
+        );
+      }) ?? null
+    );
+  }
+
+  const ordinal = normalized.match(/\b(?:o\s+)?(primeiro|segundo|terceiro)\b/);
+  const ordinalIndex = ordinal
+    ? { primeiro: 0, segundo: 1, terceiro: 2 }[
+        ordinal[1] as 'primeiro' | 'segundo' | 'terceiro'
+      ]
+    : null;
+  if (ordinalIndex !== null && ordinalIndex !== undefined) {
+    return offered[ordinalIndex] ?? null;
+  }
+
+  if (
+    offered.length === 1 &&
+    /^(?:sim|pode ser|fechado|combinado|confirmo|confirmado|beleza|perfeito|esse|esse horario|esse funciona)[!,. ]*$/.test(
+      normalized
+    )
+  ) {
+    return offered[0];
+  }
+  return null;
+}
+
 export function appointmentConfirmation(value: {
   starts_at?: unknown;
   timezone?: unknown;

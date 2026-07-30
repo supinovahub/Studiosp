@@ -5,6 +5,7 @@ import {
   appointmentReservationFailure,
   closestAvailableSlotReply,
   deriveSchedulingPreference,
+  findAcceptedOfferedSlotByText,
   findExactRequestedSlot,
   isAvailabilityInquiry,
   isOfferedSlotRejection,
@@ -811,11 +812,21 @@ export async function prepareStudiospTurn(args: {
     typeof extraction.accepted_slot_id === 'string'
       ? extraction.accepted_slot_id
       : null;
-  const acceptedSlotId = trustedAcceptedSlotId({
-    extractedSlotId: extractedAcceptedSlotId,
-    previousSemanticContext,
-    latestUserMessage: turn.latestUserMessage,
-  });
+  const deterministicAcceptedSlot = previousSemanticContext
+    ? findAcceptedOfferedSlotByText({
+        slots: reservableSlots,
+        offeredSlotIds: previousSemanticContext.offeredSlotIds,
+        latestMessage: turn.latestUserMessage,
+      })
+    : null;
+  const acceptedSlotId =
+    typeof deterministicAcceptedSlot?.id === 'string'
+      ? deterministicAcceptedSlot.id
+      : trustedAcceptedSlotId({
+          extractedSlotId: extractedAcceptedSlotId,
+          previousSemanticContext,
+          latestUserMessage: turn.latestUserMessage,
+        });
   const rejectedOfferedSlot = isOfferedSlotRejection(
     turn.latestUserMessage,
     previousSemanticContext?.offeredSlotIds ?? []

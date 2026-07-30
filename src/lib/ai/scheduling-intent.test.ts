@@ -5,6 +5,7 @@ import {
   appointmentReservationFailure,
   closestAvailableSlotReply,
   deriveSchedulingPreference,
+  findAcceptedOfferedSlotByText,
   findExactRequestedSlot,
   guardPrematureMeetingOffer,
   isAvailabilityInquiry,
@@ -17,6 +18,30 @@ import {
 } from './scheduling-intent';
 
 describe('scheduling intent', () => {
+  it('selects the exact offered slot from a natural time confirmation', () => {
+    const slots = [
+      { id: 'slot-1445', starts_at: '2026-07-30T17:45:00.000Z' },
+      { id: 'slot-1500', starts_at: '2026-07-30T18:00:00.000Z' },
+      { id: 'slot-1515', starts_at: '2026-07-30T18:15:00.000Z' },
+      { id: 'not-offered', starts_at: '2026-07-31T18:00:00.000Z' },
+    ];
+
+    expect(
+      findAcceptedOfferedSlotByText({
+        slots,
+        offeredSlotIds: ['slot-1445', 'slot-1500', 'slot-1515'],
+        latestMessage: 'pode ser 15h',
+      })
+    ).toMatchObject({ id: 'slot-1500' });
+    expect(
+      findAcceptedOfferedSlotByText({
+        slots,
+        offeredSlotIds: ['slot-1445', 'slot-1500', 'slot-1515'],
+        latestMessage: 'fico com o segundo',
+      })
+    ).toMatchObject({ id: 'slot-1500' });
+  });
+
   it('asks for a preferred day and time after rejecting an offered slot', () => {
     expect(
       isOfferedSlotRejection('Não consigo nesse horário', ['slot-1'])
