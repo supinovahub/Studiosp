@@ -113,8 +113,7 @@ export function conversationTurn(
   const latestUserIndex = messages.findLastIndex(
     (message) => message.role === 'user'
   );
-  const latestUserMessage =
-    latestUserIndex >= 0 ? messages[latestUserIndex].content.trim() : '';
+  const latestUserMessage = latestUserTurn(messages);
   let previousAssistantMessage = '';
   for (let index = latestUserIndex - 1; index >= 0; index--) {
     if (messages[index].role === 'assistant') {
@@ -130,6 +129,43 @@ export function conversationTurn(
       inferExpectedQuestionKey(previousAssistantMessage, questions),
     expectedResponseKind: trustedExpectedResponseKind ?? null,
   };
+}
+
+export function latestUserTurn(messages: ChatMessage[]) {
+  const latestUserIndex = messages.findLastIndex(
+    (message) => message.role === 'user'
+  );
+  if (latestUserIndex < 0) return '';
+  let firstUserIndex = latestUserIndex;
+  while (firstUserIndex > 0 && messages[firstUserIndex - 1].role === 'user') {
+    firstUserIndex--;
+  }
+  return messages
+    .slice(firstUserIndex, latestUserIndex + 1)
+    .filter((message) => message.role === 'user')
+    .map((message) => message.content.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+export function isolateLatestTurnForModel(messages: ChatMessage[]) {
+  const latestUserIndex = messages.findLastIndex(
+    (message) => message.role === 'user'
+  );
+  if (latestUserIndex < 0) return [];
+  let previousAssistantIndex = -1;
+  for (let index = latestUserIndex - 1; index >= 0; index--) {
+    if (messages[index].role === 'assistant') {
+      previousAssistantIndex = index;
+      break;
+    }
+  }
+  const isolated: ChatMessage[] = [];
+  if (previousAssistantIndex >= 0) {
+    isolated.push(messages[previousAssistantIndex]);
+  }
+  isolated.push({ role: 'user', content: latestUserTurn(messages) });
+  return isolated;
 }
 
 export function classifyLeadPosture(args: {

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assessPromptInjection } from './response-policy';
 import { upsertOwnerAttention } from '@/lib/studiosp/attention';
+import type { InboundDomainDecision } from './inbound-domain-policy';
 
 type Row = Record<string, unknown>;
 
@@ -29,6 +30,36 @@ export async function recordPromptInjectionSignal(args: {
     );
   }
   return assessment;
+}
+
+export async function recordInboundDomainBlock(args: {
+  db: SupabaseClient;
+  accountId: string;
+  conversationId: string;
+  messageId?: string | null;
+  decision: InboundDomainDecision;
+}) {
+  if (args.decision.allowed) return;
+  const { error } = await args.db.from('ai_security_events').insert({
+    account_id: args.accountId,
+    conversation_id: args.conversationId,
+    message_id: args.messageId ?? null,
+    event_type: 'inbound_domain_blocked',
+    severity: args.decision.domain === 'manipulation' ? 'warning' : 'info',
+    detector_version: 'inbound-domain-v1',
+    signals: [args.decision.domain, args.decision.reason],
+    metadata: {
+      action: 'blocked_before_ai',
+      domain: args.decision.domain,
+      reason: args.decision.reason,
+    },
+  });
+  if (error && error.code !== '23505') {
+    console.error(
+      '[Studiosp/IA] falha ao registrar bloqueio de domínio:',
+      error
+    );
+  }
 }
 
 export async function loadTrustedGuidance(args: {

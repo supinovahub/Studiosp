@@ -13,6 +13,32 @@ Especificação da importação segura de conversas antigas:
 
 ## Estado da implementação
 
+### Fronteira determinística de domínio da IA — 30 de julho de 2026
+
+#### Implementado, aguardando homologação real controlada
+
+- mensagens consecutivas do lead sem resposta intermediária formam um único
+  turno para segurança e interpretação;
+- antes de consultar conhecimento, classificar o SDR, extrair dados ou gerar
+  texto, o servidor classifica o turno em um conjunto fechado de domínios;
+- manipulação de instruções e assuntos externos são bloqueados antes de
+  qualquer chamada ao modelo e recebem somente redirecionamento determinístico
+  para a pergunta comercial pendente;
+- a pergunta pendente e os fatos confirmados no banco continuam sendo a fonte
+  de verdade; conteúdo bloqueado não altera qualificação, resumo, briefing,
+  matching nem agendamento;
+- depois de um bloqueio, a conversa permanece em modo restrito até o lead
+  enviar uma mensagem reconhecida como comercial ou compatível com a pergunta
+  pendente;
+- ao retomar após um bloqueio, os modelos recebem somente a última pergunta
+  confiável e o novo turno válido; o histórico ofensivo não volta ao contexto
+  de geração;
+- a política falha de forma fechada quando um turno não pertence ao domínio
+  comercial, e a política de saída também rejeita conteúdo externo produzido
+  indevidamente pelo modelo;
+- cada bloqueio gera evento de segurança com domínio, motivo, mensagem,
+  conversa e ação tomada, sem persistir o conteúdo integral no evento.
+
 ### Estabilização da qualificação SDR — 29 de julho de 2026
 
 #### Implementado, aguardando homologação real controlada

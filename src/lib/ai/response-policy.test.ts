@@ -82,6 +82,16 @@ describe('outbound response policy', () => {
     );
   });
 
+  it('blocks an off-domain answer even if the generation model produced it', () => {
+    const result = enforceOutboundPolicy({
+      text: 'Lave o arroz e use duas partes de água para cozinhar.',
+      latestLeadMessage: 'Como funciona?',
+      messages: [],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.violations).toContain('out_of_domain');
+  });
+
   it('removes a repeated lead name from the beginning', () => {
     const result = enforceOutboundPolicy({
       text: 'Maria, qual bairro você prefere?',

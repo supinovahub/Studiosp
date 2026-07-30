@@ -28,15 +28,18 @@ import {
   loadResolvingGuidance,
   openGuidanceRequest,
   openOperationalFailure,
+  recordInboundDomainBlock,
   recordPromptInjectionSignal,
   resolveGuidanceAfterReply,
 } from './guidance';
 import {
   delayedResumePrefix,
+  assessPromptInjection,
   enforceOutboundPolicy,
   isExplicitOptOut,
   joinResumePrefix,
   keepFirstQuestion,
+  securityBoundaryReply,
   type OutboundPolicyResult,
 } from './response-policy';
 import {
@@ -46,7 +49,15 @@ import {
   markAiOutboxPartSent,
   prepareAiResponseOutbox,
 } from './delivery';
-import { semanticMessageMetadata } from './semantic-context';
+import {
+  loadPreviousAssistantSemanticContext,
+  semanticMessageMetadata,
+} from './semantic-context';
+import {
+  isolateLatestTurnForModel,
+  latestUserTurn,
+} from './conversation-behavior';
+import { classifyInboundDomain } from './inbound-domain-policy';
 import type { AiConfig, ChatMessage } from './types';
 
 interface DispatchArgs {
@@ -208,6 +219,7 @@ export async function dispatchInboundToAiReply(
     if (messages.length === 0)
       return { outcome: 'skipped', reason: 'no_conversation_context' };
     const latestLeadText = latestUserMessage(messages);
+    const latestLeadTurnText = latestUserTurn(messages) || latestLeadText;
     if (
       await hasMatchingAutomationReply({
         db,
@@ -229,12 +241,35 @@ export async function dispatchInboundToAiReply(
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
-    const promptInjectionAssessment = await recordPromptInjectionSignal({
+    const previousSemanticContext = await loadPreviousAssistantSemanticContext({
+      db,
+      conversationId,
+      triggerMessageId: triggerMessage?.id ?? triggerMessageId,
+    });
+    const injectionAssessment = assessPromptInjection(latestLeadTurnText);
+    const inboundDomainDecision = classifyInboundDomain({
+      message: latestLeadTurnText,
+      expectedQuestionKey: previousSemanticContext?.expectedQuestionKey,
+      securityBoundaryActive: previousSemanticContext?.securityBoundaryActive,
+      injection: injectionAssessment,
+      explicitOptOut: isExplicitOptOut(latestLeadTurnText),
+    });
+    const modelMessages = previousSemanticContext?.securityBoundaryActive
+      ? isolateLatestTurnForModel(messages)
+      : messages;
+    await recordPromptInjectionSignal({
       db,
       accountId,
       conversationId,
       messageId: triggerMessage?.id ?? triggerMessageId,
-      message: latestLeadText,
+      message: latestLeadTurnText,
+    });
+    await recordInboundDomainBlock({
+      db,
+      accountId,
+      conversationId,
+      messageId: triggerMessage?.id ?? triggerMessageId,
+      decision: inboundDomainDecision,
     });
 
     // This limiter lives in Postgres so simultaneous Vercel instances share
@@ -272,23 +307,22 @@ export async function dispatchInboundToAiReply(
     }
 
     // Ground the reply in the account's knowledge base (best-effort).
-    const knowledge = await retrieveKnowledge(
-      db,
-      accountId,
-      config,
-      latestUserMessage(messages)
-    );
+    const knowledge = inboundDomainDecision.allowed
+      ? await retrieveKnowledge(db, accountId, config, latestLeadTurnText)
+      : [];
 
-    const classification = await classifySdrTurn({ config, messages }).catch(
-      (err) => {
-        console.error('[ai auto-reply] SDR classification failed:', err);
-        return emptySdrClassification();
-      }
-    );
+    const classification = inboundDomainDecision.allowed
+      ? await classifySdrTurn({ config, messages: modelMessages }).catch(
+          (err) => {
+            console.error('[ai auto-reply] SDR classification failed:', err);
+            return emptySdrClassification();
+          }
+        )
+      : emptySdrClassification();
     // Opt-out changes durable contact state, so the model is never the
     // authority for this decision. Only an explicit phrase from the lead can
     // close the conversation and cancel future messages.
-    if (isExplicitOptOut(latestLeadText)) {
+    if (isExplicitOptOut(latestLeadTurnText)) {
       const now = new Date().toISOString();
       const { data: reactivationLeads } = await db
         .from('reactivation_leads')
@@ -345,7 +379,8 @@ export async function dispatchInboundToAiReply(
       triggerMessageId: triggerMessage?.id ?? null,
       config,
       messages,
-      promptInjectionDetected: promptInjectionAssessment.detected,
+      modelMessages,
+      inboundDomainDecision,
     });
     if (!studiosp.opportunityId) {
       await openOperationalFailure({
@@ -384,7 +419,7 @@ export async function dispatchInboundToAiReply(
             usage: null,
           }
         : await generatePrimaryReply(
-            { config, systemPrompt, messages },
+            { config, systemPrompt, messages: modelMessages },
             studiosp.nextQualificationPrompt
           );
     const guardedResponse =
@@ -407,6 +442,14 @@ export async function dispatchInboundToAiReply(
       messages,
       leadName: contact?.name,
     });
+    if (responsePolicy.violations.includes('out_of_domain')) {
+      responsePolicy = enforceOutboundPolicy({
+        text: securityBoundaryReply(studiosp.nextQualificationPrompt),
+        latestLeadMessage: latestLeadText,
+        messages: modelMessages,
+        leadName: contact?.name,
+      });
+    }
     if (
       responsePolicy.violations.length === 1 &&
       responsePolicy.violations[0] === 'multiple_questions'
@@ -414,7 +457,7 @@ export async function dispatchInboundToAiReply(
       responsePolicy = enforceOutboundPolicy({
         text: keepFirstQuestion(responsePolicy.text),
         latestLeadMessage: latestLeadText,
-        messages,
+        messages: modelMessages,
         leadName: contact?.name,
       });
     }
@@ -427,7 +470,7 @@ export async function dispatchInboundToAiReply(
       responsePolicy = await repairPolicyViolations({
         config,
         systemPrompt,
-        messages,
+        messages: modelMessages,
         previousText: generatedResponse,
         previousResult: responsePolicy,
         latestLeadMessage: latestLeadText,

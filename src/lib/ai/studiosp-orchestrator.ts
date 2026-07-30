@@ -36,6 +36,7 @@ import {
   isClearlyOffTopicRequest,
   securityBoundaryReply,
 } from './response-policy';
+import type { InboundDomainDecision } from './inbound-domain-policy';
 import {
   deterministicQualificationCandidates,
   resolveQualificationQuestion,
@@ -278,7 +279,8 @@ export async function prepareStudiospTurn(args: {
   triggerMessageId?: string | null;
   config: AiConfig;
   messages: ChatMessage[];
-  promptInjectionDetected?: boolean;
+  modelMessages?: ChatMessage[];
+  inboundDomainDecision?: InboundDomainDecision;
 }): Promise<StudiospTurnContext> {
   const empty: StudiospTurnContext = {
     opportunityId: null,
@@ -442,6 +444,8 @@ export async function prepareStudiospTurn(args: {
     requested_start_at: null,
     insists_on_requested_time: false,
   };
+  let extractionInputTokens: number | null = null;
+  let extractionOutputTokens: number | null = null;
   const previousSemanticContext = await loadPreviousAssistantSemanticContext({
     db: args.db,
     conversationId: args.conversationId,
@@ -474,7 +478,7 @@ export async function prepareStudiospTurn(args: {
     ? String(expectedQuestionAtTurn.key)
     : null;
   const unsafeTurn =
-    Boolean(args.promptInjectionDetected) ||
+    args.inboundDomainDecision?.allowed === false ||
     (Boolean(previousSemanticContext?.securityBoundaryActive) &&
       isClearlyOffTopicRequest(turn.latestUserMessage));
   let schedulingPreference = deriveSchedulingPreference({
@@ -488,30 +492,24 @@ export async function prepareStudiospTurn(args: {
       : null,
   });
   try {
-    const extractionPrompt = buildExtractionPrompt(
-      visibleQuestionsAtTurn,
-      options as Row[],
-      currentAnswers as Row[],
-      availableSlots
-    );
-    const generated = await generateReplyWithFallback({
-      config: args.config,
-      systemPrompt: extractionPrompt,
-      messages: args.messages,
-      jsonMode: true,
-      maxOutputTokens: 1800,
-      requestTimeoutMs: 10_000,
-    });
-    extraction = parseObject(generated.text);
-    if (unsafeTurn) {
-      extraction = {
-        answers: [],
-        summary: '',
-        call_brief: null,
-        accepted_slot_id: null,
-        requested_start_at: null,
-        insists_on_requested_time: false,
-      };
+    if (!unsafeTurn) {
+      const extractionPrompt = buildExtractionPrompt(
+        visibleQuestionsAtTurn,
+        options as Row[],
+        currentAnswers as Row[],
+        availableSlots
+      );
+      const generated = await generateReplyWithFallback({
+        config: args.config,
+        systemPrompt: extractionPrompt,
+        messages: args.modelMessages ?? args.messages,
+        jsonMode: true,
+        maxOutputTokens: 1800,
+        requestTimeoutMs: 10_000,
+      });
+      extraction = parseObject(generated.text);
+      extractionInputTokens = generated.usage?.promptTokens ?? null;
+      extractionOutputTokens = generated.usage?.completionTokens ?? null;
     }
     const latestUserText = turn.latestUserMessage;
     schedulingPreference = deriveSchedulingPreference({
@@ -742,6 +740,7 @@ export async function prepareStudiospTurn(args: {
           status: 'completed',
           structured_output: {
             ...extraction,
+            inbound_domain: args.inboundDomainDecision ?? null,
             turn_evidence: {
               latest_user_message: latestUserText,
               previous_assistant_message: turn.previousAssistantMessage,
@@ -752,8 +751,8 @@ export async function prepareStudiospTurn(args: {
             accepted_question_ids: acceptedQuestionIds,
             rejected_candidate_count: rejectedCandidateCount,
           },
-          input_tokens: generated.usage?.promptTokens ?? null,
-          output_tokens: generated.usage?.completionTokens ?? null,
+          input_tokens: extractionInputTokens,
+          output_tokens: extractionOutputTokens,
           latency_ms: Date.now() - startedAt,
           completed_at: new Date().toISOString(),
         })

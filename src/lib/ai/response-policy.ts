@@ -75,8 +75,9 @@ export function assessPromptInjection(
 }
 
 const CLEARLY_OFF_TOPIC_PATTERNS = [
-  /\b(receita|brownie|bolo|brigadeiro|lasanha|pizza)\b/i,
+  /\b(receita|cozinhar|cozinha|arroz|feij[aã]o|brownie|bolo|brigadeiro|lasanha|pizza)\b/i,
   /\b(escreva|conte|invente).{0,25}\b(poema|piada|hist[oó]ria)\b/i,
+  /\b(c[oó]digo fonte|programa[cç][aã]o|futebol|pol[ií]tica)\b/i,
 ];
 
 export function isClearlyOffTopicRequest(message: string) {
@@ -122,6 +123,7 @@ export function enforceOutboundPolicy(args: {
   if (SECRET_LEAK_PATTERNS.some((pattern) => pattern.test(text))) {
     violations.push('internal_data_leak');
   }
+  if (isClearlyOffTopicRequest(text)) violations.push('out_of_domain');
   if (questionCount(text) > 1) violations.push('multiple_questions');
 
   text = removeRepeatedLeadName({
