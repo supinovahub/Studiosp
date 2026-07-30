@@ -23,6 +23,8 @@ ambígua como evidência de risco, gerando o falso positivo.
   monetária determinística sem detectar um pedido externo;
 - quando o classificador semântico está indisponível e não existe sinal
   explícito de ataque ou assunto externo, o fluxo comercial continua;
+- strikes produzidos pela política anterior não são reutilizados pela nova
+  versão do detector;
 - prompt injection, pedidos mistos e assuntos externos explícitos continuam
   bloqueados.
 
@@ -39,4 +41,3 @@ Repetir o fluxo com respostas curtas e financeiras. A conversa não deve ser
 pausada por `podemos sim` nem por valores como `seria até 700 mil`. Pedidos
 externos explícitos e tentativas de manipulação devem continuar gerando a
 notificação de segurança para o dono.
-

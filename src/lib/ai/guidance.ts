@@ -4,6 +4,7 @@ import { upsertOwnerAttention } from '@/lib/studiosp/attention';
 import type { InboundDomainDecision } from './inbound-domain-policy';
 
 type Row = Record<string, unknown>;
+const INBOUND_DOMAIN_DETECTOR_VERSION = 'inbound-domain-v2';
 
 export async function recordPromptInjectionSignal(args: {
   db: SupabaseClient;
@@ -46,7 +47,7 @@ export async function recordInboundDomainBlock(args: {
     message_id: args.messageId ?? null,
     event_type: 'inbound_domain_blocked',
     severity: args.decision.domain === 'manipulation' ? 'warning' : 'info',
-    detector_version: 'inbound-domain-v1',
+    detector_version: INBOUND_DOMAIN_DETECTOR_VERSION,
     signals: [args.decision.domain, args.decision.reason],
     metadata: {
       action: 'blocked_before_ai',
@@ -79,7 +80,8 @@ export async function enforceInboundSecurityLock(args: {
     .select('id', { count: 'exact', head: true })
     .eq('account_id', args.accountId)
     .eq('conversation_id', args.conversationId)
-    .eq('event_type', 'inbound_domain_blocked');
+    .eq('event_type', 'inbound_domain_blocked')
+    .eq('detector_version', INBOUND_DOMAIN_DETECTOR_VERSION);
   if (args.messageId) {
     priorBlocksQuery = priorBlocksQuery.neq('message_id', args.messageId);
   }
