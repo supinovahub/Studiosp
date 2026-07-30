@@ -28,6 +28,7 @@ import {
   loadResolvingGuidance,
   openGuidanceRequest,
   openOperationalFailure,
+  enforceInboundSecurityLock,
   recordInboundDomainBlock,
   recordPromptInjectionSignal,
   resolveGuidanceAfterReply,
@@ -58,6 +59,11 @@ import {
   latestUserTurn,
 } from './conversation-behavior';
 import { classifyInboundDomain } from './inbound-domain-policy';
+import {
+  classifyInboundDomainWithAi,
+  combineInboundDomainDecisions,
+  shouldRunSemanticDomainClassifier,
+} from './inbound-domain-classifier';
 import type { AiConfig, ChatMessage } from './types';
 
 interface DispatchArgs {
@@ -247,7 +253,7 @@ export async function dispatchInboundToAiReply(
       triggerMessageId: triggerMessage?.id ?? triggerMessageId,
     });
     const injectionAssessment = assessPromptInjection(latestLeadTurnText);
-    const inboundDomainDecision = classifyInboundDomain({
+    const deterministicDomainDecision = classifyInboundDomain({
       message: latestLeadTurnText,
       expectedQuestionKey: previousSemanticContext?.expectedQuestionKey,
       securityBoundaryActive: previousSemanticContext?.securityBoundaryActive,
@@ -264,13 +270,25 @@ export async function dispatchInboundToAiReply(
       messageId: triggerMessage?.id ?? triggerMessageId,
       message: latestLeadTurnText,
     });
-    await recordInboundDomainBlock({
-      db,
-      accountId,
-      conversationId,
-      messageId: triggerMessage?.id ?? triggerMessageId,
-      decision: inboundDomainDecision,
-    });
+    if (deterministicDomainDecision.domain === 'manipulation') {
+      await recordInboundDomainBlock({
+        db,
+        accountId,
+        conversationId,
+        messageId: triggerMessage?.id ?? triggerMessageId,
+        decision: deterministicDomainDecision,
+      });
+      await enforceInboundSecurityLock({
+        db,
+        accountId,
+        conversationId,
+        contactId,
+        messageId: triggerMessage?.id ?? triggerMessageId,
+        contextStartedAt: conv.ai_context_started_at,
+        decision: deterministicDomainDecision,
+      });
+      return { outcome: 'handoff', reason: 'security_lock' };
+    }
 
     // This limiter lives in Postgres so simultaneous Vercel instances share
     // the same account budget.
@@ -304,6 +322,44 @@ export async function dispatchInboundToAiReply(
         reason: 'account_rate_limited',
         retryable: true,
       };
+    }
+
+    const semanticDomainAssessment =
+      shouldRunSemanticDomainClassifier(deterministicDomainDecision)
+        ? await classifyInboundDomainWithAi({
+            config,
+            message: latestLeadTurnText,
+            expectedQuestionKey: previousSemanticContext?.expectedQuestionKey,
+          }).catch((error) => {
+            console.error(
+              '[ai auto-reply] semantic domain classification failed:',
+              error
+            );
+            return null;
+          })
+        : null;
+    const inboundDomainDecision = combineInboundDomainDecisions({
+      deterministic: deterministicDomainDecision,
+      semantic: semanticDomainAssessment,
+    });
+    await recordInboundDomainBlock({
+      db,
+      accountId,
+      conversationId,
+      messageId: triggerMessage?.id ?? triggerMessageId,
+      decision: inboundDomainDecision,
+    });
+    const securityLock = await enforceInboundSecurityLock({
+      db,
+      accountId,
+      conversationId,
+      contactId,
+      messageId: triggerMessage?.id ?? triggerMessageId,
+      contextStartedAt: conv.ai_context_started_at,
+      decision: inboundDomainDecision,
+    });
+    if (securityLock.locked) {
+      return { outcome: 'handoff', reason: 'security_lock' };
     }
 
     // Ground the reply in the account's knowledge base (best-effort).

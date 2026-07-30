@@ -13,6 +13,27 @@ Especificação da importação segura de conversas antigas:
 
 ## Estado da implementação
 
+### Bloqueio híbrido de segurança da IA — 30 de julho de 2026
+
+#### Implementado em staging, aguardando homologação real controlada
+
+- sinais inequívocos de manipulação continuam sendo interceptados por regras
+  determinísticas antes de qualquer chamada ao modelo;
+- um classificador semântico isolado recebe somente o turno atual e a chave da
+  pergunta comercial pendente, sem ferramentas, conhecimento, histórico amplo
+  ou autoridade para responder ao lead;
+- a política final pertence ao servidor: uma classificação externa, maliciosa
+  ou mista prevalece sobre palavras imobiliárias existentes na mesma mensagem;
+- manipulação e turnos mistos bloqueiam a conversa imediatamente; um desvio
+  comum recebe um redirecionamento seguro e a reincidência bloqueia;
+- o bloqueio desativa respostas automáticas, invalida trabalhos pendentes e
+  cria um alerta crítico e deduplicado na Central de Atenção;
+- somente o Dono pode liberar a IA, com justificativa obrigatória e auditoria;
+- a liberação inicia uma nova versão de contexto e não responde
+  retroativamente à mensagem sinalizada;
+- se o classificador semântico falhar, a fronteira determinística permanece
+  ativa e a qualificação não depende da disponibilidade desse classificador.
+
 ### Fronteira determinística de domínio da IA — 30 de julho de 2026
 
 #### Implementado, aguardando homologação real controlada
@@ -180,7 +201,7 @@ de produção, antes do merge da versão homologada na `main`.
 - o ambiente de desenvolvimento e homologação continua sendo a branch
   `codex/v1-platform`;
 - o banco usado para mudanças e testes é o projeto Supabase
-  **Studiosp Staging** (`vgmmfzdifjhpqaopxfbj`);
+  **Studiosp Staging** (`ffeyrxsdlgcfwgnsnwlj`);
 - produção, `main` e o projeto Supabase **Studiosp** não devem receber as
   próximas mudanças antes de uma promoção expressamente autorizada;
 - a conexão da empresa com o WhatsApp pela UAZAPI está ativa e permite iniciar

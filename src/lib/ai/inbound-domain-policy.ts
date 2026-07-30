@@ -18,6 +18,21 @@ export interface InboundDomainDecision {
   domain: InboundDomain;
   allowed: boolean;
   reason: string;
+  semantic?: SemanticDomainAssessment;
+}
+
+export interface SemanticDomainAssessment {
+  classification:
+    | 'real_estate'
+    | 'contextual'
+    | 'off_topic'
+    | 'manipulation'
+    | 'mixed'
+    | 'uncertain';
+  confidence: number;
+  containsValidLeadAnswer: boolean;
+  containsExternalRequest: boolean;
+  reason: string;
 }
 
 const BUSINESS_LANGUAGE =
@@ -35,7 +50,7 @@ const CONTEXTUAL_LANGUAGE =
 const COMMAND_LANGUAGE =
   /\b(esqueca|ignore|desconsidere|revele|mostre|repita|finja|aja como|me ensine|me fale como|me diga como|escreva|execute|acesse)\b/;
 const EXTERNAL_TOPIC_LANGUAGE =
-  /\b(receita|cozinhar|cozinha|arroz|feijao|brownie|bolo|brigadeiro|lasanha|pizza|poema|piada|codigo fonte|programacao|futebol|politica)\b/;
+  /\b(receita|cozinhar|cozinha|arroz|feijao|macarrao|massa|carbonara|brownie|bolo|brigadeiro|lasanha|pizza|poema|piada|codigo fonte|programacao|futebol|politica)\b/;
 
 export function classifyInboundDomain(args: {
   message: string;

@@ -21,6 +21,8 @@ const h = vi.hoisted(() => ({
   openOperationalFailure: vi.fn(),
   recordPromptInjectionSignal: vi.fn(),
   recordInboundDomainBlock: vi.fn(),
+  enforceInboundSecurityLock: vi.fn(),
+  classifyInboundDomainWithAi: vi.fn(),
   loadPreviousAssistantSemanticContext: vi.fn(),
   loadAiResponseOutboxForJob: vi.fn(),
   prepareAiResponseOutbox: vi.fn(),
@@ -96,6 +98,16 @@ vi.mock('./guidance', () => ({
   openOperationalFailure: h.openOperationalFailure,
   recordPromptInjectionSignal: h.recordPromptInjectionSignal,
   recordInboundDomainBlock: h.recordInboundDomainBlock,
+  enforceInboundSecurityLock: h.enforceInboundSecurityLock,
+}));
+vi.mock('./inbound-domain-classifier', () => ({
+  classifyInboundDomainWithAi: h.classifyInboundDomainWithAi,
+  shouldRunSemanticDomainClassifier: () => false,
+  combineInboundDomainDecisions: ({
+    deterministic,
+  }: {
+    deterministic: Record<string, unknown>;
+  }) => deterministic,
 }));
 vi.mock('./delivery', () => ({
   loadAiResponseOutboxForJob: h.loadAiResponseOutboxForJob,
@@ -365,6 +377,11 @@ beforeEach(() => {
     signals: [],
   });
   h.recordInboundDomainBlock.mockResolvedValue(undefined);
+  h.enforceInboundSecurityLock.mockResolvedValue({
+    locked: false,
+    strikeCount: 0,
+  });
+  h.classifyInboundDomainWithAi.mockResolvedValue(null);
   h.loadPreviousAssistantSemanticContext.mockResolvedValue(null);
 });
 
@@ -404,15 +421,17 @@ describe('dispatchInboundToAiReply â€” eligibility gates', () => {
         }),
       })
     );
-    expect(h.prepareStudiospTurn).toHaveBeenCalledWith(
+    expect(h.enforceInboundSecurityLock).toHaveBeenCalledWith(
       expect.objectContaining({
-        inboundDomainDecision: expect.objectContaining({
+        decision: expect.objectContaining({
           allowed: false,
           domain: 'manipulation',
         }),
       })
     );
-    expect(h.engineSendText).toHaveBeenCalledWith(
+    expect(h.prepareStudiospTurn).not.toHaveBeenCalled();
+    expect(h.engineSendText).not.toHaveBeenCalled();
+    void (
       expect.objectContaining({
         text: expect.stringContaining('busca do imóvel'),
       })

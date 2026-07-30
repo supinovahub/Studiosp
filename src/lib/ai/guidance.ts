@@ -52,6 +52,7 @@ export async function recordInboundDomainBlock(args: {
       action: 'blocked_before_ai',
       domain: args.decision.domain,
       reason: args.decision.reason,
+      semantic: args.decision.semantic ?? null,
     },
   });
   if (error && error.code !== '23505') {
@@ -60,6 +61,139 @@ export async function recordInboundDomainBlock(args: {
       error
     );
   }
+}
+
+export async function enforceInboundSecurityLock(args: {
+  db: SupabaseClient;
+  accountId: string;
+  conversationId: string;
+  contactId: string;
+  messageId?: string | null;
+  contextStartedAt?: string | null;
+  decision: InboundDomainDecision;
+}) {
+  if (args.decision.allowed) return { locked: false, strikeCount: 0 };
+
+  let priorBlocksQuery = args.db
+    .from('ai_security_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('account_id', args.accountId)
+    .eq('conversation_id', args.conversationId)
+    .eq('event_type', 'inbound_domain_blocked');
+  if (args.messageId) {
+    priorBlocksQuery = priorBlocksQuery.neq('message_id', args.messageId);
+  }
+  const priorBlocks = args.contextStartedAt
+    ? await priorBlocksQuery.gte('created_at', args.contextStartedAt)
+    : await priorBlocksQuery;
+  if (priorBlocks.error) throw priorBlocks.error;
+
+  const strikeCount = Number(priorBlocks.count ?? 0) + 1;
+  const immediateLock =
+    args.decision.domain === 'manipulation' ||
+    args.decision.reason === 'semantic_mixed_domain';
+  if (!immediateLock && strikeCount < 2) {
+    return { locked: false, strikeCount };
+  }
+
+  const now = new Date().toISOString();
+  const { data: opportunity } = await args.db
+    .from('opportunities')
+    .select('id')
+    .eq('account_id', args.accountId)
+    .eq('contact_id', args.contactId)
+    .not('stage', 'in', '(won,lost)')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const reasonCode =
+    args.decision.domain === 'manipulation'
+      ? 'ai_security_manipulation'
+      : 'ai_security_repeated_off_topic';
+  const update = await args.db
+    .from('conversations')
+    .update({
+      ai_autoreply_disabled: true,
+      ai_control_mode: 'paused',
+      ai_control_reason: reasonCode,
+      ai_control_changed_at: now,
+      ai_processing_status: 'paused',
+      ai_processing_reason: 'security_review_required',
+    })
+    .eq('account_id', args.accountId)
+    .eq('id', args.conversationId);
+  if (update.error) throw update.error;
+
+  await Promise.all([
+    (() => {
+      let jobs = args.db
+        .from('ai_reply_jobs')
+        .update({
+          status: 'skipped',
+          completed_at: now,
+          claimed_at: null,
+          lease_expires_at: null,
+          outcome_reason: 'security_lock',
+        })
+        .eq('account_id', args.accountId)
+        .eq('conversation_id', args.conversationId)
+        .in('status', ['queued', 'retrying', 'processing']);
+      if (args.messageId) {
+        jobs = jobs.neq('trigger_message_id', args.messageId);
+      }
+      return jobs;
+    })(),
+    args.db
+      .from('ai_response_outbox')
+      .update({
+        status: 'cancelled',
+        lease_expires_at: null,
+        last_error: 'security_lock',
+      })
+      .eq('account_id', args.accountId)
+      .eq('conversation_id', args.conversationId)
+      .in('status', ['pending', 'failed']),
+    upsertOwnerAttention(args.db, {
+      accountId: args.accountId,
+      opportunityId: opportunity?.id ?? null,
+      kind: 'ai_security_review',
+      severity: 'critical',
+      title: 'Conversa bloqueada por segurança',
+      context: {
+        conversation_id: args.conversationId,
+        trigger_message_id: args.messageId ?? null,
+        reason_code: reasonCode,
+        domain: args.decision.domain,
+        decision_reason: args.decision.reason,
+        strike_count: strikeCount,
+        semantic: args.decision.semantic ?? null,
+      },
+      dueAt: now,
+      deduplicationKey: `ai-security:${args.conversationId}`,
+    }),
+    args.db.from('ai_security_events').upsert(
+      {
+        account_id: args.accountId,
+        conversation_id: args.conversationId,
+        message_id: args.messageId ?? null,
+        event_type: 'ai_security_lock',
+        severity: 'warning',
+        detector_version: 'hybrid-domain-v1',
+        signals: [args.decision.domain, args.decision.reason],
+        metadata: {
+          action: 'conversation_locked_for_owner_review',
+          strike_count: strikeCount,
+        },
+      },
+      {
+        onConflict: 'account_id,message_id,event_type',
+        ignoreDuplicates: true,
+      }
+    ),
+  ]);
+
+  return { locked: true, strikeCount };
 }
 
 export async function loadTrustedGuidance(args: {

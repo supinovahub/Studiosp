@@ -423,6 +423,25 @@ export async function POST(request: NextRequest) {
       const conversationId = text(body.conversationId);
       const incidentId = text(body.incidentId);
       const admin = supabaseAdmin();
+      const { data: securityConversation } = await admin
+        .from('conversations')
+        .select('ai_control_reason')
+        .eq('account_id', accountId)
+        .eq('id', conversationId)
+        .maybeSingle();
+      if (
+        String(securityConversation?.ai_control_reason ?? '').startsWith(
+          'ai_security_'
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              'Esta conversa exige revisão de segurança e só pode ser liberada pela ação específica do dono.',
+          },
+          { status: 409 }
+        );
+      }
       const queued = await queueOwnerAiRetry({
         admin,
         accountId,
@@ -447,6 +466,36 @@ export async function POST(request: NextRequest) {
       }
       await triggerAiReplyProcessor(0);
       return NextResponse.json({ queued });
+    }
+
+    if (action === 'release_ai_security_lock') {
+      if (role !== 'owner') {
+        throw new ForbiddenError(
+          'Somente o dono pode liberar uma conversa bloqueada por segurança.'
+        );
+      }
+      const conversationId = text(body.conversationId);
+      const attentionId = text(body.attentionId);
+      const justification = text(body.justification);
+      if (!conversationId || !attentionId || justification.length < 5) {
+        return NextResponse.json(
+          {
+            error:
+              'Informe a conversa, o alerta e uma justificativa para a liberação.',
+          },
+          { status: 400 }
+        );
+      }
+      const released = await supabase.rpc(
+        'studiosp_release_ai_security_lock',
+        {
+          p_conversation_id: conversationId,
+          p_attention_id: attentionId,
+          p_justification: justification,
+        }
+      );
+      actionError(released.error);
+      return NextResponse.json({ conversation: released.data });
     }
 
     if (action === 'pause_ai_conversation') {

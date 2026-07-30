@@ -13,6 +13,8 @@ import {
   Pause,
   Play,
   SendHorizontal,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   UserRoundCheck,
 } from 'lucide-react';
@@ -57,6 +59,9 @@ export function AttentionPage() {
   const [guidanceScope, setGuidanceScope] = useState<
     'reply' | 'conversation' | 'knowledge'
   >('reply');
+  const [securityItem, setSecurityItem] =
+    useState<StudiospAttention | null>(null);
+  const [securityJustification, setSecurityJustification] = useState('');
   const [renderedAt] = useState(() => Date.now());
 
   const items = useMemo(() => data?.attention ?? [], [data?.attention]);
@@ -141,6 +146,40 @@ export function AttentionPage() {
         err instanceof Error
           ? err.message
           : 'Não foi possível continuar com o Pedro.'
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function releaseSecurityLock() {
+    const conversationId = String(
+      securityItem?.context?.conversation_id ?? ''
+    );
+    if (
+      !securityItem ||
+      !conversationId ||
+      securityJustification.trim().length < 5
+    ) {
+      setActionError('Informe por que esta conversa pode ser liberada.');
+      return;
+    }
+    setSavingId(securityItem.id);
+    setActionError(null);
+    try {
+      await runStudiospAction('release_ai_security_lock', {
+        conversationId,
+        attentionId: securityItem.id,
+        justification: securityJustification.trim(),
+      });
+      setSecurityItem(null);
+      setSecurityJustification('');
+      await reload();
+    } catch (err) {
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível liberar esta conversa.'
       );
     } finally {
       setSavingId(null);
@@ -311,7 +350,9 @@ export function AttentionPage() {
                   'ai_needs_guidance',
                   'ai_operational_failure',
                   'ai_partial_reply',
+                  'ai_security_review',
                 ].includes(item.kind);
+                const isSecurityCase = item.kind === 'ai_security_review';
                 const deliveryUnsafe = ['ambiguous', 'partially_sent'].includes(
                   String(
                     item.incident?.delivery_state ??
@@ -403,7 +444,19 @@ export function AttentionPage() {
                           Orientar o Pedro
                         </Button>
                       ) : null}
+                      {isSecurityCase && filter === 'action' ? (
+                        <Button
+                          onClick={() => {
+                            setSecurityItem(item);
+                            setSecurityJustification('');
+                          }}
+                        >
+                          <ShieldCheck />
+                          Revisar e liberar IA
+                        </Button>
+                      ) : null}
                       {isAiCase &&
+                      !isSecurityCase &&
                       !deliveryUnsafe &&
                       (filter === 'action' || filter === 'paused') &&
                       !needsGuidance ? (
@@ -535,6 +588,57 @@ export function AttentionPage() {
         }}
         onSubmit={() => void provideGuidance()}
       />
+      <Dialog
+        open={Boolean(securityItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSecurityItem(null);
+            setSecurityJustification('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="text-red-500" />
+              Revisar bloqueio de segurança
+            </DialogTitle>
+            <DialogDescription>
+              A IA permanecerá bloqueada até a liberação do dono. Ao liberar,
+              um novo contexto será iniciado e a mensagem sinalizada não será
+              respondida automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={securityJustification}
+            onChange={(event) => setSecurityJustification(event.target.value)}
+            placeholder="Explique por que é seguro retomar o atendimento"
+            maxLength={1000}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSecurityItem(null)}
+              disabled={Boolean(securityItem && savingId === securityItem.id)}
+            >
+              Manter bloqueada
+            </Button>
+            <Button
+              onClick={() => void releaseSecurityLock()}
+              disabled={
+                !securityItem ||
+                securityJustification.trim().length < 5 ||
+                savingId === securityItem.id
+              }
+            >
+              <ShieldCheck />
+              {securityItem && savingId === securityItem.id
+                ? 'Liberando...'
+                : 'Liberar IA'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -53,4 +53,13 @@ describe('inbound domain policy', () => {
       domain: 'off_topic',
     });
   });
+
+  it('blocks carbonara even when the same turn contains a valid objective', () => {
+    expect(decide('quero para morar, mas me ensine um carbonara')).toMatchObject(
+      {
+        allowed: false,
+        domain: 'off_topic',
+      }
+    );
+  });
 });

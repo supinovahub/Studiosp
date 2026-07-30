@@ -10,7 +10,7 @@ ou branches de correção acessem o banco de produção.
 3. Execute `npm run env:staging`.
 4. Confira localmente, sem publicar valores, que
    `NEXT_PUBLIC_SUPABASE_URL` contém o project ref
-   `vgmmfzdifjhpqaopxfbj` (**Studiosp Staging**).
+   `ffeyrxsdlgcfwgnsnwlj` (**Studiosp Staging**).
 5. Execute `npm run typecheck`, `npm test` e `npm run build`.
 
 O arquivo `.env.local` é ignorado pelo Git e nunca deve ser commitado.
@@ -19,7 +19,7 @@ O arquivo `.env.local` é ignorado pelo Git e nunca deve ser commitado.
 
 - Novas migrations devem ser criadas em `supabase/migrations`.
 - A migration deve ser aplicada e validada primeiro no projeto
-  **Studiosp Staging** (`vgmmfzdifjhpqaopxfbj`).
+  **Studiosp Staging** (`ffeyrxsdlgcfwgnsnwlj`).
 - Não aplicar migrations no projeto **Studiosp** de produção durante o
   desenvolvimento.
 - Antes de promover, executar os advisors de segurança e desempenho e registrar
