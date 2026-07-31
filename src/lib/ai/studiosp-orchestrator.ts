@@ -8,6 +8,7 @@ import {
   findAcceptedOfferedSlotByText,
   findExactRequestedSlot,
   isAvailabilityInquiry,
+  isLaterAvailabilityInquiry,
   isOfferedSlotRejection,
   opportunityInvitation,
   qualificationQuestionPrompt,
@@ -1095,15 +1096,34 @@ export async function prepareStudiospTurn(args: {
   const nextQualificationPrompt = qualificationQuestionPrompt(nextQuestion);
   const latestUserText = turn.latestUserMessage;
   const availabilityInquiry = isAvailabilityInquiry(latestUserText);
+  const previousOfferedSlot = isLaterAvailabilityInquiry(latestUserText)
+    ? reservableSlots.find((slot) =>
+        (previousSemanticContext?.offeredSlotIds ?? []).includes(String(slot.id))
+      )
+    : null;
+  const availabilityPreference = {
+    dayKey:
+      previousSemanticContext?.schedulingDayKey ??
+      (typeof previousOfferedSlot?.starts_at === 'string'
+        ? new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date(previousOfferedSlot.starts_at))
+        : null),
+    period: previousSemanticContext?.schedulingPeriod,
+    requestedStartAt:
+      previousSemanticContext?.requestedStartAt ??
+      (typeof previousOfferedSlot?.starts_at === 'string'
+        ? previousOfferedSlot.starts_at
+        : null),
+  };
   const availabilitySlots = availabilityInquiry
     ? selectAvailabilitySlots({
         slots: reservableSlots,
         latestMessage: latestUserText,
-        preference: {
-          dayKey: previousSemanticContext?.schedulingDayKey,
-          period: previousSemanticContext?.schedulingPeriod,
-          requestedStartAt: previousSemanticContext?.requestedStartAt,
-        },
+        preference: availabilityPreference,
       })
     : [];
   const confirmedByQuestion = new Map(
@@ -1219,14 +1239,10 @@ export async function prepareStudiospTurn(args: {
             ? schedulePreferenceQuestion()
             : availabilityInquiry
               ? availabilityReply({
-                  slots: reservableSlots,
+                  slots: availabilitySlots,
                   latestMessage: latestUserText,
                   nextQuestion: nextQualificationPrompt,
-                  preference: {
-                    dayKey: previousSemanticContext?.schedulingDayKey,
-                    period: previousSemanticContext?.schedulingPeriod,
-                    requestedStartAt: previousSemanticContext?.requestedStartAt,
-                  },
+                  preference: availabilityPreference,
                 })
               : reservedAppointment
                 ? appointmentConfirmation(reservedAppointment)
@@ -1239,7 +1255,6 @@ export async function prepareStudiospTurn(args: {
                       : deterministicNextQuestion
                         ? deterministicNextQuestion
                         : qualification.complete &&
-                            ['neutral', 'playful'].includes(posture) &&
                             (!reactivationSession || reactivationAffirmed) &&
                             reservableSlots[0]
                           ? opportunityInvitation(
@@ -1269,9 +1284,13 @@ export async function prepareStudiospTurn(args: {
         reservedAppointment?.guaranteed_slot_id ??
         (requestedStart && nearbySlots[0]
           ? String(nearbySlots[0].id)
-          : !rejectedOfferedSlot && qualification.complete && reservableSlots[0]
-            ? String(reservableSlots[0].id)
-            : null),
+          : availabilitySlots[0]
+            ? String(availabilitySlots[0].id)
+            : !rejectedOfferedSlot &&
+                qualification.complete &&
+                reservableSlots[0]
+              ? String(reservableSlots[0].id)
+              : null),
       offeredSlotIds: reservedAppointment?.guaranteed_slot_id
         ? [String(reservedAppointment.guaranteed_slot_id)]
         : rejectedOfferedSlot

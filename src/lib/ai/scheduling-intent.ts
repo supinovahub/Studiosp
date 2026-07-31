@@ -4,7 +4,10 @@ const MEETING_OFFER_PATTERN =
   /\b(agend\w*|marc\w*|reserv\w*|reuni[aã]o|conversa\s+r[aá]pida|bate[\s-]*papo|oportunidades?|falar\s+com\s+(?:um\s+)?corretor)\b/i;
 
 const AVAILABILITY_INQUIRY_PATTERN =
-  /\b(disponibilidade|dispon[ií]ve(?:l|is)|quais?\s+hor[aá]rios?|hor[aá]rios?\s+(?:tem|t[eê]m|dispon[ií]ve(?:l|is))|tem\s+hor[aá]rio|tem\s+algo(?:\s+\w+){0,3}\s+hor[aá]rio|algo\s+(?:de\s+)?(?:manh[aã]|tarde|noite)|pra\s+quando|para\s+quando)\b/i;
+  /\b(disponibilidade|dispon[ií]ve(?:l|is)|quais?\s+hor[aá]rios?|hor[aá]rios?\s+(?:tem|t[eê]m|dispon[ií]ve(?:l|is)|mais\s+tarde)|tem\s+(?:algum|outro)?\s*hor[aá]rio|tem\s+algo(?:\s+\w+){0,3}\s+hor[aá]rio|algum\s+hor[aá]rio(?:\s+mais\s+tarde)?|outro\s+hor[aá]rio|mais\s+tarde|algo\s+(?:de\s+)?(?:manh[aã]|tarde|noite)|pra\s+quando|para\s+quando)\b/i;
+
+const LATER_AVAILABILITY_PATTERN =
+  /\b(?:mais\s+tarde|depois|ap[oó]s|hor[aá]rio\s+posterior)\b/i;
 
 export type SchedulingPeriod = 'morning' | 'afternoon' | 'evening';
 
@@ -150,9 +153,12 @@ export function findAcceptedOfferedSlotByText<T extends Slot>(args: {
 
   if (
     offered.length === 1 &&
-    /^(?:sim|pode ser|fechado|combinado|confirmo|confirmado|beleza|perfeito|esse|esse horario|esse funciona)[!,. ]*$/.test(
+    (/^(?:sim|pode ser|fechado|combinado|confirmo|confirmado|beleza|perfeito|esse|esse horario|esse funciona)[!,. ]*$/.test(
       normalized
-    )
+    ) ||
+      /\b(?:pode ser(?:\s+sim)?|esse funciona|funciona pra mim|fechado|combinado|confirmo)\b/.test(
+        normalized
+      ))
   ) {
     return offered[0];
   }
@@ -218,6 +224,10 @@ export function appointmentReservationFailure() {
 
 export function isAvailabilityInquiry(value: string) {
   return AVAILABILITY_INQUIRY_PATTERN.test(value);
+}
+
+export function isLaterAvailabilityInquiry(value: string) {
+  return LATER_AVAILABILITY_PATTERN.test(value);
 }
 
 export function isOfferedSlotRejection(
@@ -420,6 +430,18 @@ export function selectAvailabilitySlots<T extends Slot>(args: {
         periodForHour(localHour(new Date(slot.starts_at))) === preference.period
     );
   }
+  if (
+    isLaterAvailabilityInquiry(args.latestMessage) &&
+    preference.requestedStartAt
+  ) {
+    const baseline = new Date(preference.requestedStartAt).getTime();
+    if (Number.isFinite(baseline)) {
+      selected = selected.filter(
+        (slot) => new Date(slot.starts_at).getTime() > baseline
+      );
+    }
+  }
   const hasExplicitPreference = Boolean(preference.dayKey || preference.period);
-  return (hasExplicitPreference ? selected : usable).slice(0, 3);
+  const limit = isLaterAvailabilityInquiry(args.latestMessage) ? 1 : 3;
+  return (hasExplicitPreference ? selected : usable).slice(0, limit);
 }

@@ -9,6 +9,7 @@ import {
   findExactRequestedSlot,
   guardPrematureMeetingOffer,
   isAvailabilityInquiry,
+  isLaterAvailabilityInquiry,
   isOfferedSlotRejection,
   opportunityInvitation,
   qualificationQuestionPrompt,
@@ -143,6 +144,37 @@ describe('scheduling intent', () => {
     );
     expect(isAvailabilityInquiry('Pode ser às 14h15')).toBe(false);
     expect(isAvailabilityInquiry('Tem algo no horário da tarde?')).toBe(true);
+    expect(isAvailabilityInquiry('você tem algum horário mais tarde?')).toBe(
+      true
+    );
+    expect(
+      isLaterAvailabilityInquiry('você tem algum horário mais tarde?')
+    ).toBe(true);
+  });
+
+  it('offers one real later slot on the same day and accepts a natural reply', () => {
+    const slots = selectAvailabilitySlots({
+      latestMessage: 'você tem algum horário mais tarde?',
+      preference: {
+        dayKey: '2026-07-31',
+        requestedStartAt: '2026-07-31T15:00:00.000Z',
+      },
+      slots: [
+        { id: 'old', starts_at: '2026-07-31T15:00:00.000Z' },
+        { id: 'later', starts_at: '2026-07-31T20:45:00.000Z' },
+        { id: 'later-2', starts_at: '2026-07-31T21:00:00.000Z' },
+        { id: 'tomorrow', starts_at: '2026-08-01T20:45:00.000Z' },
+      ],
+    });
+
+    expect(slots.map((slot) => slot.id)).toEqual(['later']);
+    expect(
+      findAcceptedOfferedSlotByText({
+        slots,
+        offeredSlotIds: ['later'],
+        latestMessage: 'Bacana, pode ser sim',
+      })
+    ).toMatchObject({ id: 'later' });
   });
 
   it('preserves the requested day while the lead changes to the afternoon', () => {
