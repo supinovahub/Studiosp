@@ -802,9 +802,8 @@ export async function dispatchInboundToAiReply(
             },
           });
           return {
-            outcome: 'failed',
+            outcome: 'skipped',
             reason: 'duplicate_response_blocked',
-            retryable: false,
           };
         }
       }

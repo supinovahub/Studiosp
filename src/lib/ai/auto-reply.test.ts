@@ -736,9 +736,8 @@ describe('dispatchInboundToAiReply â€” eligibility gates', () => {
     const result = await dispatchInboundToAiReply(ARGS);
 
     expect(result).toEqual({
-      outcome: 'failed',
+      outcome: 'skipped',
       reason: 'duplicate_response_blocked',
-      retryable: false,
     });
     expect(h.engineSendText).not.toHaveBeenCalled();
     expect(h.openOperationalFailure).toHaveBeenCalledWith(

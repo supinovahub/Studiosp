@@ -115,6 +115,20 @@ export function selectNextQualificationQuestion(args: {
   return args.missingQuestions[0];
 }
 
+export function sanitizeQualificationSummary(
+  summary: string,
+  purchaseObjective: unknown
+) {
+  const objective = String(
+    (purchaseObjective as Row | null)?.value ?? purchaseObjective ?? ''
+  );
+  if (objective !== 'live' && objective !== 'morar') return summary;
+  return summary
+    .replace(/\bprevis[aã]o de venda\b/gi, 'prazo de compra')
+    .replace(/\binten[cç][aã]o de vender\b/gi, 'intenção de comprar')
+    .replace(/\bpretende vender\b/gi, 'pretende comprar');
+}
+
 async function loadCurrentLeadTurnMessages(args: {
   db: SupabaseClient;
   conversationId: string;
@@ -868,10 +882,22 @@ export async function prepareStudiospTurn(args: {
       )
     ) {
       const callBrief = sanitizeCallBrief(extraction.call_brief);
+      const objectiveQuestion = visibleQuestionsAtTurn.find(
+        (question) => question.key === 'purchase_objective'
+      );
+      const objectiveValue = objectiveQuestion?.id
+        ? (candidateByQuestion.get(String(objectiveQuestion.id))
+            ?.normalized_value ??
+          currentMap.get(objectiveQuestion.id)?.normalized_value)
+        : null;
+      const leadSummary = sanitizeQualificationSummary(
+        extraction.summary.trim(),
+        objectiveValue
+      );
       await args.db
         .from('opportunities')
         .update({
-          lead_summary: extraction.summary.trim().slice(0, 2000),
+          lead_summary: leadSummary.slice(0, 2000),
           ...(callBrief
             ? {
                 call_brief: callBrief,
@@ -1650,6 +1676,7 @@ Regras:
 - requested_start_at deve conter a data e hora solicitadas pelo lead em ISO 8601 com offset de São Paulo, inclusive para expressões relativas como "amanhã às 10h". Agora: ${new Date().toISOString()}. Fuso operacional: America/Sao_Paulo.
 - accepted_slot_id só pode ser preenchido quando o lead aceitar claramente um horário exato que a assistente acabou de oferecer e o ID estiver na lista de horários. Caso contrário, null.
 - O resumo deve ser curto, factual e útil ao corretor.
+- Se o objetivo for morar ou comprar, nunca transforme o prazo em venda. Use "prazo de compra" ou "pretende comprar".
 - call_brief é orientativo, factual e baseado somente na conversa. Use listas curtas. Informações ausentes entram em confirm, nunca são inventadas.
 - insists_on_requested_time só é true quando o lead recusou claramente as alternativas e manteve o dia e horário pedido.
 
@@ -2001,17 +2028,39 @@ export function normalizeQualificationValue(args: {
 }
 
 function urgencyOptionValue(candidate: string) {
-  const monthMatch = candidate.match(/\b(\d{1,2})\s+mes/);
+  const wordNumbers: Record<string, number> = {
+    um: 1,
+    uma: 1,
+    dois: 2,
+    duas: 2,
+    tres: 3,
+    quatro: 4,
+    cinco: 5,
+    seis: 6,
+    sete: 7,
+    oito: 8,
+    nove: 9,
+    dez: 10,
+  };
+  const durationMatch = candidate.match(
+    /\b(\d{1,2}|um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|dez)\s+(mes(?:es)?|ano(?:s)?)/
+  );
+  const duration = durationMatch
+    ? Number(durationMatch[1]) || wordNumbers[durationMatch[1]] || null
+    : null;
+  const unit = durationMatch?.[2] ?? null;
+  const monthMatch = unit?.startsWith('mes') && duration ? duration : null;
   if (monthMatch) {
-    const months = Number(monthMatch[1]);
+    const months = monthMatch;
     if (months <= 1) return 'up_to_30_days';
     if (months <= 3) return 'one_to_three_months';
     if (months <= 6) return 'three_to_six_months';
     if (months <= 12) return 'six_to_twelve_months';
     return 'over_twelve_months';
   }
-  const yearMatch = candidate.match(/\b(\d{1,2})\s+ano/);
-  if (yearMatch && Number(yearMatch[1]) >= 1) return 'over_twelve_months';
+  if (unit?.startsWith('ano') && duration && duration >= 1) {
+    return 'over_twelve_months';
+  }
   return null;
 }
 

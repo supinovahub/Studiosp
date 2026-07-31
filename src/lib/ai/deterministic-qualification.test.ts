@@ -7,6 +7,7 @@ import {
 import {
   normalizeQualificationValue,
   qualificationEvidenceMessage,
+  sanitizeQualificationSummary,
   selectNextQualificationQuestion,
 } from './studiosp-orchestrator';
 import { isValidQualificationValue } from './qualification-validation';
@@ -74,6 +75,17 @@ describe('deterministic qualification', () => {
         posture: 'neutral',
       })
     ).toBe(propertyTiming);
+  });
+
+  it('does not turn a homebuyer purchase horizon into a sale forecast', () => {
+    expect(
+      sanitizeQualificationSummary(
+        'Lead busca morar em Pinheiros, com previsão de venda em dois anos.',
+        { value: 'live' }
+      )
+    ).toBe(
+      'Lead busca morar em Pinheiros, com prazo de compra em dois anos.'
+    );
   });
 
   it('resolves both canonical keys and database ids', () => {

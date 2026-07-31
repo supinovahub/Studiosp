@@ -76,6 +76,24 @@ describe('qualification canonical normalization', () => {
     });
   });
 
+  it.each(['dois anos', 'em até dois anos', 'daqui a dois anos'])(
+    'normalizes the real lead horizon without repeating the question: %s',
+    (text) => {
+      expect(
+        normalizeQualificationValue({
+          question: { key: 'purchase_urgency', data_type: 'single_choice' },
+          normalizedValue: { text },
+          options: [
+            { value: 'over_twelve_months', label: 'Mais de 12 meses' },
+          ],
+        })
+      ).toEqual({
+        value: 'over_twelve_months',
+        label: 'Mais de 12 meses',
+      });
+    }
+  );
+
   it('does not turn an ambiguous confirmation into a business fact', () => {
     expect(
       normalizeQualificationValue({
