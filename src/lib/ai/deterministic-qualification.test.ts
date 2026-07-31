@@ -158,6 +158,41 @@ describe('deterministic qualification', () => {
     ]);
   });
 
+  it('consolidates informal rapid messages into distinct qualification facts', () => {
+    const messages = [
+      'faz sim',
+      'eu tenho 5 milhoespra gastar',
+      'e queria morar em um bairro tipo higienópolis',
+    ];
+    const candidates = messages.flatMap((latestUserMessage) =>
+      deterministicQualificationCandidates({
+        latestUserMessage,
+        expectedQuestionKey: 'purchase_objective',
+      })
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          question_id: 'total_price_budget',
+          normalized_value: {
+            min: 5000000,
+            max: 5000000,
+            currency: 'BRL',
+          },
+        }),
+        expect.objectContaining({
+          question_id: 'purchase_objective',
+          normalized_value: { value: 'morar' },
+        }),
+        expect.objectContaining({
+          question_id: 'preferred_locations',
+          normalized_value: { values: ['higienópolis'] },
+        }),
+      ])
+    );
+  });
+
   it('extracts property timing and a long purchase horizon', () => {
     expect(
       deterministicQualificationCandidates({

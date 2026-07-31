@@ -31,7 +31,7 @@ export function resolveQualificationQuestion(
 
 function parseBrlAmount(message: string) {
   const match = message.match(
-    /(?:r\$\s*)?(\d+(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*(milhao|milhoes|mil|k)?\b/i
+    /(?:r\$\s*)?(\d+(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)\s*(milhao|milhoes|mil|k)?(?=\b|pra|para)/i
   );
   if (!match) return null;
   const raw = match[1].replace(/\s/g, '');
@@ -70,6 +70,14 @@ function candidate(
     confidence: 0.99,
     deterministic: true,
   };
+}
+
+function explicitLocationValue(message: string) {
+  const match = message.match(
+    /\b(?:bairro|regi[aã]o|localiza[cç][aã]o)\s+(?:tipo\s+|como\s+|de\s+)?([\p{L}][\p{L}\s'-]{1,60}?)(?=\s+(?:pra|para|e\s+(?:quero|queria|gostaria)|com\s+|at[eé]\s+)|[,.!?]|$)/iu
+  );
+  const value = match?.[1]?.trim();
+  return value && value.length >= 2 ? value : null;
 }
 
 export function deterministicPropertyTimingValue(value: string) {
@@ -159,6 +167,14 @@ export function deterministicQualificationCandidates(args: {
     }
     if (
       explicitFinancialKeys.length === 0 &&
+      /\b(?:tenho|teria|disponho|orcamento|budget|pra gastar|para gastar|posso gastar|consigo gastar)\b/.test(
+        message
+      )
+    ) {
+      explicitFinancialKeys.push('total_price_budget');
+    }
+    if (
+      explicitFinancialKeys.length === 0 &&
       args.expectedQuestionKey &&
       FINANCIAL_KEYS.has(args.expectedQuestionKey)
     ) {
@@ -169,9 +185,17 @@ export function deterministicQualificationCandidates(args: {
     }
   }
 
+  const explicitLocation = explicitLocationValue(raw);
+  if (explicitLocation) {
+    candidates.set(
+      'preferred_locations',
+      candidate('preferred_locations', raw, { values: [explicitLocation] })
+    );
+  }
+
   if (
     args.expectedQuestionKey === 'preferred_locations' &&
-    candidates.size === 0 &&
+    !candidates.has('preferred_locations') &&
     !/\d/.test(message) &&
     !/^(sim|nao|isso|correto|nao sei|ainda nao sei)$/.test(message)
   ) {
