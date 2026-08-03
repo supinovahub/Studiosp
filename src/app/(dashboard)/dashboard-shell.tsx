@@ -34,6 +34,8 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
     '/reativacao',
     '/relatorios',
   ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const ownerOnlyRoute =
+    pathname === '/simulador' || pathname.startsWith('/simulador/');
 
   // Sidebar drawer state — only used on mobile. On lg+ the sidebar is
   // always visible and this stays at `false` (ignored by the component).
@@ -98,6 +100,26 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   }, [isManager, loading, managerOnlyRoute, profileLoading, router, user]);
 
   useEffect(() => {
+    if (
+      !loading &&
+      !profileLoading &&
+      user &&
+      ownerOnlyRoute &&
+      accountRole !== 'owner'
+    ) {
+      router.replace(isManager ? '/visao-geral' : '/meu-dia');
+    }
+  }, [
+    accountRole,
+    isManager,
+    loading,
+    ownerOnlyRoute,
+    profileLoading,
+    router,
+    user,
+  ]);
+
+  useEffect(() => {
     if (!loading && !profileLoading && user) {
       let cancelled = false;
       void loadBrokerActivation().then((nextState) => {
@@ -113,6 +135,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
     loading ||
     profileLoading ||
     (!!user && !isManager && managerOnlyRoute) ||
+    (!!user && ownerOnlyRoute && accountRole !== 'owner') ||
     (accountRole === 'agent' && brokerActivation.status === 'checking')
   ) {
     return (

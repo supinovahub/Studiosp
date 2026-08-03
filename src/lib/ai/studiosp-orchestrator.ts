@@ -396,6 +396,9 @@ export async function prepareStudiospTurn(args: {
   messages: ChatMessage[];
   modelMessages?: ChatMessage[];
   inboundDomainDecision?: InboundDomainDecision;
+  /** Preserve internal qualification/pipeline effects but suppress real-world
+   * scheduling, broker notifications and operational incidents. */
+  simulation?: boolean;
 }): Promise<StudiospTurnContext> {
   const empty: StudiospTurnContext = {
     opportunityId: null,
@@ -432,7 +435,7 @@ export async function prepareStudiospTurn(args: {
         triggerMessageId: args.triggerMessageId,
       })
     : null;
-  if (existingReservation) {
+  if (existingReservation && !args.simulation) {
     await notifyPendingBrokers(args.db, {
       appointmentId: String(existingReservation.id),
       limit: 1,
@@ -1017,7 +1020,11 @@ export async function prepareStudiospTurn(args: {
     requestedStartFromExtraction(extraction.requested_start_at)
   );
   const slotToReserve = explicitlyAcceptedSlot ?? requestedSlot;
-  if (qualificationCompleteBeforeReservation && slotToReserve?.id) {
+  if (
+    !args.simulation &&
+    qualificationCompleteBeforeReservation &&
+    slotToReserve?.id
+  ) {
     const reservation = await args.db.rpc('studiosp_reserve_guaranteed_slot', {
       p_opportunity_id: opportunity.id,
       p_slot_id: slotToReserve.id,
@@ -1131,7 +1138,9 @@ export async function prepareStudiospTurn(args: {
   const availabilityInquiry = isAvailabilityInquiry(latestUserText);
   const previousOfferedSlot = isLaterAvailabilityInquiry(latestUserText)
     ? reservableSlots.find((slot) =>
-        (previousSemanticContext?.offeredSlotIds ?? []).includes(String(slot.id))
+        (previousSemanticContext?.offeredSlotIds ?? []).includes(
+          String(slot.id)
+        )
       )
     : null;
   const availabilityPreference = {

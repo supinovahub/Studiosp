@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  FlaskConical,
   Sparkles,
   RefreshCcw,
   UserRoundCheck,
@@ -36,6 +37,7 @@ interface NavigationItem {
   label: string;
   icon: typeof LayoutDashboard;
   badge?: 'inbox';
+  ownerOnly?: boolean;
 }
 
 const ownerSections: { label: string; items: NavigationItem[] }[] = [
@@ -68,6 +70,12 @@ const ownerSections: { label: string; items: NavigationItem[] }[] = [
     label: 'Gestão',
     items: [
       { href: '/inteligencia', label: 'Inteligência', icon: Bot },
+      {
+        href: '/simulador',
+        label: 'Simulador',
+        icon: FlaskConical,
+        ownerOnly: true,
+      },
       { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
       { href: '/configuracoes', label: 'Configurações', icon: Settings },
     ],
@@ -186,32 +194,36 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                   {section.label}
                 </p>
                 <ul className="space-y-0.5">
-                  {section.items.map((item) => {
-                    const active =
-                      pathname === item.href ||
-                      pathname.startsWith(`${item.href}/`);
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          className={cn(
-                            'group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors lg:min-h-10',
-                            active
-                              ? 'bg-primary-soft text-primary shadow-[inset_0_0_0_1px_var(--primary-soft-2)]'
-                              : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                          )}
-                        >
-                          <item.icon className="size-[17px] transition-transform group-hover:scale-[1.03]" />
-                          <span className="flex-1">{item.label}</span>
-                          {item.badge === 'inbox' && totalUnread > 0 ? (
-                            <span className="bg-primary text-primary-foreground flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold">
-                              {totalUnread > 99 ? '99+' : totalUnread}
-                            </span>
-                          ) : null}
-                        </Link>
-                      </li>
-                    );
-                  })}
+                  {section.items
+                    .filter(
+                      (item) => !item.ownerOnly || accountRole === 'owner'
+                    )
+                    .map((item) => {
+                      const active =
+                        pathname === item.href ||
+                        pathname.startsWith(`${item.href}/`);
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            className={cn(
+                              'group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors lg:min-h-10',
+                              active
+                                ? 'bg-primary-soft text-primary shadow-[inset_0_0_0_1px_var(--primary-soft-2)]'
+                                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                            )}
+                          >
+                            <item.icon className="size-[17px] transition-transform group-hover:scale-[1.03]" />
+                            <span className="flex-1">{item.label}</span>
+                            {item.badge === 'inbox' && totalUnread > 0 ? (
+                              <span className="bg-primary text-primary-foreground flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold">
+                                {totalUnread > 99 ? '99+' : totalUnread}
+                              </span>
+                            ) : null}
+                          </Link>
+                        </li>
+                      );
+                    })}
                 </ul>
               </section>
             ))}
